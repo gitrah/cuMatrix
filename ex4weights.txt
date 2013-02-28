@@ -1,0 +1,1 @@
+/home/reid/ml-class/ex4 - Neural Networks Learning/ex4weights.txt
