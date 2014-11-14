@@ -10,7 +10,6 @@
 
 #include <cuda_runtime_api.h>
 #include "util.h"
-#include "CMap.h"
 //#include "Matrix.h"
 
 template<typename T> class CuMatrix;
@@ -26,19 +25,19 @@ private:
 	long currHost;
 	long currDevice;
 
-	CMap<std::string, int> hDimCounts;
-	CMap<std::string, int> dDimCounts;
-	CMap<std::string, int> hDimFreeCounts;
-	CMap<std::string, int> dDimFreeCounts;
-	CMap<T*, std::string> ptrDims;
-	CMap<T*, int> hBuffers;
-	CMap<T*, int> dBuffers;
-	CMap<T*, long> hSizes;
-	CMap<T*, long> dSizes;
-	CMap<CuMatrix<T>*, T*> mhBuffers;
-	CMap<CuMatrix<T>*, T*> mdBuffers;
+	std::map<std::string, int> hDimCounts;
+	std::map<std::string, int> dDimCounts;
+	std::map<std::string, int> hDimFreeCounts;
+	std::map<std::string, int> dDimFreeCounts;
+	std::map<T*, std::string> ptrDims;
+	std::map<T*, int> hBuffers;
+	std::map<T*, int> dBuffers;
+	std::map<T*, long> hSizes;
+	std::map<T*, long> dSizes;
+	std::map<CuMatrix<T>*, T*> mhBuffers;
+	std::map<CuMatrix<T>*, T*> mdBuffers;
 
-	CMap<const T*,const T*> parents;
+	std::map<const T*,const T*> parents;
 
 public:
 	__host__ MemMgr();
