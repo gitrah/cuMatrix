@@ -10,18 +10,25 @@
 #include "MatrixExceptions.h"
 #include <climits>
 
-template<typename T> LUDecomposition<T>::LUDecomposition(Matrix<T>& x) :
+template<typename T> LUDecomposition<T>::LUDecomposition(CuMatrix<T>& x) :
 		 m(x.m), n(x.n), mRef(x), pivsign(1),luRowi (null){
 	ulong len = m*n*sizeof(T);
 	checkCudaErrors(cudaHostAlloc((void**)&lu,len,0));
-	x.syncHost();
-	checkCudaErrors(cudaMemcpy(lu, x.elements, len,cudaMemcpyHostToHost));
+	if(mRef.lastMod == mod_device) {
+		mRef.syncBuffers();
+	}
+	checkCudaErrors(cudaMemcpy(lu, mRef.elements, len,cudaMemcpyHostToHost));
 	pivots = new int[m];
 	for (uint i = 0; i < m; i++) {
 		pivots[i] = i;
 	}
 	checkCudaErrors(cudaHostAlloc((void**)&luColj,m*sizeof(T),0));
 	compute();
+}
+
+template<typename T> LUDecomposition<T>::~LUDecomposition() {
+	checkCudaErrors(cudaFreeHost(lu));
+	checkCudaErrors(cudaFreeHost(luColj));
 }
 
 template<typename T> void LUDecomposition<T>::compute() {
@@ -122,12 +129,13 @@ template<typename T> T LUDecomposition<T>::determinant() {
 	return d;
 }
 
-template<typename T> Matrix<T> LUDecomposition<T>::solve(const Matrix<T>& b) {
+template<typename T> CuMatrix<T> LUDecomposition<T>::solve(const CuMatrix<T>& b) {
 	if (b.m != m) {
-		dthrow ( rowDimsDontAgree());
+		dthrow ( rowDimsDisagree());
 	}
-	outln("n " << n);
-	outln("m " << m);
+	//outln("b " << b.toShortString());
+	//outln("n " << n);
+	//outln("m " << m);
 
 	if (m == n && singularQ()) {
 		dthrow ( singularMatrix());
@@ -135,10 +143,10 @@ template<typename T> Matrix<T> LUDecomposition<T>::solve(const Matrix<T>& b) {
 
 	// Copy right hand side with pivoting
 	uint nx = b.n;
-	Matrix<T> xm = b.clippedRowSubset(pivots, m, std::pair<uint,uint>(0, nx - 1));
+	CuMatrix<T> xm = b.clippedRowSubset(pivots, m, std::pair<uint,uint>(0, nx - 1));
 	uint nm = xm.n;
-	T* x = xm.getElements();
-
+	T* x = xm.elements;
+	//outln("xm0 " << xm.syncBuffers());
 	// Solve L*Y = B(piv,:)
 	uint k = 0;
 	uint i = 0;
@@ -155,6 +163,7 @@ template<typename T> Matrix<T> LUDecomposition<T>::solve(const Matrix<T>& b) {
 		}
 		k++;
 	}
+	//outln("xm1 " << xm.syncBuffers());
 	// Solve U*X = Y;
 	if(n > 1) {
 		k = n - 1;
@@ -176,13 +185,15 @@ template<typename T> Matrix<T> LUDecomposition<T>::solve(const Matrix<T>& b) {
 			if(k==0){
 				break;
 			} else {
-				k -= 1;
+ 				k -= 1;
 			}
 		}
 	}
 	xm.invalidateDevice();
+
 	return xm;
 }
 
 template class LUDecomposition<float>;
 template class LUDecomposition<double>;
+template class LUDecomposition<ulong>;

@@ -7,7 +7,7 @@
 
 #ifndef CONJUGATEGRADIENT_H_
 #define CONJUGATEGRADIENT_H_
-#include "Matrix.h"
+#include "CuMatrix.h"
 
 template<typename T> class ConjugateGradient {
 public:
@@ -27,9 +27,9 @@ public:
 		max = 20;
 		ratio = 100;
 	}
-	template<typename CostFunction> static std::pair<Matrix<T>,
-			std::pair<Matrix<T>, int> >
-	fmincg(CostFunction& f, Matrix<T>& x, int length = 50, int red = 1);
+	template<typename CostFunction> static std::pair<CuMatrix<T>,
+			std::pair<CuMatrix<T>, int> >
+	fmincg(CostFunction& f, CuMatrix<T>& x, int length = 50, int red = 1);
 	static inline bool nanQ(T value);
 
 // requires #include <limits>

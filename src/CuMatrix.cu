@@ -1,27 +1,36 @@
+/*
+ * CuMatrix.cu
+ *
+ *      Author: reid
+ */
+
+#include <cuda_runtime.h>
+#include <helper_cuda.h>
 #include "CuMatrix.h"
 #include "caps.h"
 #include "debug.h"
+#include "MemMgr.h"
+#include "Kernels.h"
+#include "DMatrix.h"
 
-template <typename T> int CuMatrix<T>::MaxThreads = 512;
-template <typename T> int CuMatrix<T>::MaxBlocks = 128;
+__constant__ uint D_MaxRowsDisplayed;
+__constant__ uint D_MaxColsDisplayed;
+cublasHandle_t g_handle;
+bool g_useCublas = false;
 
+template <typename T> __host__ void CuMatrix<T>::setMaxRowsDisplayed(uint rows) {
+	MaxRowsDisplayed = rows;
+	//checkCudaError(cudaMemcpyToSymbol(D_MaxRowsDisplayed,  (void*) &CuMatrix<T>::MaxRowsDisplayed, sizeof(uint)));
+}
+template <typename T> __host__ void CuMatrix<T>::setMaxColsDisplayed(uint cols) {
+	MaxColsDisplayed = cols;
+	//checkCudaError(cudaMemcpyToSymbol(D_MaxColsDisplayed,  (void*) &CuMatrix<T>::MaxColsDisplayed, sizeof(uint)));
+}
 
-template<typename T> void CuMatrix<T>::getReductionExecContext(int &blocks, int &threads, ulong nP,
-		int maxBlocks, int maxThreads) {
+template <typename T> typename MatProd<T>::MatProdKptr CuMatrix<T>::g_matrix_product_kernel = null;
 
-	threads =  nP == 2 ? 1 : (nP < (ulong) maxThreads * 2) ? b_util::nextPowerOf2((nP + 1) / 2) : maxThreads;
-	blocks = (nP + (threads * 2 - 1)) / (threads * 2);
-
-	blocks = MIN(maxBlocks, blocks);
-	if (debugExec) {
-			char buff[5];
-			T blockOcc = threads* 1. / caps.thrdPerBlock;
-			sprintf(buff,"%1.3g",blockOcc);
-			ot("nP " << nP << ", threads " << threads << "(" << buff << ")");
-			T globOcc = threads*blocks *1./ (caps.totalThreads());
-			sprintf(buff,"%1.3g",globOcc);
-			outln(", blocks " << blocks  << "(" << buff << ")" );
-	}
+template<typename T> int CuMatrix<T>::maxSlices(uint n) {
+	return ExecCaps::currCaps()->memSharedPerBlock / (2. * n * sizeof(T));
 }
 
 template<typename T, typename UnaryOp> __global__ void unaryOp1dKernel(
@@ -45,175 +54,6 @@ template<typename T, typename UnaryOp> __global__ void unaryOpDmKernel(
 	}
 }
 
-template<typename T> template<typename UnaryOp> void CuMatrix<T>::unaryOpL(DMatrix<T>& trg, const DMatrix<T>& src, UnaryOp op) {
-	uint threads = 256;
-	uint len = src.m * src.n;
-	dim3 dBlocks, dThreads;
-	b_util::execContext(threads, len, dBlocks, dThreads);
-	unaryOp1dKernel<<<dBlocks,dThreads>>>(trg.elements, src.elements, op, len);
-	cudaError_t err = syncHappy ? cudaDeviceSynchronize() : cudaSuccess;
-	if(err != cudaSuccess) {
-		outln("failed with threads " << threads << " len " << len << " dBlocks " <<
-				b_util::pd3(dBlocks).c_str() << " dThreads " << b_util::pd3(dThreads) << " src " << (util<T>::pdm(src)).c_str()  << ", trg " << (util<T>::pdm(trg)).c_str());
-	}
-	checkCudaError(err);
-}
-template void CuMatrix<float>::unaryOpL<expUnaryOp<float> >(DMatrix<float>&, const DMatrix<float>&, expUnaryOp<float>);
-template void CuMatrix<double>::unaryOpL<expUnaryOp<double> >(DMatrix<double>&, const DMatrix<double>&, expUnaryOp<double>);
-template void CuMatrix<float>::unaryOpL<translationUnaryOp<float> >(DMatrix<float>&, const DMatrix<float>&, translationUnaryOp<float>);
-template void CuMatrix<double>::unaryOpL<translationUnaryOp<double> >(DMatrix<double>&, const DMatrix<double>&, translationUnaryOp<double>);
-template void CuMatrix<float>::unaryOpL<scaleUnaryOp<float> >(DMatrix<float>&, const DMatrix<float>&, scaleUnaryOp<float>);
-template void CuMatrix<double>::unaryOpL<scaleUnaryOp<double> >(DMatrix<double>&, const DMatrix<double>&, scaleUnaryOp<double>);
-template void CuMatrix<float>::unaryOpL<subFromUnaryOp<float> >(DMatrix<float>&, const DMatrix<float>&, subFromUnaryOp<float>);
-template void CuMatrix<double>::unaryOpL<subFromUnaryOp<double> >(DMatrix<double>&, const DMatrix<double>&, subFromUnaryOp<double>);
-template void CuMatrix<float>::unaryOpL<negateUnaryOp<float> >(DMatrix<float>&, const DMatrix<float>&, negateUnaryOp<float>);
-template void CuMatrix<double>::unaryOpL<negateUnaryOp<double> >(DMatrix<double>&, const DMatrix<double>&, negateUnaryOp<double>);
-template void CuMatrix<float>::unaryOpL<sigmoidUnaryOp<float> >(DMatrix<float>&, const DMatrix<float>&, sigmoidUnaryOp<float>);
-template void CuMatrix<double>::unaryOpL<sigmoidUnaryOp<double> >(DMatrix<double>&, const DMatrix<double>&, sigmoidUnaryOp<double>);
-template void CuMatrix<float>::unaryOpL<sigmoidGradientUnaryOp<float> >(DMatrix<float>&, const DMatrix<float>&, sigmoidGradientUnaryOp<float>);
-template void CuMatrix<double>::unaryOpL<sigmoidGradientUnaryOp<double> >(DMatrix<double>&, const DMatrix<double>&, sigmoidGradientUnaryOp<double>);
-template void CuMatrix<float>::unaryOpL<logUnaryOp<float> >(DMatrix<float>&, const DMatrix<float>&, logUnaryOp<float>);
-template void CuMatrix<double>::unaryOpL<logUnaryOp<double> >(DMatrix<double>&, const DMatrix<double>&, logUnaryOp<double>);
-template void CuMatrix<float>::unaryOpL<oneOverUnaryOp<float> >(DMatrix<float>&, const DMatrix<float>&, oneOverUnaryOp<float>);
-template void CuMatrix<double>::unaryOpL<oneOverUnaryOp<double> >(DMatrix<double>&, const DMatrix<double>&, oneOverUnaryOp<double>);
-template void CuMatrix<float>::unaryOpL<sqrtUnaryOp<float> >(DMatrix<float>&, const DMatrix<float>&, sqrtUnaryOp<float>);
-template void CuMatrix<double>::unaryOpL<sqrtUnaryOp<double> >(DMatrix<double>&, const DMatrix<double>&, sqrtUnaryOp<double>);
-template void CuMatrix<float>::unaryOpL<sqrUnaryOp<float> >(DMatrix<float>&, const DMatrix<float>&, sqrUnaryOp<float>);
-template void CuMatrix<double>::unaryOpL<sqrUnaryOp<double> >(DMatrix<double>&, const DMatrix<double>&, sqrUnaryOp<double>);
-template void CuMatrix<float>::unaryOpL<powUnaryOp<float> >(DMatrix<float>&, const DMatrix<float>&, powUnaryOp<float>);
-template void CuMatrix<double>::unaryOpL<powUnaryOp<double> >(DMatrix<double>&, const DMatrix<double>&, powUnaryOp<double>);
-template void CuMatrix<float>::unaryOpL<divSqrtUnaryOp<float> >(DMatrix<float>&, const DMatrix<float>&, divSqrtUnaryOp<float>);
-template void CuMatrix<double>::unaryOpL<divSqrtUnaryOp<double> >(DMatrix<double>&, const DMatrix<double>&, divSqrtUnaryOp<double>);
-
-template void CuMatrix<float>::unaryOpL<ltUnaryOp<float> >(DMatrix<float>&, const DMatrix<float>&, ltUnaryOp<float>);
-template void CuMatrix<double>::unaryOpL<ltUnaryOp<double> >(DMatrix<double>&, const DMatrix<double>&, ltUnaryOp<double>);
-template void CuMatrix<float>::unaryOpL<lteUnaryOp<float> >(DMatrix<float>&, const DMatrix<float>&, lteUnaryOp<float>);
-template void CuMatrix<double>::unaryOpL<lteUnaryOp<double> >(DMatrix<double>&, const DMatrix<double>&, lteUnaryOp<double>);
-template void CuMatrix<float>::unaryOpL<gtUnaryOp<float> >(DMatrix<float>&, const DMatrix<float>&, gtUnaryOp<float>);
-template void CuMatrix<double>::unaryOpL<gtUnaryOp<double> >(DMatrix<double>&, const DMatrix<double>&, gtUnaryOp<double>);
-template void CuMatrix<float>::unaryOpL<gteUnaryOp<float> >(DMatrix<float>&, const DMatrix<float>&, gteUnaryOp<float>);
-template void CuMatrix<double>::unaryOpL<gteUnaryOp<double> >(DMatrix<double>&, const DMatrix<double>&, gteUnaryOp<double>);
-template void CuMatrix<float>::unaryOpL<eqUnaryOp<float> >(DMatrix<float>&, const DMatrix<float>&, eqUnaryOp<float>);
-template void CuMatrix<double>::unaryOpL<eqUnaryOp<double> >(DMatrix<double>&, const DMatrix<double>&, eqUnaryOp<double>);
-
-#define UNOP_BLOCK_SIZE 	32
-#define UNOP_X2Y			4
-
-template<typename T> template<typename UnaryOp> void CuMatrix<T>::unaryOpDmL(DMatrix<T>& trg, const DMatrix<T>& src, UnaryOp op, int w2h) {
-	dassert( trg.m >= src.m && trg.n >= src.n );
-	int blockW = UNOP_BLOCK_SIZE;
-	dim3 block(blockW,blockW/w2h);
-    dim3 grid(b_util::enough(blockW,src.n), b_util::enough(blockW, src.m));
-    if(debugExec)outln("unaryOpDmL grid " << b_util::pd3(grid) << " of block " << b_util::pd3(block));
-    unaryOpDmKernel<<<grid,block>>>(trg, src, op);
-}
-template void CuMatrix<float>::unaryOpDmL<expUnaryOp<float> >(DMatrix<float>&, const DMatrix<float>&, expUnaryOp<float>,int);
-template void CuMatrix<double>::unaryOpDmL<expUnaryOp<double> >(DMatrix<double>&, const DMatrix<double>&, expUnaryOp<double>,int);
-template void CuMatrix<float>::unaryOpDmL<translationUnaryOp<float> >(DMatrix<float>&, const DMatrix<float>&, translationUnaryOp<float>,int);
-template void CuMatrix<double>::unaryOpDmL<translationUnaryOp<double> >(DMatrix<double>&, const DMatrix<double>&, translationUnaryOp<double>,int);
-template void CuMatrix<float>::unaryOpDmL<scaleUnaryOp<float> >(DMatrix<float>&, const DMatrix<float>&, scaleUnaryOp<float>,int);
-template void CuMatrix<double>::unaryOpDmL<scaleUnaryOp<double> >(DMatrix<double>&, const DMatrix<double>&, scaleUnaryOp<double>,int);
-template void CuMatrix<float>::unaryOpDmL<subFromUnaryOp<float> >(DMatrix<float>&, const DMatrix<float>&, subFromUnaryOp<float>,int);
-template void CuMatrix<double>::unaryOpDmL<subFromUnaryOp<double> >(DMatrix<double>&, const DMatrix<double>&, subFromUnaryOp<double>,int);
-template void CuMatrix<float>::unaryOpDmL<negateUnaryOp<float> >(DMatrix<float>&, const DMatrix<float>&, negateUnaryOp<float>,int);
-template void CuMatrix<double>::unaryOpDmL<negateUnaryOp<double> >(DMatrix<double>&, const DMatrix<double>&, negateUnaryOp<double>,int);
-template void CuMatrix<float>::unaryOpDmL<sigmoidUnaryOp<float> >(DMatrix<float>&, const DMatrix<float>&, sigmoidUnaryOp<float>,int);
-template void CuMatrix<double>::unaryOpDmL<sigmoidUnaryOp<double> >(DMatrix<double>&, const DMatrix<double>&, sigmoidUnaryOp<double>,int);
-template void CuMatrix<float>::unaryOpDmL<sigmoidGradientUnaryOp<float> >(DMatrix<float>&, const DMatrix<float>&, sigmoidGradientUnaryOp<float>,int);
-template void CuMatrix<double>::unaryOpDmL<sigmoidGradientUnaryOp<double> >(DMatrix<double>&, const DMatrix<double>&, sigmoidGradientUnaryOp<double>,int);
-template void CuMatrix<float>::unaryOpDmL<logUnaryOp<float> >(DMatrix<float>&, const DMatrix<float>&, logUnaryOp<float>,int);
-template void CuMatrix<double>::unaryOpDmL<logUnaryOp<double> >(DMatrix<double>&, const DMatrix<double>&, logUnaryOp<double>,int);
-template void CuMatrix<float>::unaryOpDmL<oneOverUnaryOp<float> >(DMatrix<float>&, const DMatrix<float>&, oneOverUnaryOp<float>,int);
-template void CuMatrix<double>::unaryOpDmL<oneOverUnaryOp<double> >(DMatrix<double>&, const DMatrix<double>&, oneOverUnaryOp<double>,int);
-template void CuMatrix<float>::unaryOpDmL<sqrtUnaryOp<float> >(DMatrix<float>&, const DMatrix<float>&, sqrtUnaryOp<float>,int);
-template void CuMatrix<double>::unaryOpDmL<sqrtUnaryOp<double> >(DMatrix<double>&, const DMatrix<double>&, sqrtUnaryOp<double>,int);
-template void CuMatrix<float>::unaryOpDmL<sqrUnaryOp<float> >(DMatrix<float>&, const DMatrix<float>&, sqrUnaryOp<float>,int);
-template void CuMatrix<double>::unaryOpDmL<sqrUnaryOp<double> >(DMatrix<double>&, const DMatrix<double>&, sqrUnaryOp<double>,int);
-template void CuMatrix<float>::unaryOpDmL<powUnaryOp<float> >(DMatrix<float>&, const DMatrix<float>&, powUnaryOp<float>,int);
-template void CuMatrix<double>::unaryOpDmL<powUnaryOp<double> >(DMatrix<double>&, const DMatrix<double>&, powUnaryOp<double>,int);
-template void CuMatrix<float>::unaryOpDmL<divSqrtUnaryOp<float> >(DMatrix<float>&, const DMatrix<float>&, divSqrtUnaryOp<float>,int);
-template void CuMatrix<double>::unaryOpDmL<divSqrtUnaryOp<double> >(DMatrix<double>&, const DMatrix<double>&, divSqrtUnaryOp<double>,int);
-
-template void CuMatrix<float>::unaryOpDmL<ltUnaryOp<float> >(DMatrix<float>&, const DMatrix<float>&, ltUnaryOp<float>,int);
-template void CuMatrix<double>::unaryOpDmL<ltUnaryOp<double> >(DMatrix<double>&, const DMatrix<double>&, ltUnaryOp<double>,int);
-template void CuMatrix<float>::unaryOpDmL<lteUnaryOp<float> >(DMatrix<float>&, const DMatrix<float>&, lteUnaryOp<float>,int);
-template void CuMatrix<double>::unaryOpDmL<lteUnaryOp<double> >(DMatrix<double>&, const DMatrix<double>&, lteUnaryOp<double>,int);
-template void CuMatrix<float>::unaryOpDmL<gtUnaryOp<float> >(DMatrix<float>&, const DMatrix<float>&, gtUnaryOp<float>,int);
-template void CuMatrix<double>::unaryOpDmL<gtUnaryOp<double> >(DMatrix<double>&, const DMatrix<double>&, gtUnaryOp<double>,int);
-template void CuMatrix<float>::unaryOpDmL<gteUnaryOp<float> >(DMatrix<float>&, const DMatrix<float>&, gteUnaryOp<float>,int);
-template void CuMatrix<double>::unaryOpDmL<gteUnaryOp<double> >(DMatrix<double>&, const DMatrix<double>&, gteUnaryOp<double>,int);
-template void CuMatrix<float>::unaryOpDmL<eqUnaryOp<float> >(DMatrix<float>&, const DMatrix<float>&, eqUnaryOp<float>,int);
-template void CuMatrix<double>::unaryOpDmL<eqUnaryOp<double> >(DMatrix<double>&, const DMatrix<double>&, eqUnaryOp<double>,int);
-
-
-template<typename T> bool CuMatrix<T>::equalDims(const CuMatrix<T>& other) const {
-	return m == other.m && n == other.n;
-}
-
-
-template<typename T, typename BinaryOp> __global__ void binaryOpKernel(
-		T* trg, const T* src1, const T* src2, BinaryOp op,
-		ulong len) {
-	ulong i = blockIdx.x * blockDim.x + threadIdx.x + threadIdx.y * blockDim.x*blockDim.y;
-	if (i < len) {
-		trg[i] = op(src1[i], src2[i]);
-	}
-}
-template<typename T, typename BinaryOp> __global__ void binaryOpDmKernel(
-		DMatrix<T> trg, const DMatrix<T> src1, const DMatrix<T> src2, BinaryOp op ) {
-	uint x = blockIdx.x * blockDim.x + threadIdx.x;
-	uint y = blockIdx.y * blockDim.x + threadIdx.y;
-	uint src1Off = y * src1.p + x;
-	uint src2Off = y * src2.p + x;
-	uint trgOff = y * trg.p + x;
-	for(int i = 0; i < blockDim.x; i+=blockDim.y) {
-		if(x < src1.n && y + i < src1.m && x < src2.n && y + i < src2.m) {
-			trg.elements[trgOff + i * trg.p] = op(src1.elements[src1Off + i * src1.p],src2.elements[src2Off + i * src2.p]);
-		}
-	}
-}
-
-template<typename T> template<typename BinaryOp> void CuMatrix<T>::binaryOpL(
-		DMatrix<T>& trg, const DMatrix<T>& src1, const DMatrix<T>& src2, BinaryOp op) {
-	uint threads = 256;
-	uint len = src1.m * src2.n;
-	dim3 dBlocks, dThreads;
-	b_util::execContext(threads, len, dBlocks, dThreads);
-	binaryOpKernel<<<dBlocks,dThreads>>>(trg.elements, src1.elements, src2.elements, op, len);
-	if(syncHappy)checkCudaError(cudaDeviceSynchronize());
-}
-template void CuMatrix<float>::binaryOpL<minusBinaryOp<float> >(DMatrix<float>&, const DMatrix<float>&, const DMatrix<float>&, minusBinaryOp<float>);
-template void CuMatrix<double>::binaryOpL<minusBinaryOp<double> >(DMatrix<double>&, const DMatrix<double>&, const DMatrix<double>&, minusBinaryOp<double>);
-template void CuMatrix<float>::binaryOpL<plusBinaryOp<float> >(DMatrix<float>&, const DMatrix<float>&, const DMatrix<float>&, plusBinaryOp<float>);
-template void CuMatrix<double>::binaryOpL<plusBinaryOp<double> >(DMatrix<double>&, const DMatrix<double>&, const DMatrix<double>&, plusBinaryOp<double>);
-template void CuMatrix<float>::binaryOpL<multBinaryOp<float> >(DMatrix<float>&, const DMatrix<float>&, const DMatrix<float>&, multBinaryOp<float>);
-template void CuMatrix<double>::binaryOpL<multBinaryOp<double> >(DMatrix<double>&, const DMatrix<double>&, const DMatrix<double>&, multBinaryOp<double>);
-template void CuMatrix<float>::binaryOpL<quotientBinaryOp<float> >(DMatrix<float>&, const DMatrix<float>&, const DMatrix<float>&, quotientBinaryOp<float>);
-template void CuMatrix<double>::binaryOpL<quotientBinaryOp<double> >(DMatrix<double>&, const DMatrix<double>&, const DMatrix<double>&, quotientBinaryOp<double>);
-template void CuMatrix<float>::binaryOpL<andBinaryOp<float> >(DMatrix<float>&, const DMatrix<float>&, const DMatrix<float>&, andBinaryOp<float>);
-template void CuMatrix<double>::binaryOpL<andBinaryOp<double> >(DMatrix<double>&, const DMatrix<double>&, const DMatrix<double>&, andBinaryOp<double>);
-
-template<typename T> template<typename BinaryOp> void CuMatrix<T>::binaryOpDmL(
-		DMatrix<T>& trg, const DMatrix<T>& src1, const DMatrix<T>& src2, BinaryOp op, int w2h) {
-	dassert( trg.m >= MIN( src1.m,src2.m) && trg.n >= MIN(src1.n,src2.n) );
-	int blockW = UNOP_BLOCK_SIZE;
-	dim3 block(blockW,blockW/w2h);
-    dim3 grid(b_util::enough(blockW,MIN(src1.n,src2.n)), b_util::enough(blockW, MIN(src1.m,src2.m)));
-    outln("grid " << b_util::pd3(grid) << " of block " << b_util::pd3(block));
-	binaryOpDmKernel<<<grid,block>>>(trg, src1, src2, op);
-}
-
-template void CuMatrix<float>::binaryOpDmL<minusBinaryOp<float> >(DMatrix<float>&, const DMatrix<float>&, const DMatrix<float>&, minusBinaryOp<float>,int);
-template void CuMatrix<double>::binaryOpDmL<minusBinaryOp<double> >(DMatrix<double>&, const DMatrix<double>&, const DMatrix<double>&, minusBinaryOp<double>,int);
-template void CuMatrix<float>::binaryOpDmL<plusBinaryOp<float> >(DMatrix<float>&, const DMatrix<float>&, const DMatrix<float>&, plusBinaryOp<float>,int);
-template void CuMatrix<double>::binaryOpDmL<plusBinaryOp<double> >(DMatrix<double>&, const DMatrix<double>&, const DMatrix<double>&, plusBinaryOp<double>,int);
-template void CuMatrix<float>::binaryOpDmL<multBinaryOp<float> >(DMatrix<float>&, const DMatrix<float>&, const DMatrix<float>&, multBinaryOp<float>,int);
-template void CuMatrix<double>::binaryOpDmL<multBinaryOp<double> >(DMatrix<double>&, const DMatrix<double>&, const DMatrix<double>&, multBinaryOp<double>,int);
-template void CuMatrix<float>::binaryOpDmL<quotientBinaryOp<float> >(DMatrix<float>&, const DMatrix<float>&, const DMatrix<float>&, quotientBinaryOp<float>,int);
-template void CuMatrix<double>::binaryOpDmL<quotientBinaryOp<double> >(DMatrix<double>&, const DMatrix<double>&, const DMatrix<double>&, quotientBinaryOp<double>,int);
-template void CuMatrix<float>::binaryOpDmL<andBinaryOp<float> >(DMatrix<float>&, const DMatrix<float>&, const DMatrix<float>&, andBinaryOp<float>,int);
-template void CuMatrix<double>::binaryOpDmL<andBinaryOp<double> >(DMatrix<double>&, const DMatrix<double>&, const DMatrix<double>&, andBinaryOp<double>,int);
-
 // TODO implement column and row-wise reductions and replace these
 template<typename T> __global__ void varianceMusKernel(DMatrix<T> sigmas, const DMatrix<T> x,
 		const DMatrix<T> mus) {
@@ -223,7 +63,7 @@ template<typename T> __global__ void varianceMusKernel(DMatrix<T> sigmas, const 
 	if (i < x.n) {
 		const T currMu = mus.elements[i];
 		//printf("i %d -> avg %f\n", i, currMu);
-		for (uint row = 0; row < x.m; row++) {
+		for (int row = 0; row < x.m; row++) {
 			curr = x.elements[row * x.p + i] - currMu;
 			sqrDiff += curr * curr;
 		}
@@ -236,7 +76,7 @@ template<typename T> __global__ void varianceKernel(DMatrix<T> sigmas, DMatrix<T
 	T avgSum = 0;
 	T sqrDiff = 0;
 	T curr;
-	uint row;
+	int row;
 	// compute column (feature) averages
 	if (i < x.n) {
 		avgSum = x.elements[i];
@@ -256,37 +96,25 @@ template<typename T> __global__ void varianceKernel(DMatrix<T> sigmas, DMatrix<T
 }
 
 
-template<typename T> __global__ void columnMatrixKernel(DMatrix<T> column, const DMatrix<T> x,
-		int col) {
-	uint row = blockIdx.x * blockDim.x + threadIdx.x;
-	if (row < x.m) {
-		column.elements[row] = x.elements[row * x.p + col];
-	}
-}
-
-template<typename T> void CuMatrix<T>::columnMatrixL(DMatrix<T>& d_column, const DMatrix<T>& d_x,
-		 int col) {
-	dim3 block(MIN(512, b_util::nextPowerOf2(d_x.m)));
-	dim3 grid(b_util::enough(block.x, d_x.m));
-	columnMatrixKernel<<<grid,block>>>(d_column, d_x, col );
-	if(syncHappy)checkCudaError(cudaDeviceSynchronize());
-}
-
 template<typename T> void CuMatrix<T>::varianceL( DMatrix<T>& d_Sigmas, const DMatrix<T>& d_X,
 		const DMatrix<T>& d_Mus) {
 	dim3 block(MIN(512, b_util::nextPowerOf2(d_X.n)));
-	dim3 grid(b_util::enough(block.x, d_X.n));
+	dim3 grid(DIV_UP( d_X.n,block.x));
 	outln("varianceL(&,const&,const&) for " << util<T>::pdm(d_X) << " with mus " << util<T>::pdm(d_Mus) << " have exctx grid " << b_util::pd3(grid) << " or blk " <<  b_util::pd3(block));
-	varianceMusKernel<<<grid,block>>>(d_Sigmas,d_X,d_Mus);
-	if(syncHappy)checkCudaError(cudaDeviceSynchronize());
+	varianceMusKernel<<<grid,block,0>>>(d_Sigmas,d_X,d_Mus);
+#ifndef __CUDA_ARCH__
+	if(checkDebug(syncHappy))checkCudaError(cudaDeviceSynchronize());
+#endif
 }
 
 template<typename T> void CuMatrix<T>::varianceAndMeanL(DMatrix<T>& d_Sigmas,  DMatrix<T>& d_Mus, const DMatrix<T>& d_X) {
 	dim3 block(MIN(512, b_util::nextPowerOf2(d_X.n)));
-	dim3 grid(b_util::enough(block.x, d_X.n));
+	dim3 grid(DIV_UP(d_X.n,block.x));
 	outln("varianceL(&,&,const&) for " << util<T>::pdm(d_X) << " have exctx grid " << b_util::pd3(grid) << " or blk " <<  b_util::pd3(block));
-	varianceKernel<<<grid,block>>>(d_Sigmas, d_Mus, d_X);
-	if(syncHappy)checkCudaError(cudaDeviceSynchronize());
+	varianceKernel<<<grid,block,0>>>(d_Sigmas, d_Mus, d_X);
+#ifndef __CUDA_ARCH__
+	if(checkDebug(syncHappy))checkCudaError(cudaDeviceSynchronize());
+#endif
 }
 
 /*
@@ -304,7 +132,7 @@ template<typename T> __global__ void featureAvgKernel(DMatrix<T> means, const DM
 	}
 
 	if (i < x.n) {
-		for (uint row = 1; row < x.m; row++) {
+		for (int row = 1; row < x.m; row++) {
 				sdata[tid] += x.elements[row * x.p + i];
 		}
 	}
@@ -323,6 +151,71 @@ template<typename T> __global__ void featureAvgKernelLv(DMatrix<T> means, const 
 	// have to zero sm first?
 	T t = (i < x.n) ? x.elements[i] : 0;
 
+	for (int row = 1; row < x.m; row++) {
+		if (i < x.n) {
+			t += x.elements[row * x.p + i];
+			//if(i == 0){
+			//	printf("row %d t %f\n",row,t);
+			//}
+		}
+	}
+	if (i < x.n) {
+		means.elements[i] = t / x.m;
+	}
+}
+
+template<typename T> __global__ void featureAvgKernelTxd(DMatrix<T> means, const DMatrix<T> txdX) {
+	// 	T res = reduce(d_A, plusBinaryOp<T>(), 0 );
+	T* sdata = SharedMemory<T>();
+	uint row = blockIdx.x * blockDim.x + threadIdx.x; // index into column
+	// have to zero sm first?
+	//T t = (row < txdX.m) ? txdX.elements[row] : 0;
+	printf("featureAvgKernelTxd txdX m %u* n %u\n", txdX.m, txdX.n);
+	DMatrix<T> drow( txdX.elements + row * txdX.p, 1, txdX.n, txdX.p);
+	printf("featureAvgKernelTxd drow.m %u drow.n %u drow.p %u\n", drow.m, drow.n, drow.p);
+	printf("featureAvgKernelTxd row %u drow.elements %p drow.elements[0] %f drow.elements[n-1] %f\n",row, drow.elements,drow.elements[0],drow.elements[drow.n-1]);
+	if(row==0)util<T>::printDm( drow,"featureAvgKernelTxd row 0 drow ");
+	if(row==1)util<T>::printDm( drow,"featureAvgKernelTxd row 1 drow ");
+	ulong nP = drow.n;
+	uint threads;
+	uint blocks;
+	getReductionExecContext(blocks, threads, nP,128,512);
+	printf("featureAvgKernelTxd row %u blocks %u thread %u nP %lu\n",row, blocks, threads, nP);
+	//CuMatrix<T> res(blocks, 1, true, true);
+	DMatrix<T> d_Res;
+	d_Res.elements = means.elements + row;
+	d_Res.m = d_Res.n = d_Res.p = 1;
+	T dummyResult;
+	//d_Res =
+	//res.asDmatrix(d_Res, false);
+	plusBinaryOp<T> op;
+	//if(blocks == 1) { //BinaryOp op, T start, cudaStream_t stream
+		reduceLauncher<T, plusBinaryOp>(&dummyResult, d_Res, nP, drow, op, 0,0);
+	//}
+	__syncthreads();
+	if(row == 0)util<T>::printDm( d_Res,"featureAvgKernelTxd post reduceLauncherDm d_Res row 0");
+	if(row == 1)util<T>::printDm( d_Res,"featureAvgKernelTxd post reduceLauncherDm d_Res row 1");
+	//__syncthreads();
+	printf("featureAvgKernelTxd row %d el[0] %f el[1] %f\n", row,d_Res.elements[0],d_Res.elements[1]  );
+	printf("featureAvgKernelTxd  row %d nP %u avg[0] %f avg[1] %f\n", row, nP,d_Res.elements[0]/nP,d_Res.elements[1]/nP  );
+
+	d_Res.elements[row] = d_Res.elements[row]/nP;
+	__syncthreads();
+	printf("featureAvgKernelTxd row %d avg %f\n", row,d_Res.elements[row] );
+	//printf("d_Res.elements 0x%lx d_Res.elements[0] %f\n",d_Res.elements , d_Res.elements[0] );
+	/*
+	CuMatrix<T> res(blocks, 1, true, true);
+	DMatrix<T> d_Res;
+	res.asDmatrix(d_Res, false);
+	T total;
+	if(d_M.p != d_M.n) {
+		total =
+	} else {
+	 total = reduceLauncher(res.d_elements, d_M.elements, nP, op, start, stream);
+	}
+	if(checkDebug(syncHappy))cherr(cudaDeviceSynchronize());
+	if(checkDebug(debugMem)) outln("done with res " << res.toShortString());
+
 	for (uint row = 1; row < x.m; row++) {
 		if (i < x.n) {
 			t += x.elements[row * x.p + i];
@@ -330,6 +223,43 @@ template<typename T> __global__ void featureAvgKernelLv(DMatrix<T> means, const 
 	}
 	if (i < x.n) {
 		means.elements[i] = t / x.m;
+	}
+*/
+}
+
+template<typename T> __global__ void featureSumKernelLv(DMatrix<T> means, const DMatrix<T> x) {
+	uint i = blockIdx.x * blockDim.x + threadIdx.x; // index into column
+	// have to zero sm first?
+	T t = (i < x.n) ? x.elements[i] : 0;
+
+	for (int row = 1; row < x.m; row++) {
+		if (i < x.n) {
+			t += x.elements[row * x.p + i];
+			//if(i == 0){
+			//	printf("row %d t %f\n",row,t);
+			//}
+		}
+	}
+	if (i < x.n) {
+		means.elements[i] = t;
+	}
+}
+// one thread per column
+template<typename T> __global__ void featureSumKernelDivLv(DMatrix<T> means, const DMatrix<T> x, int count) {
+	uint i = blockIdx.x * blockDim.x + threadIdx.x; // index into column
+	// have to zero sm first?
+	T t = (i < x.n) ? x.elements[i] : 0;
+
+	for (int row = 1; row < x.m; row++) {
+		if (i < x.n) {
+			t += x.elements[row * x.p + i];
+			//if(i == 0){
+			//	printf("row %d t %f\n",row,t);
+			//}
+		}
+	}
+	if (i < x.n) {
+		means.elements[i] = t/count;
 	}
 }
 
@@ -341,163 +271,118 @@ template<typename T> __global__ void featureAvgKernelLv(DMatrix<T> means, const 
  */
 
 
-template<typename T> void CuMatrix<T>::featureAvgKernelL(DMatrix<T>& d_means, const DMatrix<T>& d_x, bool localVar) {
-	uint threads = 512;
+template<typename T> __host__ CUDART_DEVICE void CuMatrix<T>::featureAvgKernelL(DMatrix<T>& d_means, const DMatrix<T>& d_x, bool localVar, cudaStream_t stream ) {
+	uint threads =  MAX(d_means.m, d_means.n);
 	dim3 dBlocks, dThreads;
 	uint smem = d_x.n * sizeof(T);
-	if (smem > caps.memSharedPerBlock) {
-		dthrow (  new smemExceeded);
+	if (smem > ExecCaps::currCaps()->memSharedPerBlock) {
+		setLastError ( smemExceededEx);
 	}
 	b_util::execContext(threads, d_x.n, dBlocks, dThreads);
-	//outln("for " << nRows << "*" << nCols << ", have " << dBlocks.x << " blocks of " << dThreads.x << " threads with " << smem << " smem");
-	//outln("rows " << d_x.m);
-	if(syncHappy)checkCudaError(cudaGetLastError());
 	if (localVar) {
-		featureAvgKernelLv<<<dBlocks, dThreads>>>(d_means, d_x);
+		featureAvgKernelLv<<<dBlocks, dThreads, 0, stream>>>(d_means, d_x);
 	} else {
-		featureAvgKernel<<<dBlocks, dThreads, smem>>>(d_means, d_x);
+		featureAvgKernel<<<dBlocks, dThreads, smem, stream>>>(d_means, d_x);
 	}
-	if(syncHappy)checkCudaError(cudaDeviceSynchronize());
+#ifndef __CUDA_ARCH__
+	if(checkDebug(syncHappy))checkCudaError(cudaDeviceSynchronize());
+#endif
 }
 
-/*
- * expects a nonsqr block and a grid of (sqr) blocks to cover x (and pdens)
- * x is input sampleCount*featureCount
- * pdens is sampleCount*featureProbability
- */
-template<typename T> __global__ void multivariateGaussianFeaturesKernel(
-		DMatrix<T> d_pdens, const DMatrix<T> d_x, const DMatrix<T> d_sigmaSquared, const DMatrix<T> d_mu) {
-	uint col = blockIdx.x * blockDim.x + threadIdx.x; // index into column
-	uint rowStart = blockIdx.y * blockDim.x + threadIdx.y; //
-	uint rowsRemaining = MIN(d_x.m - rowStart, blockDim.x);
-	uint xRowOff,pdensRowOff;
-	T x_n, sigmaSquared_n, mu_n;
-	if(col < d_x.n && rowStart < d_x.m) {
-		sigmaSquared_n = d_sigmaSquared.elements[col];
-		mu_n = d_mu.elements[col];
-		xRowOff = rowStart * d_x.p;
-		pdensRowOff = rowStart * d_pdens.p;
-		for (uint row = 0; row < rowsRemaining; row += blockDim.y) {
-			x_n = d_x.elements[xRowOff + row * d_x.p + col];
-			d_pdens.elements[pdensRowOff + row * d_pdens.p + col] =
-					(ONE_OVER_SQR_2PI / sqrt(sigmaSquared_n)) / exp(  ( (x_n - mu_n )*( x_n - mu_n ) / (2.0 * sigmaSquared_n)));
-		}
+
+template<typename T> __host__ CUDART_DEVICE void CuMatrix<T>::featureAvgMultiStreamL(
+		DMatrix<T>& d_means, const DMatrix<T>& d_x, bool localVar,
+		int nstreams) {
+	uint maxDim = MAX(d_means.m, d_means.n);
+	uint threads = maxDim;
+	dim3 dBlocks, dThreads;
+	uint smem = d_x.n * sizeof(T);
+	if (smem > ExecCaps::currCaps()->memSharedPerBlock) {
+		setLastError(smemExceededEx);
 	}
-}
+	b_util::execContext(threads, d_x.n, dBlocks, dThreads);
 
-
-template<typename T>  void CuMatrix<T>::multivariateGaussianFeatures( DMatrix<T>& d_pden, const DMatrix<T>& d_x, const DMatrix<T>& d_sqrdSigmas, const DMatrix<T>& d_mu) {
-	dim3 block(32,8);
-	dim3 grid(b_util::enough(block.x, d_x.n), b_util::enough(block.x, d_x.m));
-	outln("multivariateGaussianFeatures on d_x " << util<T>::pdm(d_x) );
-	outln("multivariateGaussianFeatures with grid " << b_util::pd3(grid) << " block " << b_util::pd3(block));
-	//outln("rows " << d_x.m);
-	if(syncHappy)checkCudaError(cudaGetLastError());
-	multivariateGaussianFeaturesKernel<<<grid,block>>>(d_pden, d_x, d_sqrdSigmas, d_mu);
-	if(syncHappy)checkCudaError(cudaDeviceSynchronize());
-}
-
-
-/*
- * converts probability density matrix to probability vector
- * assumes block as wide as pdens.n
- */
-template<typename T> __global__ void mvGaussianVectorFromFeaturesKernel(
-		DMatrix<T> d_pvec, const DMatrix<T> d_pdens) {
-	uint col = blockIdx.x * blockDim.x + threadIdx.x; // index into column
-	uint row = blockIdx.y * blockDim.y + threadIdx.y; //
-	uint tileIdx = threadIdx.x + threadIdx.y * blockDim.x;
-	// load smem
-	T* tile = SharedMemory<T>();
-	T currP;
-	if(col < d_pdens.n && row < d_pdens.m) {
-		// fill tile with block of pdens
-		tile[tileIdx] = d_pdens.elements[col + row * d_pdens.p];
-		__syncthreads();
-		if(threadIdx.x == 0) {
-			currP = tile[tileIdx];
-			for(uint icol = 1; icol < d_pdens.n; icol++) {
-				currP *= tile[tileIdx +icol];
-			}
-			d_pvec.elements[row* d_pvec.p] = currP;
-		}
+	//int meanSize = MAX(d_means.m, d_means.n) * sizeof(T);
+	cudaStream_t *streams = (cudaStream_t *) malloc(
+			nstreams * sizeof(cudaStream_t));
+	for (int i = 0; i < nstreams; i++) {
+		cherr(cudaStreamCreateWithFlags(&(streams[i]), cudaStreamNonBlocking));
 	}
-}
+	// create CUDA event handles
+	// use blocking sync
+	cudaEvent_t start_event, stop_event;
 
-template<typename T>  void CuMatrix<T>::mvGaussianVectorFromFeatures( DMatrix<T>& d_pvec, const DMatrix<T>& d_pdens) {
-	//uint blockX =MAX(32, d_pdens.n);
-	//dim3 block(blockX,caps.maxTsPerBlock<T>()/blockX);
-	//uint smem = block.x * block.y * sizeof(T);
-	uint blockX = d_pdens.n;
-	uint blockY = MIN(d_pdens.m, caps.maxTsPerBlock<T>()/blockX);
-	outln("blockY by max smem " << blockY);
-	if(blockY < 1) {
-		dthrow(notEnoughSmem());
+	cherr(cudaEventCreateWithFlags(&start_event, cudaStreamNonBlocking));
+	cherr(cudaEventCreateWithFlags(&stop_event, cudaStreamNonBlocking));
+	cudaEventRecord(start_event, 0);
+	T* cols = new T[d_x.n];
+	plusBinaryOp<T> pbo  = Functory<T,plusBinaryOp>::pinch();
+	for (int i = 0; i < d_x.n; i++) {
+		CuMatrix<T>::reduceColumn(cols + i, d_x, pbo, 0, i,
+				streams[i % nstreams]);
 	}
-	blockY = MIN(blockY, caps.thrdPerBlock/blockX);
-	outln("blockY by max thread/block" << blockY);
-	uint smem = blockX * blockY * sizeof(T);
-	dim3 block(blockX,blockY);
-	dim3 grid(1, b_util::enough(block.y, d_pdens.m));
-	//dim3 grid(b_util::enough(block.x, d_pdens.n), b_util::enough(block.y, d_pdens.m));
-	outln("mvGaussianVectorFromFeatures with grid " << b_util::pd3(grid) << " block " << b_util::pd3(block) << ", smem " << smem);
-	//outln("rows " << d_x.m);
-	if(syncHappy)checkCudaError(cudaGetLastError());
-	mvGaussianVectorFromFeaturesKernel<<<grid,block,smem>>>(d_pvec, d_pdens);
-	if(syncHappy)checkCudaError(cudaDeviceSynchronize());
-}
-
-/*
- *
- * d_x.n must < max block dim otherwise two-step it
- * rows is how many rows of d_x.n cols will fit in smem
- *
- */
-template<typename T> __global__ void multivariateGaussianVectorKernel(
-		DMatrix<T> d_pvec, const DMatrix<T> d_x, const DMatrix<T> d_sigmaSquared, const DMatrix<T> d_mu) {
-	uint col = threadIdx.x; // index into column
-	uint row = blockIdx.y * blockDim.y + threadIdx.y; //
-	uint xRowOff;
-	uint tileIdx = threadIdx.x + threadIdx.y * blockDim.x;
-	T x_n, sigmaSquared_n, mu_n;
-	T* tile = SharedMemory<T>();
-	if(col < d_x.n && row < d_x.m) {
-		sigmaSquared_n = d_sigmaSquared.elements[col];
-		mu_n = d_mu.elements[col];
-		xRowOff = row * d_x.p;
-		// fill as many rows as will fit in smem with feautures probs
-		x_n = d_x.elements[xRowOff + col];
-		tile[tileIdx] =
-				(ONE_OVER_SQR_2PI / sqrt(sigmaSquared_n)) / exp(  ( (x_n - mu_n )*( x_n - mu_n ) / (2.0 * sigmaSquared_n)));
-		__syncthreads();
-		// now find the sample prob (== product of feature probs)
-		if(threadIdx.x == 0) {
-			x_n = tile[tileIdx] ;
-			for(uint icol = 1; icol < blockDim.x; icol++) {
-				x_n *= tile[tileIdx + icol];
-			}
-			d_pvec.elements[row * d_pvec.p] = x_n;
-		}
+	cudaEventRecord(stop_event, 0);
+#ifndef __CUDA_ARCH__
+	cudaEventSynchronize(stop_event);
+#endif
+	// release resources
+	for (int i = 0; i < nstreams; i++) {
+		cudaStreamDestroy(streams[i]); // implicit sync on stream
 	}
+#ifndef __CUDA_ARCH__
+	if(checkDebug(debugRedux))outln("cols before div " << util<T>::parry(cols,d_x.n));
+#endif
+
+	cudaEventDestroy(start_event);
+	cudaEventDestroy(stop_event);
+	scaleUnaryOp<T> multf = Functory<T,scaleUnaryOp>::pinch( static_cast<T>(1. / d_x.n));
+#ifndef __CUDA_ARCH__
+	T* d_cols;
+	cherr(cudaMalloc(&d_cols,d_x.n*sizeof(T)));
+	cherr(cudaMemcpy(d_cols,cols,d_x.n*sizeof(T), cudaMemcpyHostToDevice));
+	DMatrix<T> d_meansF(d_cols, d_x.n, 1);
+	unaryOpL(d_means, d_meansF, multf);
+#else
+	DMatrix<T> d_meansF(cols, d_x.n, 1);
+	unaryOpL(d_means, d_meansF, multf);
+#endif
+
+#ifndef __CUDA_ARCH__
+	cudaFree(d_cols);
+#endif
+	delete [] cols;
+
+#ifndef __CUDA_ARCH__
+	if(checkDebug(syncHappy))checkCudaError(cudaDeviceSynchronize());
+#endif
 }
 
-
-template<typename T>  void CuMatrix<T>::multivariateGaussianVector(  DMatrix<T>& d_pvec, const DMatrix<T>& d_x, const DMatrix<T>& d_sqrdSigmas, const DMatrix<T>& d_mu) {
-	uint blockX = d_x.n;
-	uint blockY = MIN(d_x.m, caps.maxTsPerBlock<T>()/blockX);
-	if(blockY < 1) {
-		dthrow(notEnoughSmem());
+template<typename T> __host__ CUDART_DEVICE void CuMatrix<T>::featureAvgTxdKernelL(DMatrix<T>& d_means, const DMatrix<T>& d_x) {
+	uint threads = MIN(512, MAX(d_means.m, d_means.n));
+	dim3 dBlocks, dThreads;
+	b_util::execContext(threads, d_x.m, dBlocks, dThreads);
+	if(checkDebug(debugRedux)) {
+		printf("featureAvgTxdKernelL threads %u rows %u \n ",threads, d_x.m );
+		b_util::prd3(dBlocks,"featureAvgTxdKernelL dBlocks");
+		b_util::prd3(dThreads,"featureAvgTxdKernelL dThreads");
 	}
-	uint smem = blockX * blockY * sizeof(T);
-	dim3 block(blockX,blockY);
-	dim3 grid(1, b_util::enough(block.y, d_x.m));
-	outln("multivariateGaussianVector on d_x " << util<T>::pdm(d_x));
-	outln("multivariateGaussianVector with grid " << b_util::pd3(grid) << " of blocks " << b_util::pd3(block) << " with smem " << smem);
-	//outln("rows " << d_x.m);
-	if(syncHappy)checkCudaError(cudaGetLastError());
-	multivariateGaussianVectorKernel<<<grid,block,smem>>>(d_pvec, d_x, d_sqrdSigmas,d_mu);
-	if(syncHappy)checkCudaError(cudaDeviceSynchronize());
+
+	// get row sums of txd X (==column sums of x)
+	rowSum(d_means, d_x);
+
+	// divide by sample count (row count of x, col count of txd x)
+	scaleUnaryOp<T> multf = Functory<T,scaleUnaryOp>::pinch( static_cast<T>(1. / d_x.n));
+	unaryOp1dKernel<<<dBlocks,dThreads>>>(d_means.elements, d_means.elements, multf, d_x.m);
+	//return unaryOp(multf);
+
+	//featureAvgKernelTxd<<<dBlocks, dThreads, smem>>>(d_means, d_x);
+#ifndef __CUDA_ARCH__
+	if(checkDebug(syncHappy))checkCudaError(cudaDeviceSynchronize());
+#else
+	__syncthreads();
+#endif
 }
+
 
 template<typename T> __global__ void meanSubKernel(DMatrix<T> res, const DMatrix<T> x,
 		const DMatrix<T> means) {
@@ -508,7 +393,7 @@ template<typename T> __global__ void meanSubKernel(DMatrix<T> res, const DMatrix
 	if (i < x.n) {
 		mu = means.elements[i];
 		uint idx;
-		for (uint row = 0; row < x.m; row++) {
+		for (int row = 0; row < x.m; row++) {
 			idx = row * x.n + i;
 			res.elements[idx] = x.elements[idx] - mu;
 		}
@@ -524,7 +409,7 @@ template<typename T> __global__ void meanSubSqrKernel(DMatrix<T> res, const DMat
 	if (i < x.n) {
 		mu = means.elements[i];
 		uint idx;
-		for (uint row = 0; row < x.m; row++) {
+		for (int row = 0; row < x.m; row++) {
 			idx = row * x.n + i;
 			curr = x.elements[idx] - mu;
 			res.elements[idx] = curr * curr;
@@ -532,42 +417,40 @@ template<typename T> __global__ void meanSubSqrKernel(DMatrix<T> res, const DMat
 	}
 }
 
-template<typename T> void CuMatrix<T>::meanSubL(DMatrix<T>& d_res, const DMatrix<T>& d_x, const DMatrix<T>& d_means) {
+template<typename T> __host__ CUDART_DEVICE void CuMatrix<T>::meanSubL(DMatrix<T>& d_res, const DMatrix<T>& d_x, const DMatrix<T>& d_means, cudaStream_t stream) {
 	uint threads = 512;
 	dim3 dBlocks, dThreads;
 	uint smem = d_x.n * sizeof(T);
-	if (smem > caps.memSharedPerBlock) {
-		throw new smemExceeded;
+	if (smem > ExecCaps::currCaps()->memSharedPerBlock) {
+		setLastError(smemExceededEx);
 	}
 	b_util::execContext(threads, d_x.n, dBlocks, dThreads);
-	outln(
-			"meanSubL for " << d_x.m << "*" << d_x.n << ", have " << dBlocks.x << " blocks of " << dThreads.x << " threads with " << smem << " smem");
+	if(checkDebug(debugExec))printf(
+			"meanSubL for %d*%d, have %d bloks of %d threads, smem %d\n", d_x.m, d_x.n, dBlocks.x, dThreads.x,smem );
 	//outln("rows " << d_x.m);
-	if(syncHappy)checkCudaError(cudaGetLastError());
-	meanSubKernel<<<dBlocks, dThreads, smem>>>(d_res, d_x, d_means);
-	if(syncHappy)checkCudaError(cudaDeviceSynchronize());
+	meanSubKernel<<<dBlocks, dThreads, smem, stream>>>(d_res, d_x, d_means);
 }
 
 template<typename T> void CuMatrix<T>::meanSubSqrL(DMatrix<T>& d_res, const DMatrix<T>& d_x, const DMatrix<T>& d_means) {
 	uint threads = 512;
 	dim3 dBlocks, dThreads;
 	uint smem = d_x.n * sizeof(T);
-	if (smem > caps.memSharedPerBlock) {
+	if (smem > ExecCaps::currCaps()->memSharedPerBlock) {
 		throw new smemExceeded;
 	}
 	b_util::execContext(threads, d_x.n, dBlocks, dThreads);
 	outln("meanSubL for " << d_x.m << "*" << d_x.n << ", have " << dBlocks.x << " blocks of " << dThreads.x << " threads with " << smem << " smem");
 	//outln("rows " << d_x.m);
-	if(syncHappy)checkCudaError(cudaGetLastError());
+	if(checkDebug(syncHappy))checkCudaError(cudaGetLastError());
 	meanSubSqrKernel<<<dBlocks, dThreads, smem>>>( d_res, d_x, d_means);
-	if(syncHappy)checkCudaError(cudaDeviceSynchronize());
+	if(checkDebug(syncHappy))checkCudaError(cudaDeviceSynchronize());
 }
 
 template<typename T> __global__ void columnProdKernel(DMatrix<T> prod, const DMatrix<T> x) {
 	uint i = blockIdx.x * blockDim.x + threadIdx.x; // index into column
 	T product = 1;
 	if(i < x.n) {
-		for (uint row = 0; row < x.m; row++) {
+		for (long row = 0; row < x.m; row++) {
 			product *= x.elements[i + row * x.p];
 		}
 		prod.elements[i] = product;
@@ -575,14 +458,17 @@ template<typename T> __global__ void columnProdKernel(DMatrix<T> prod, const DMa
 }
 
 template<typename T> void CuMatrix<T>::columnProduct(DMatrix<T>& d_prod, const DMatrix<T>& d_x) {
-	dim3 block(32), grid(b_util::enough(block.x, d_x.n));
+	dim3 block(32), grid(DIV_UP( d_x.n,block.x));
 	//outln("rows " << d_x.m);
-	if(syncHappy)checkCudaError(cudaGetLastError());
-	columnProdKernel<<<grid, block>>>(d_prod, d_x);
-	if(syncHappy)checkCudaError(cudaDeviceSynchronize());
+	if(checkDebug(syncHappy))checkCudaError(cudaGetLastError());
+	columnProdKernel<<<grid, block,0>>>(d_prod, d_x);
+	if(checkDebug(syncHappy))checkCudaError(cudaDeviceSynchronize());
 }
 
-// block is x.n wide, deep as smem allows
+// copies as many rows as will fit to smem,
+// uses first column of thread block to sum rows
+// todo shuffle reduction for x.n < warp_size
+//
 template<typename T> __global__ void rowSumKernel(DMatrix<T> d_rowSums, const DMatrix<T> d_x) {
 	uint col = threadIdx.x; // index into column
 	uint row = blockIdx.y * blockDim.y + threadIdx.y; //
@@ -590,35 +476,19 @@ template<typename T> __global__ void rowSumKernel(DMatrix<T> d_rowSums, const DM
 	T* tile = SharedMemory<T>();
 	T currRowSum = 0;
 	if(threadIdx.x < d_x.n && row < d_x.m) {
+		// copy tile from source
 		tile[tileIdx] = d_x.elements[row * d_x.p + col];
 		__syncthreads();
+		// use first column of threads to sum rows
 		if(threadIdx.x == 0) {
-			for(uint icol = 0; icol< d_x.n;icol++) {
+			if(checkDebug(debugExec)){flprintf("threadIdx.y %d\n", threadIdx.y);}
+			for(int icol = 0; icol< d_x.n;icol++) {
 				currRowSum += tile[tileIdx + icol];
 			}
 			d_rowSums.elements[row] = currRowSum;
 		}
 	}
 }
-
-template<typename T> void CuMatrix<T>::rowSum(DMatrix<T>& d_rowSums, const DMatrix<T>& d_x) {
-	uint blockX = MAX(WARP_SIZE,d_x.n);
-	if(blockX > caps.maxBlock.x) {
-		dthrow(exceedsMaxBlockDim());
-	}
-	uint blockY = MIN( d_x.m, MIN( caps.maxBlock.y, MIN( caps.thrdPerBlock/blockX, caps.maxTsPerBlock<T>() )));
-	dim3 block(blockX,blockY);
-	uint smem = util<T>::vol(block);
-	if (smem > caps.memSharedPerBlock) {
-		dthrow (  new smemExceeded);
-	}
-	dim3 grid(1,b_util::enough(block.y, d_x.m));
-	if(debugExec)outln("rowSum on " << util<T>::pdm(d_x) << " with " << b_util::pexec(grid,block, smem));
-	if(syncHappy)checkCudaError(cudaGetLastError());
-	rowSumKernel<<<grid, block, smem>>>(d_rowSums, d_x);
-	if(syncHappy)checkCudaError(cudaDeviceSynchronize());
-}
-
 
 template<typename T> string CuMatrix<T>::dimsString() const {
 	stringstream ssout;
@@ -646,8 +516,12 @@ template<typename T> string CuMatrix<T>::toShortString() const {
 	else
 		ssout << "null";
 	ssout << ", d: ";
-	if(d_elements)
+	if(d_elements) {
 		ssout << d_elements;
+		cudaPointerAttributes ptrAtts;
+		checkCudaErrors(cudaPointerGetAttributes(&ptrAtts,d_elements));
+		ssout << "<" << ptrAtts.device << ">";
+	}
 	else
 		ssout << "null";
 	ssout << "]]";
@@ -655,8 +529,8 @@ template<typename T> string CuMatrix<T>::toShortString() const {
 }
 
 
-template<typename T> template<typename CostFunction> void CuMatrix<T>::gradientApprox(
-		CostFunction costFn, DMatrix<T> theta, DMatrix<T> perturb, DMatrix<T> gradApprox, T epsilon) {
+template<typename T> template<template <typename> class CostFunction> void CuMatrix<T>::gradientApprox(
+		CostFunction<T> costFn, DMatrix<T> theta, DMatrix<T> perturb, DMatrix<T> gradApprox, T epsilon) {
 	const uint l = theta.m * theta.n;
 	ulong i = 0;
 	constFiller<T> filler;
@@ -678,6 +552,8 @@ template<typename T> template<typename CostFunction> void CuMatrix<T>::gradientA
 }
 
 
+extern template class CuMatrix<float>;
+extern template class CuMatrix<double>;
 
 #include "CuMatrixInster.cu"
 

@@ -8,41 +8,69 @@
 #ifndef MATRIXEXCEPTIONS_H_
 #define MATRIXEXCEPTIONS_H_
 
-class MatrixException {};
+class MatrixException {
+public:
+	string msg;
+	MatrixException() : msg("") {};
+	MatrixException(string msg) : msg(msg) {};
+	inline friend ostream& operator<<(ostream& os, const MatrixException& e)  {
+		return os << e.msg;
+	}
+};
 
-class outOfBounds : MatrixException{};
-class columnOutOfBounds : outOfBounds{};
-class rowOutOfBounds: outOfBounds{};
+class illegalArgument: public  MatrixException{};
 
-class notVector : MatrixException{};
-class notRowVector : notVector{};
-class notColumnVector : notVector{};
 
-class notSynced: MatrixException{}; // required buffer (host or dev) missing or out of date
-class notSyncedDevice: notSynced{}; // required buffer (host or dev) missing or out of date
-class notSyncedHost: notSynced{}; // required buffer (host or dev) missing or out of date
+class outOfBounds : public  MatrixException{};
+class columnOutOfBounds : public  outOfBounds{};
+class rowOutOfBounds: public  outOfBounds{};
 
-class notSquare : MatrixException{};
+class notVector : public  MatrixException{};
+class notRowVector : public  notVector{};
+class notColumnVector : public  notVector{};
 
-class badDimensions: MatrixException{};
-class matricesOfIncompatibleShape : badDimensions{};
-class rowDimsDontAgree: matricesOfIncompatibleShape{};
-class columnDimsDontAgree: matricesOfIncompatibleShape{};
-class exceedsMaxBlockDim: badDimensions{};
+class notSynced: public  MatrixException{}; // required buffer (host or dev) missing or out of date
+class notSynceCUDART_DEVICE: public  notSynced{}; // required buffer (host or dev) missing or out of date
+class notSyncedHost: public  notSynced{}; // required buffer (host or dev) missing or out of date
 
-class notImplemented : MatrixException{};
-class nNeqPnotImplemented : notImplemented{};
-class singularMatrix: MatrixException{};
+class notSquare : public  MatrixException{};
 
-class memoryException : MatrixException{};
-class noDeviceBuffer : memoryException{};
-class noHostBuffer : memoryException{};
-class alreadyPointingDevice : memoryException{};
-class hostReallocation: memoryException{};
-class notEnoughSmem: memoryException{};
+class badDimensions: public  MatrixException{};
+class matricesOfIncompatibleShape : public  badDimensions{};
+class rowDimsDisagree: public  matricesOfIncompatibleShape{};
+class columnDimsDisagree: public  matricesOfIncompatibleShape{};
+class exceedsMaxBlockDim: public  badDimensions{};
 
-class TimerException : MatrixException{};
-class TimerNotStarted : TimerException{};
-class TimerAlreadyStarted : TimerException{};
+class notImplemented : public  MatrixException{};
+class nNeqPnotImplemented : public  notImplemented{};
+class singularMatrix: public  MatrixException{};
 
+class MemoryException : public  MatrixException{};
+class noDeviceBuffer : public  MemoryException{};
+class noHostBuffer : public  MemoryException{};
+class alreadyPointingDevice : public  MemoryException{};
+class hostReallocation: public  MemoryException{};
+class notEnoughSmem: public  MemoryException{};
+class notResidentOnDevice : public  MemoryException{};
+
+class TimerException : public  MatrixException{};
+class timerNotStarted : public  TimerException{};
+class timerAlreadyStarted : public  TimerException{};
+
+class StreamException: public  MatrixException{};
+class wrongStream : public  StreamException{};
+
+class HardwareException : public  MatrixException{};
+class insufficientGPUCount : public  MatrixException{};
+
+class PointException : public  MatrixException{};
+class TimeNotSet : public PointException {};
+class SuperposNotImplemented : public PointException {};
+class OglCbException : public MatrixException{};
+class ThisAlreadySet : public OglCbException {};
+
+class CapsException : public  MatrixException{};
+
+/*
+*/
 #endif /* MATRIXEXCEPTIONS_H_ */

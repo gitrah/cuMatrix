@@ -14,19 +14,6 @@
 #include <sys/wait.h>
 #include "tests.h"
 
-
-bool debugExec = false;
-bool debugMem = false;
-bool debugLife = false;
-bool debugCopy = false;
-bool debugMatProd = false;
-bool debugSync = false;
-bool debugCons = false;
-bool debugTxp = false;
-bool debugStack = false;
-bool debugVerbose = false;
-bool syncHappy = false;
-
 string const allChoice = "all";
 string const memChoice = "mem";
 string const copyChoice = "copy";
@@ -38,8 +25,6 @@ string const verboseChoice = "verb";
 string const syncChoice = "sync";
 string const txpChoice = "txp";
 string const syncHappyChoice = "shappy";
-extern ExecCaps caps;
-extern cudaDeviceProp deviceProp;
 
 int testCheckValid() {
 	Matrix<float> m = Matrix<float>::zeros(5, 5);
@@ -57,60 +42,57 @@ template <typename T> int runTest(int argc, char** argv) {
     int status = -1;
 
     b_util::announceTime();
-    ExecCaps::getExecCaps(caps);
 
-	Matrix<T>::init(256, 64);
-	outln("card(s) capability: " << deviceProp.major << "." << deviceProp.minor);
-	b_util::initTimer();
 	//testCheckValid();
 	getCmdLineArgumentString(argc, (const char **) argv, "dbg", &debugChoice);
 	getCmdLineArgumentString(argc, (const char **)argv, "dev", &device);
+	uint localDbgFlags = 0;
 	if (debugChoice) {
 		string debug(debugChoice);
 		cout << "debug choices: ";
 		if (debug.find(allChoice) != string::npos) {
 			cout << " ALL";
-			debugMem = debugLife = debugCopy = debugMatProd = debugCons = debugStack = debugVerbose = debugTxp= true;
+			//debugMem = debugLife = debugCopy = debugMatProd = debugCons = debugStack = debugVerbose = debugTxp= true;
 		} else {
 			if (debug.find(memChoice) != string::npos) {
 				cout << " mem";
-				debugMem = true;
+				localDbgFlags |=debugMem;
 			}
 			if (debug.find(lifeChoice) != string::npos) {
 				cout << " life";
-				debugLife = true;
+				localDbgFlags |=debugLife;
 			}
 			if (debug.find(copyChoice) != string::npos) {
 				cout << " copy";
-				debugCopy = true;
+				localDbgFlags |=debugCopy;
 			}
 			if (debug.find(matprodChoice) != string::npos) {
 				cout << " verbose";
-				debugMatProd = true;
+				localDbgFlags |=debugMatProd;
 			}
 			if (debug.find(consChoice) != string::npos) {
 				cout << " cons";
-				debugCons = true;
+				localDbgFlags |=debugCons;
 			}
 			if (debug.find(stackChoice) != string::npos) {
 				cout << " stack";
-				debugStack = true;
+				localDbgFlags |=debugStack;
 			}
 			if (debug.find(stackChoice) != string::npos) {
 				cout << " verbose";
-				debugVerbose = true;
+				localDbgFlags |= debugVerbose;
 			}
 			if (debug.find(syncChoice) != string::npos) {
 				cout << " sync";
-				debugSync = true;
+				localDbgFlags |=debugSync;
 			}
 			if (debug.find(syncHappyChoice) != string::npos) {
 				cout << " s(ync)happy";
-				syncHappy = true;
+				localDbgFlags |=syncHappy;
 			}
 			if (debug.find(txpChoice) != string::npos) {
 				cout << " txp";
-				debugTxp = true;
+				localDbgFlags |=debugTxp;
 			}
 		}
 		cout << endl;
@@ -124,7 +106,18 @@ template <typename T> int runTest(int argc, char** argv) {
             idev = 0;
 		}
 	}
+
     checkCudaErrors(cudaSetDevice(idev));
+    setAllGpuDebugFlags(localDbgFlags,false,false);
+	Matrix<T>::init(256, 64);
+	int devCount;
+	checkCudaErrors(cudaGetDeviceCount(&devCount));
+	ExecCaps* currCaps = null;
+	for(int i = 0; i <devCount; i++) {
+		currCaps = g_devCaps[i];
+		outln("gpu(" << i << ") capability: " << currCaps->deviceProp.major << "." << currCaps->deviceProp.minor << "; dynamicPism " << tOrF(currCaps->dynamicPism));
+	}
+
     // initialize events
     outln(debugMem << debugLife << debugCopy);
 

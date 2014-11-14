@@ -1,34 +1,50 @@
 #include "tests.h"
+#include "testKernels.h"
+#include "../CuMatrix.h"
 #include "../util.h"
 #include "../caps.h"
 
 template int testBinCat<float>::operator()(int argc, char const ** args) const;
 template int testBinCat<double>::operator()(int argc, char const ** args) const;
+template int testBinCat<ulong>::operator()(int argc, char const ** args) const;
 template <typename T> int testBinCat<T>::operator()(int argc, const char** args) const {
-	Matrix<T>::verbose = true;
-	Matrix<T> a = Matrix<T>::seqMod(1, 32, 40, 1);
-	outln(a.toString());
-	Matrix<T> b = a.toBinaryCategoryMatrix();
-	outln(b.toString());
-	Matrix<T> c = b.toMaxColumnIndexVector();
-	outln(c.toString());
+	setCurrGpuDebugFlags( debugVerbose,true,false);
+	CuMatrix<T> a = CuMatrix<T>::seqMod(1, 32, 40, 1).syncBuffers();
+	//outln(a.syncBuffers().toString());
+	CuMatrix<T> b = a.toBinaryCategoryMatrix();
+	//outln(b.syncBuffers().toString());
+	CuMatrix<T> c = b.toMaxColumnIndexVector();
+	//outln("c " << c.syncBuffers().toString());
+	CuMatrix<T> a_c = a-c;
+	//outln("a_c " << a_c.syncBuffers());
+	//outln( "a == c " << (a == c));
+	//outln( "a != c " << (a != c));
+	outln("a minus c complete");
+	outln( "a almostEq c " << (a.almostEq( c)));
+	//outln( "c almostEq a " << (c.almostEq( a)));
+	almostEqualsBinaryOp<T> op =  Functory<T,almostEqualsBinaryOp>::pinch((T)1e-6);
+
+	outln(" op.epsilon " << op.epsilon_ro());
+	CuMatrix<T> a_c2 = a.binaryOp(c, op);
+	outln("a_c2 " << a_c2.syncBuffers());
+	outln(" op.epsilon2 " << op.epsilon_ro());
 	dassert(a.almostEq(c));
 	outln("passed 1");
-	Matrix<T> a2 = Matrix<T>::seqMod(1, 70, 40, 1);
-	outln(a2.toString());
-	Matrix<T> b2 = a2.toBinaryCategoryMatrix();
-	outln(b2.toString());
-	Matrix<T> c2 = b2.toMaxColumnIndexVector();
-	outln(c2.toString());
+	CuMatrix<T> a2 = CuMatrix<T>::seqMod(1, 70, 40, 1);
+	outln(a2.syncBuffers().toString());
+	CuMatrix<T> b2 = a2.toBinaryCategoryMatrix();
+	outln(b2.syncBuffers().toString());
+	CuMatrix<T> c2 = b2.toMaxColumnIndexVector();
+	outln(c2.syncBuffers().toString());
 	dassert(a2.almostEq(c2 + static_cast<T>(1)));
-	Matrix<T>::verbose = false;
+	setCurrGpuDebugFlags( ~debugVerbose,false,true);
 	return 0;
 }
 
 template int testFillXvsY<float>::operator()(int argc, char const ** args) const;
 template int testFillXvsY<double>::operator()(int argc, char const ** args) const;
 template <typename T> int testFillXvsY<T>::operator()(int argc, const char** args) const {
-	Matrix<T>::verbose = true;
+	setCurrGpuDebugFlags( debugVerbose,true,false);
 	int count = b_util::getCount(argc,args,1000);
     CuTimer timer;
     timer.start();
@@ -36,7 +52,7 @@ template <typename T> int testFillXvsY<T>::operator()(int argc, const char** arg
 
 	// rows
     for(int i = 0; i < count; i++) {
-		Matrix<T> m = Matrix<T>::ones(5000,1);
+		CuMatrix<T> m = CuMatrix<T>::ones(5000,1);
 	}
 
 	double delta = b_util::diffclock(clock(), lastTime) / 1000;
@@ -49,7 +65,7 @@ template <typename T> int testFillXvsY<T>::operator()(int argc, const char** arg
 	timer.start();
 	// columns
 	for(int i = 0; i < count; i++) {
-		Matrix<T> m = Matrix<T>::ones(1,5000);
+		CuMatrix<T> m = CuMatrix<T>::ones(1,5000);
 	}
 	delta = b_util::diffclock(clock(), lastTime) / 1000;
 	outln("columns " << count << " took " << delta << " secs");
@@ -63,18 +79,18 @@ template <typename T> int testFillXvsY<T>::operator()(int argc, const char** arg
 template int testCat<float>::operator()(int argc, char const ** args) const;
 template int testCat<double>::operator()(int argc, char const ** args) const;
 template <typename T> int testCat<T>::operator()(int argc, const char** args) const {
-	Matrix<T> s = Matrix<T>::ones(40, 1);
-	Matrix<T> t = s |= Matrix<T>::ones(40, 40) * 3;
+	CuMatrix<T> s = CuMatrix<T>::ones(40, 1);
+	CuMatrix<T> t = s |= CuMatrix<T>::ones(40, 40) * 3;
 	outln("t.ss " << t.toShortString());
 	outln("t after sum " << t.sum() << " mat " << t.syncBuffers());
-	Matrix<T> s2 = Matrix<T>::ones(40,40) * 2;
-	Matrix<T> t2 = s2 |= Matrix<T>::ones(40,1);
+	CuMatrix<T> s2 = CuMatrix<T>::ones(40,40) * 2;
+	CuMatrix<T> t2 = s2 |= CuMatrix<T>::ones(40,1);
 	outln("t2 " << (t2.syncBuffers()));
-	Matrix<T> s3 = s.rightConcatenate(Matrix<T>::ones(40, 1));
+	CuMatrix<T> s3 = s.rightConcatenate(CuMatrix<T>::ones(40, 1));
 	outln("s final " << (s3.syncBuffers()).toString());
 
-	Matrix<T> big = Matrix<T>::ones(400,400) * 2;
-	Matrix<T> bigger = big /= big;
+	CuMatrix<T> big = CuMatrix<T>::ones(400,400) * 2;
+	CuMatrix<T> bigger = big /= big;
 	T bs = big.sum();
 	T bbs = bigger.sum();
 	outln("big.sum() " << bs << ", bigger " << bbs);
@@ -85,9 +101,9 @@ template <typename T> int testCat<T>::operator()(int argc, const char** args) co
 template int testMaxColIdxs<float>::operator()(int argc, char const ** args) const;
 template int testMaxColIdxs<double>::operator()(int argc, char const ** args) const;
 template <typename T> int testMaxColIdxs<T>::operator()(int argc, const char** args) const {
-	Matrix<T> a = Matrix<T>::randn(1000,10);
+	CuMatrix<T> a = CuMatrix<T>::randn(1000,10);
 	outln(a.syncBuffers());
-	Matrix<T> b = a.toMaxColumnIndexVector();
+	CuMatrix<T> b = a.toMaxColumnIndexVector();
 	outln(b.syncBuffers());
 	return 0;
 }
@@ -112,110 +128,110 @@ template <typename T> int testTranspose<T>::operator()(int argc, const char** ar
 //	for(int i = 3; i < 4;i++) {
 		kernel = kernels[i];
 		outln("kernel " << txNames[i]);
-		Matrix<T> ms = Matrix<T>::sequence(1,11,13);
+		CuMatrix<T> ms = CuMatrix<T>::sequence(1,11,13);
 		ms.syncBuffers();
-		Matrix<T> tms = ms.transposeKernelPtr(kernel);
-		Matrix<T> ttms = tms.transposeKernelPtr(kernel);
-		Matrix<T>::verbose = true;
+		CuMatrix<T> tms = ms.transposeKernelPtr(kernel);
+		CuMatrix<T> ttms = tms.transposeKernelPtr(kernel);
+		setCurrGpuDebugFlags( debugVerbose,true,false);
 		outln("ms " << ms);
 		tms.syncBuffers();
 		outln("tms " << tms);
 		outln("s- " << (ms - ttms).syncBuffers());
-		Matrix<T>::verbose = false;
+		setCurrGpuDebugFlags( ~debugVerbose,false,true);
 		assert( ttms.almostEq(ms));
 
-		Matrix<T> ms2a = Matrix<T>::sequence(2,22,24).syncBuffers();\
+		CuMatrix<T> ms2a = CuMatrix<T>::sequence(2,22,24).syncBuffers();
 		outln("ms2a " << ms2a);
-		Matrix<T> ms2 = ms2a.addBiasColumn();
+		CuMatrix<T> ms2 = ms2a.addBiasColumn();
 		outln("ms2 " << ms2.toShortString());
 		ms2.syncBuffers();
 		outln("ms2 " << ms2);
-		Matrix<T> tms2 = ms2.transposeKernelPtr(kernel).syncBuffers();
-		Matrix<T> ttms2 = tms2.transposeKernelPtr(kernel).syncBuffers();
-		Matrix<T>::verbose = true;
+		CuMatrix<T> tms2 = ms2.transposeKernelPtr(kernel).syncBuffers();
+		CuMatrix<T> ttms2 = tms2.transposeKernelPtr(kernel).syncBuffers();
+		setCurrGpuDebugFlags( debugVerbose,true,false);
 		outln("tms2 " << tms2);
 		outln("s2- " << (ms2 - ttms2).syncBuffers());
-		Matrix<T>::verbose = false;
+		setCurrGpuDebugFlags( ~debugVerbose,false,true);
 		assert( ttms2.almostEq(ms2));
 
-		Matrix<T> m = Matrix<T>::sequence(0,32*3+1-16, 32*3-16).addBiasColumn().syncBuffers();
-		Matrix<T> tm = m.transposeKernelPtr(kernel).syncBuffers();
-		Matrix<T> ttm = tm.transposeKernelPtr(kernel).syncBuffers();
-		Matrix<T>::verbose = true;
+		CuMatrix<T> m = CuMatrix<T>::sequence(0,32*3+1-16, 32*3-16).addBiasColumn().syncBuffers();
+		CuMatrix<T> tm = m.transposeKernelPtr(kernel).syncBuffers();
+		CuMatrix<T> ttm = tm.transposeKernelPtr(kernel).syncBuffers();
+		setCurrGpuDebugFlags( debugVerbose,true,false);
 		outln("m " << m);
 		outln("tm " << tm);
 		outln("- " << (m - ttm).syncBuffers());
-		Matrix<T>::verbose = false;
+		setCurrGpuDebugFlags( ~debugVerbose,false,true);
 		assert( ttm.almostEq(m));
 
 
-		Matrix<T> m2 = Matrix<T>::sequence(0,16, 34).addBiasColumn().syncBuffers();
-		Matrix<T> tm2 = m2.transposeKernelPtr(kernel).syncBuffers();
-		Matrix<T> ttm2 = tm2.transposeKernelPtr(kernel).syncBuffers();
-		Matrix<T>::verbose = true;
+		CuMatrix<T> m2 = CuMatrix<T>::sequence(0,16, 34).addBiasColumn().syncBuffers();
+		CuMatrix<T> tm2 = m2.transposeKernelPtr(kernel).syncBuffers();
+		CuMatrix<T> ttm2 = tm2.transposeKernelPtr(kernel).syncBuffers();
+		setCurrGpuDebugFlags( debugVerbose,true,false);
 		outln("m2 " << m2);
 		outln("tm2 " << tm2);
 		outln("- " << (m2 - ttm2).syncBuffers());
-		Matrix<T>::verbose = false;
+		setCurrGpuDebugFlags( ~debugVerbose,false,true);
 		assert( ttm2.almostEq(m2));
 
-		Matrix<T> dm = Matrix<T>::sequence(0, 65, 62).addBiasColumn().syncBuffers();
-		Matrix<T> dtm = dm.transposeKernelPtr(kernel).syncBuffers();
-		Matrix<T> dttm = dtm.transposeKernelPtr(kernel).syncBuffers();
-		Matrix<T>::verbose = true;
+		CuMatrix<T> dm = CuMatrix<T>::sequence(0, 65, 62).addBiasColumn().syncBuffers();
+		CuMatrix<T> dtm = dm.transposeKernelPtr(kernel).syncBuffers();
+		CuMatrix<T> dttm = dtm.transposeKernelPtr(kernel).syncBuffers();
+		setCurrGpuDebugFlags( debugVerbose,true,false);
 		outln("dm " << dm);
 		outln("dtm " << dtm);
 		outln("- " << (dm - dttm).syncBuffers());
-		Matrix<T>::verbose = false;
+		setCurrGpuDebugFlags( ~debugVerbose,false,true);
 		assert( dttm.almostEq(dm));
 
-		Matrix<T> mBig = Matrix<T>::sin(5000, 399).syncBuffers().addBiasColumn().syncBuffers();
-		Matrix<T> tmBig = mBig.transposeKernelPtr(kernel).syncBuffers();
-		Matrix<T> ttmBig = tmBig.transposeKernelPtr(kernel).syncBuffers();
+		CuMatrix<T> mBig = CuMatrix<T>::sin(5000, 399).syncBuffers().addBiasColumn().syncBuffers();
+		CuMatrix<T> tmBig = mBig.transposeKernelPtr(kernel).syncBuffers();
+		CuMatrix<T> ttmBig = tmBig.transposeKernelPtr(kernel).syncBuffers();
 		outln("mBig " << mBig);
 		outln("tmBig " << tmBig);
 		outln("- " << (mBig - ttmBig).syncBuffers());
 		outln("sum " << (mBig - ttmBig).sum());
 		assert( ttmBig.almostEq(mBig));
 
-		Matrix<T> mTOdd= Matrix<T>::sin(23, 23).syncBuffers();
-		Matrix<T> tmTOdd= mTOdd.transposeKernelPtr(kernel);
-		Matrix<T> tttmOdd = tmTOdd.transposeKernelPtr(kernel);
+		CuMatrix<T> mTOdd= CuMatrix<T>::sin(23, 23).syncBuffers();
+		CuMatrix<T> tmTOdd= mTOdd.transposeKernelPtr(kernel);
+		CuMatrix<T> tttmOdd = tmTOdd.transposeKernelPtr(kernel);
 		outln("tttmOdd " << tttmOdd.almostEq(mTOdd));
 
-		Matrix<T> mTOddNs= Matrix<T>::sin(13, 23).syncBuffers();
-		Matrix<T> tmTOddNs= mTOddNs.transposeKernelPtr(kernel);
-		Matrix<T> tttmOddNs = tmTOddNs.transposeKernelPtr(kernel);
+		CuMatrix<T> mTOddNs= CuMatrix<T>::sin(13, 23).syncBuffers();
+		CuMatrix<T> tmTOddNs= mTOddNs.transposeKernelPtr(kernel);
+		CuMatrix<T> tttmOddNs = tmTOddNs.transposeKernelPtr(kernel);
 		outln("tttmOddNs " << tttmOddNs.almostEq(mTOddNs));
 
-		Matrix<T> mBig2 = Matrix<T>::zeros(3220, 399).addBiasColumn();
-		Matrix<T> tmBig2= mBig2.transposeKernelPtr(kernel);
-		Matrix<T> ttmBig2 = tmBig2.transposeKernelPtr(kernel);
+		CuMatrix<T> mBig2 = CuMatrix<T>::zeros(3220, 399).addBiasColumn();
+		CuMatrix<T> tmBig2= mBig2.transposeKernelPtr(kernel);
+		CuMatrix<T> ttmBig2 = tmBig2.transposeKernelPtr(kernel);
 		outln("big2 " << ttmBig2.almostEq(mBig2));
 
-		Matrix<T> mNonSquare= Matrix<T>::sin(512, 256).syncBuffers();
-		Matrix<T> tmNonSquare = mNonSquare.transposeKernelPtr(kernel);
-		Matrix<T> ttmNonSquare = tmNonSquare.transposeKernelPtr(kernel);
+		CuMatrix<T> mNonSquare= CuMatrix<T>::sin(512, 256).syncBuffers();
+		CuMatrix<T> tmNonSquare = mNonSquare.transposeKernelPtr(kernel);
+		CuMatrix<T> ttmNonSquare = tmNonSquare.transposeKernelPtr(kernel);
 		outln("ttmNonSquare " << ttmNonSquare.almostEq(mNonSquare));
 
-		Matrix<T> mOdd= Matrix<T>::sin(333, 333).syncBuffers();
-		Matrix<T> tmOdd = mOdd.transposeKernelPtr(kernel);
-		Matrix<T> ttmOdd = tmOdd.transposeKernelPtr(kernel);
+		CuMatrix<T> mOdd= CuMatrix<T>::sin(333, 333).syncBuffers();
+		CuMatrix<T> tmOdd = mOdd.transposeKernelPtr(kernel);
+		CuMatrix<T> ttmOdd = tmOdd.transposeKernelPtr(kernel);
 		outln("ttmOdd " << ttmOdd.almostEq(mOdd));
 
-		Matrix<T> mOddNs= Matrix<T>::sin(533, 333).syncBuffers();
-		Matrix<T> tmOddNs = mOddNs.transposeKernelPtr(kernel);
-		Matrix<T> ttmOddNs = tmOddNs.transposeKernelPtr(kernel);
+		CuMatrix<T> mOddNs= CuMatrix<T>::sin(533, 333).syncBuffers();
+		CuMatrix<T> tmOddNs = mOddNs.transposeKernelPtr(kernel);
+		CuMatrix<T> ttmOddNs = tmOddNs.transposeKernelPtr(kernel);
 		outln("ttmOddNS " << ttmOddNs.almostEq(mOddNs));
 
-		Matrix<T> mSOdd= Matrix<T>::sin(33, 33).syncBuffers();
-		Matrix<T> tmSOdd= mSOdd.transposeKernelPtr(kernel);
-		Matrix<T> ttsmOdd = tmSOdd.transposeKernelPtr(kernel);
+		CuMatrix<T> mSOdd= CuMatrix<T>::sin(33, 33).syncBuffers();
+		CuMatrix<T> tmSOdd= mSOdd.transposeKernelPtr(kernel);
+		CuMatrix<T> ttsmOdd = tmSOdd.transposeKernelPtr(kernel);
 		outln("ttsmOdd " << ttsmOdd.almostEq(mSOdd));
 
-		Matrix<T> mSOddNs= Matrix<T>::sin(33, 53).syncBuffers();
-		Matrix<T> tmSOddNs= mSOddNs.transposeKernelPtr(kernel);
-		Matrix<T> ttsmOddNs = tmSOddNs.transposeKernelPtr(kernel);
+		CuMatrix<T> mSOddNs= CuMatrix<T>::sin(33, 53).syncBuffers();
+		CuMatrix<T> tmSOddNs= mSOddNs.transposeKernelPtr(kernel);
+		CuMatrix<T> ttsmOddNs = tmSOddNs.transposeKernelPtr(kernel);
 		outln("ttsmOddNs " << ttsmOddNs.almostEq(mSOddNs));
 	}
 	return 0;
@@ -227,9 +243,9 @@ template int testTransposeLoop<double>::operator()(int argc, char const ** args)
 template <typename T> int testTransposeLoop<T>::operator()(int argc, const char** args) const {
     CuTimer timer;
 	outln("testTransposeLoop start");
-	Matrix<T> seq = Matrix<T>::sequence(0,1024, 1024);
+	CuMatrix<T> seq = CuMatrix<T>::sequence(0,1024, 1024);
 	//
-	Matrix<T> tx = Matrix<T>::zeros(1024, 1024);
+	CuMatrix<T> tx = CuMatrix<T>::zeros(1024, 1024);
 	ulong matB = tx.size;
 	DMatrix<T> tx_d;
 	tx.asDmatrix(tx_d);
@@ -269,11 +285,11 @@ template int testReshape<double>::operator()(int argc, char const ** args) const
 template <typename T> int testReshape<T>::operator()(int argc, const char** args) const {
 	uint width = 500;
 	uint height = 500;
-	Matrix<T> ms = Matrix<T>::sin(height, width-1).addBiasColumn();
-	Matrix<T> mc = Matrix<T>::cos(height, width-1).addBiasColumn();
-	Matrix<T> flat = ms.poseAsCol() /= mc.poseAsCol();
-	Matrix<T> msP = flat.reshape(height,width,0);
-	Matrix<T> mcP = flat.reshape(height,width,height*width);
+	CuMatrix<T> ms = CuMatrix<T>::sin(height, width-1).addBiasColumn();
+	CuMatrix<T> mc = CuMatrix<T>::cos(height, width-1).addBiasColumn();
+	CuMatrix<T> flat = ms.poseAsCol() /= mc.poseAsCol();
+	CuMatrix<T> msP = flat.reshape(height,width,0);
+	CuMatrix<T> mcP = flat.reshape(height,width,height*width);
 	dassert(ms.almostEq(msP));
 	outln("ms sum " << ms.sum() << ", msP.sum " << msP.sum());
 	dassert(mc.almostEq(mcP));
@@ -284,8 +300,8 @@ template <typename T> int testReshape<T>::operator()(int argc, const char** args
 template int testTransposeNneqP<float>::operator()(int argc, char const ** args) const;
 template int testTransposeNneqP<double>::operator()(int argc, char const ** args) const;
 template <typename T> int testTransposeNneqP<T>::operator()(int argc, const char** args) const {
-	Matrix<T> incrRows = Matrix<T>::increasingRows(5, 1000, 900).syncBuffers();
-	Matrix<T> incrRowsCM = Matrix<T>::increasingRows(5, 1000, 900, true).syncBuffers();
+	CuMatrix<T> incrRows = CuMatrix<T>::increasingRows(5, 1000, 900).syncBuffers();
+	CuMatrix<T> incrRowsCM = CuMatrix<T>::increasingRows(5, 1000, 900, true).syncBuffers();
 	outln("a row of incrRows");
 	for(uint col = 0; col < incrRows.n; col++ ) {
 		cout << incrRows.get(0,col);
@@ -297,8 +313,8 @@ template <typename T> int testTransposeNneqP<T>::operator()(int argc, const char
 	}
 	cout << endl;
 
-	Matrix<T> m1 = Matrix<T>::zeros(1,10,false).syncBuffers();
-	Matrix<T> m2 = Matrix<T>::zeros(1,10,true).syncBuffers();
+	CuMatrix<T> m1 = CuMatrix<T>::zeros(1,10,false).syncBuffers();
+	CuMatrix<T> m2 = CuMatrix<T>::zeros(1,10,true).syncBuffers();
 	for(int col = 0; col < 10; col++) {
 		m1.set(0,col,col);
 		m2.set(0,col,col);
@@ -311,25 +327,11 @@ template <typename T> int testTransposeNneqP<T>::operator()(int argc, const char
 	outln("incrRows " << incrRows.toShortString() << ", " << incrRows.sum());
 	outln("incrRows " << incrRows.syncBuffers());
 	outln("incrRowsCM " << incrRowsCM.syncBuffers());
-	Matrix<T> incrCols = Matrix<T>::increasingColumns(5, 1000, 900);
+	CuMatrix<T> incrCols = CuMatrix<T>::increasingColumns(5, 1000, 900);
 	outln("incrCols " << incrCols.toShortString() << ", " << incrCols.sum());
-	Matrix<T> incrColsCM = Matrix<T>::increasingColumns(5, 100, 90, true);
+	CuMatrix<T> incrColsCM = CuMatrix<T>::increasingColumns(5, 100, 90, true);
 	outln("incrCols " << incrCols.syncBuffers());
 	outln("colsCM " << incrColsCM.syncBuffers());
-
-	return 0;
-}
-
-template int testFillers<float>::operator()(int argc, char const ** args) const;
-template int testFillers<double>::operator()(int argc, char const ** args) const;
-template <typename T> int testFillers<T>::operator()(int argc, const char** args) const {
-	outln("testFillers start");
-	Matrix<T> seq = Matrix<T>::sequence(1, 100, 1);
-	outln("seq\n" << seq.toString());
-	Matrix<T> msin = Matrix<T>::sin(10,1);
-	Matrix<T> mcos = Matrix<T>::cos(10,1);
-	outln("mcos\n" << mcos.toString());
-	outln("msin\n" << msin.toString());
 
 	return 0;
 }
@@ -337,8 +339,8 @@ template <typename T> int testFillers<T>::operator()(int argc, const char** args
 template int testSubmatrices<float>::operator()(int argc, char const ** args) const;
 template int testSubmatrices<double>::operator()(int argc, char const ** args) const;
 template <typename T> int testSubmatrices<T>::operator()(int argc, const char** args) const {
-	Matrix<T> theta1 = Matrix<T>::sequence(100, 10, 25);
-	Matrix<T> theta2 = Matrix<T>::sequence(2000, 20,26);
+	CuMatrix<T> theta1 = CuMatrix<T>::sequence(100, 10, 25);
+	CuMatrix<T> theta2 = CuMatrix<T>::sequence(2000, 20,26);
 	theta1.syncBuffers();
 	theta2.syncBuffers();
 	T sTheta1= theta1.sum();
@@ -347,12 +349,12 @@ template <typename T> int testSubmatrices<T>::operator()(int argc, const char** 
 	outln("theta2 sum " << sTheta2 << " " << theta2);
 	theta1.poseAsRow();
 	theta2.poseAsRow();
-	const Matrix<T>* parts[] = {&theta1,&theta2};
-	const Matrix<T>* parts21[] = {&theta2,&theta1};
-	Matrix<T> thetas12(1,(theta1.size + theta2.size)/sizeof(T),false,true);
-	Matrix<T>::concat(thetas12, 2,parts);
-	Matrix<T> thetas21(1,thetas12.size/sizeof(T),false,true);
-	Matrix<T>::concat(thetas21, 2,parts21);
+	const CuMatrix<T>* parts[] = {&theta1,&theta2};
+	const CuMatrix<T>* parts21[] = {&theta2,&theta1};
+	CuMatrix<T> thetas12(1,(theta1.size + theta2.size)/sizeof(T),false,true);
+	CuMatrix<T>::concat(thetas12, 2,parts);
+	CuMatrix<T> thetas21(1,thetas12.size/sizeof(T),false,true);
+	CuMatrix<T>::concat(thetas21, 2,parts21);
 	theta1.unPose();
 	theta2.unPose();
 	thetas12.syncBuffers();
@@ -363,9 +365,9 @@ template <typename T> int testSubmatrices<T>::operator()(int argc, const char** 
 	assert(util<T>::almostEquals(s_thetas12, sTheta1 + sTheta2));
     outln("thetas12 sum " << s_thetas12 << " "<< thetas12);
     outln("thetas21 sum " << s_thetas21 << " "<< thetas21);
-	Matrix<T> unpackedTheta1, unpackedTheta2;
-	Matrix<T> unpackedTheta1b, unpackedTheta2b;
-	// submatrix(Matrix<T>& v, uint rows, uint cols, uint pitch, ulong offset)
+	CuMatrix<T> unpackedTheta1, unpackedTheta2;
+	CuMatrix<T> unpackedTheta1b, unpackedTheta2b;
+	// submatrix(CuMatrix<T>& v, uint rows, uint cols, uint pitch, ulong offset)
 	thetas12.unconcat(unpackedTheta1,theta1.m,theta1.n,theta1.p,0);
 	thetas12.unconcat(unpackedTheta2,theta2.m,theta2.n,theta2.p, theta1.size/sizeof(T));
 	thetas21.unconcat(unpackedTheta1b,theta2.m,theta2.n,theta2.p,0);
@@ -380,16 +382,16 @@ template <typename T> int testSubmatrices<T>::operator()(int argc, const char** 
     uint input_layer_size = 400; // 20x20 Input Images of Digits
     uint hidden_layer_size = 25; //   25 hidden units
     uint num_labels = 10; // 10 labels, from 1 to 10
-    Matrix<T> initial_Theta1 = Matrix<T>::sequence(5, hidden_layer_size, input_layer_size).addBiasColumn();
-    Matrix<T> initial_Theta2 = Matrix<T>::sequence(50000,num_labels, hidden_layer_size).addBiasColumn();
+    CuMatrix<T> initial_Theta1 = CuMatrix<T>::sequence(5, hidden_layer_size, input_layer_size).addBiasColumn();
+    CuMatrix<T> initial_Theta2 = CuMatrix<T>::sequence(50000,num_labels, hidden_layer_size).addBiasColumn();
     outln("initial_Theta1 " << initial_Theta1.syncBuffers());
     outln("initial_Theta2 " << initial_Theta2.syncBuffers());
     outln("initial_Theta1 sum " << initial_Theta1.sum());
     outln("initial_Theta2 sum " << initial_Theta2.sum());
-    const Matrix<T>* pieces[] = {&initial_Theta1, &initial_Theta2};
-    Matrix<T> nn_params(1, (initial_Theta1.size + initial_Theta2.size)/sizeof(T),false,true);
-    Matrix<T>::concat(nn_params,2, pieces);
- 	Matrix<T> second_Theta1, second_Theta2;
+    const CuMatrix<T>* pieces[] = {&initial_Theta1, &initial_Theta2};
+    CuMatrix<T> nn_params(1, (initial_Theta1.size + initial_Theta2.size)/sizeof(T),false,true);
+    CuMatrix<T>::concat(nn_params,2, pieces);
+ 	CuMatrix<T> second_Theta1, second_Theta2;
 	nn_params.unconcat(second_Theta1, hidden_layer_size,input_layer_size + 1,input_layer_size + 1, 0);
 	outln("second_Theta1 " << second_Theta1.toShortString());
 	outln("second_Theta1 " << second_Theta1.syncBuffers());
@@ -410,20 +412,20 @@ template int testDropFirstAlts<float>::operator()(int argc, char const ** args) 
 template int testDropFirstAlts<double>::operator()(int argc, char const ** args) const;
 template <typename T> int testDropFirstAlts<T>::operator()(int argc, const char** args) const {
 	outln("testDropFirstAlts start");
-	Matrix<T> b = Matrix<T>::ones(5000, 999) * 2;
+	CuMatrix<T> b = CuMatrix<T>::ones(5000, 999) * 2;
 	outln("b.sum " << b.sum());
-	Matrix<T> base = b.addBiasColumn();
+	CuMatrix<T> base = b.addBiasColumn();
 	outln("base " << base.toShortString() << " sum " << base.sum());
-	Matrix<T> baseM1 = base.dropFirst(true);
-	Matrix<T> baseM2 = base.dropFirst(false);
+	CuMatrix<T> baseM1 = base.dropFirst(true);
+	CuMatrix<T> baseM2 = base.dropFirst(false);
 	outln("baseM1 " << baseM1.toShortString());
 	outln("baseM1 sum " << baseM1.sum());
 	outln("baseM2 " << baseM2.toShortString());
 	outln("baseM2 sum " << baseM2.sum());
 	//outln("baseM2 " << baseM2.syncBuffers());
-	Matrix<T> s1 = baseM1.sigmoid();
+	CuMatrix<T> s1 = baseM1.sigmoid();
 	outln("s1 " << s1.sum());
-	Matrix<T> s2 = baseM2.sigmoid();
+	CuMatrix<T> s2 = baseM2.sigmoid();
 	outln("s2 " << s2.sum());
 	return 0;
 }
@@ -432,14 +434,14 @@ template int testSigmoidNneqP<float>::operator()(int argc, char const ** args) c
 template int testSigmoidNneqP<double>::operator()(int argc, char const ** args) const;
 template <typename T> int testSigmoidNneqP<T>::operator()(int argc, const char** args) const {
 	outln("testDropFirstAlts start");
-	Matrix<T> b = Matrix<T>::ones(40, 39) * 2;
+	CuMatrix<T> b = CuMatrix<T>::ones(40, 39) * 2;
 
 	T bsum = b.sum();
 	outln("b.sum " << bsum);
 	//outln("b " << b.syncBuffers());
-	Matrix<T> biased = b.addBiasColumn().syncBuffers();
+	CuMatrix<T> biased = b.addBiasColumn().syncBuffers();
 	outln("biased.sum " << biased.sum());
-	Matrix<T> smb;
+	CuMatrix<T> smb;
 	biased.submatrix(smb,b.m, b.n, 0,1); // should be equiv to b
 	//base2.invalidateHost();
 	//outln("smb " << smb);
@@ -448,24 +450,24 @@ template <typename T> int testSigmoidNneqP<T>::operator()(int argc, const char**
 	outln("smb.sum " << smbsum);
 	assert(util<T>::almostEquals(bsum,smbsum));
 
-	Matrix<T> sigb = b.sigmoid();
+	CuMatrix<T> sigb = b.sigmoid();
 	outln("sigb " << sigb.syncBuffers());
 	T sigbsum = sigb.sum();
 	outln("sigb sum " << sigbsum);
-	Matrix<T> sigsmb = smb.sigmoid();
+	CuMatrix<T> sigsmb = smb.sigmoid();
 	outln("sigsmb " << sigsmb.syncBuffers());
 	T sigsmbsum = sigsmb.sum();
 	outln("sigsmb sum " << sigsmbsum);
 	assert(util<T>::almostEquals(sigbsum,sigsmbsum));
 
-	Matrix<T> bigSeq = Matrix<T>::sequence(0,20,20).syncBuffers();
-	Matrix<T> chunk1, chunk2;
+	CuMatrix<T> bigSeq = CuMatrix<T>::sequence(0,20,20).syncBuffers();
+	CuMatrix<T> chunk1, chunk2;
 	bigSeq.submatrix(chunk1,4,4,2,2);
 	bigSeq.submatrix(chunk2,4,4,6,6);
 	outln("bigSeq " << bigSeq);
 	outln("chunk1 " << chunk1);
 	outln("chunk2 " << chunk2);
-	Matrix<T> chunks = chunk1 + chunk2;
+	CuMatrix<T> chunks = chunk1 + chunk2;
 	outln("chunks " << chunks.syncBuffers());
 	return 0;
 }
@@ -473,22 +475,22 @@ template <typename T> int testSigmoidNneqP<T>::operator()(int argc, const char**
 template int testSubmatrices2<float>::operator()(int argc, char const ** args) const;
 template int testSubmatrices2<double>::operator()(int argc, char const ** args) const;
 template <typename T> int testSubmatrices2<T>::operator()(int argc, const char** args) const {
-	Matrix<T> b = Matrix<T>::zeros(60,1);
+	CuMatrix<T> b = CuMatrix<T>::zeros(60,1);
 	for(int i = 1; i < 60; i++) {
-		b = b |= (Matrix<T>::ones(60,1) * i);
+		b = b |= (CuMatrix<T>::ones(60,1) * i);
 	}
 	outln("b " << b.syncBuffers());
 
-	Matrix<T> sub1, sub2;
-	Matrix<T> sub3(40,40,false,true);
+	CuMatrix<T> sub1, sub2;
+	CuMatrix<T> sub3(40,40,false,true);
 	b.submatrix(sub1,40,40,2,2);
 	b.submatrix(sub2,40,40,20,20);
 	sub1.copy(sub3,0,0);
 	outln("sub1 " << sub1);
 	outln("sub2 " << sub2);
 	outln("sub3 " << sub3.syncBuffers());
-	Matrix<T> sigsub1 = sub1.sigmoid();
-	Matrix<T> sigsub2 = sub2.sigmoid();
+	CuMatrix<T> sigsub1 = sub1.sigmoid();
+	CuMatrix<T> sigsub2 = sub2.sigmoid();
 
 	outln("sigsub1 " << sigsub1.syncBuffers());
 	outln("sigsub1 " << sigsub2.syncBuffers());

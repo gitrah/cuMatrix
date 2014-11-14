@@ -4,29 +4,30 @@
  *  Created on: Oct 3, 2012
  *      Author: reid
  */
-#include "Matrix.h"
 
 #ifndef LUDECOMPOSITION_H_
 #define LUDECOMPOSITION_H_
 
+#include "CuMatrix.h"
 
 template <typename T> class LUDecomposition {
   T* lu;
   uint m,n;
   int* pivots;
-  Matrix<T>& mRef;
+  CuMatrix<T>& mRef;
 
   int pivsign;
   T* luRowi;
   T* luColj;
 
 public:
-  LUDecomposition(Matrix<T>& x);
+  LUDecomposition(CuMatrix<T>& x);
+  ~LUDecomposition();
 
   void compute();
   bool singularQ();
   T determinant();
-  Matrix<T> solve(const Matrix<T>& b);
+  CuMatrix<T> solve(const CuMatrix<T>& b);
 
 };
 #endif /* LUDECOMPOSITION_H_ */

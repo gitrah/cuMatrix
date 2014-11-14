@@ -1,0 +1,10 @@
+To build, first modify Makefile to point to your CUDA and c++/g++ libaries
+
+To build 3.5 enabled features (such as nested kernels) use the rdc switch, as in
+
+	make rdc=1
+	
+likewise for debug builds, as in the cuda samples specify 'dbg'
+
+	make dbg=1
+	

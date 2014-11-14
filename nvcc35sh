@@ -1,0 +1,3 @@
+#!/bin/sh
+#
+nvcc -O0 -g -G -lineinfo -I/mnt/rd/cuda/include -I/mnt/rd/cuda/src/common/inc -gencode arch=compute_35,code=sm_35  $*

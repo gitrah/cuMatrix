@@ -5,11 +5,12 @@
  *      Author: reid
  */
 
-#include "../Matrix.h"
+#include "../CuMatrix.h"
 #include "../MatrixExceptions.h"
 #include "../LuDecomposition.h"
 #include "../debug.h"
 #include "../util.h"
+#include "../caps.h"
 #include <cstdio>
 #include <helper_string.h>
 #include "tests.h"
@@ -18,11 +19,11 @@ template int testPrint<float>::operator()(int argc, char const ** args) const;
 template int testPrint<double>::operator()(int argc, char const ** args) const;
 template <typename T> int testPrint<T>::operator()(int argc, const char** args) const {
 	outln("testPrint start");
-	Matrix<T> seq = Matrix<T>::sequence(1, 100, 1).syncBuffers();
+	CuMatrix<T> seq = CuMatrix<T>::sequence(1, 100, 1).syncBuffers();
 	outln("seq\n" << seq);
 
-	Matrix<T> seqEx;
-	Matrix<T> tr = seq.transpose();
+	CuMatrix<T> seqEx;
+	CuMatrix<T> tr = seq.transpose();
 
 	try {
 		seqEx = tr.extrude(2).syncBuffers();
@@ -33,7 +34,7 @@ template <typename T> int testPrint<T>::operator()(int argc, const char** args) 
 	}
 
 	outln("seq\n"<<tr.toString());
-	Matrix<T> trEx = seqEx.transpose();
+	CuMatrix<T> trEx = seqEx.transpose();
 	outln("trEx " << trEx.toShortString());
 	outln(trEx.syncBuffers().toString());
 	outln("testPrint finish");
@@ -41,35 +42,33 @@ template <typename T> int testPrint<T>::operator()(int argc, const char** args) 
  }
 
 
-template int testOps<float>::operator()(int argc, char const ** args) const;
-template int testOps<double>::operator()(int argc, char const ** args) const;
 template <typename T> int testOps<T>::operator()(int argc, const char** args) const {
 	//float els[]= {1., 2, 3, 0, 5, 6, 3, 8, 9};
 	outln("testOps start");
 	T els[] = { 1, 2, 3., 0, 1, 5, 6, 3, 2, 8, 9, 4.3, 9, 2, .3, 4 };
-	Matrix<T> m(els, 4, 4, true);
+	CuMatrix<T> m(els, 4, 4, true);
 	outln("have m " << m.toString());
 	T det = m.determinant();
 	outln("has det " << det);
 	assert(abs( abs(det) -50.37) < .001);
-	Matrix<T> inv = m.inverse();
+	CuMatrix<T> inv = m.inverse();
 	outln("have inv ");
 	outln(inv.syncBuffers().toString());
 
-	Matrix<T> mp5 = m + 5;
+	CuMatrix<T> mp5 = m + 5;
 	T smp5 = mp5.sum();
 	outln("have mp5 sum " << smp5 << "\n" << mp5.syncBuffers().toString());
 	assert(util<T>::almostEquals(smp5,139.6));
-	Matrix<T> mp5t5 = mp5 * 5;
+	CuMatrix<T> mp5t5 = mp5 * 5;
 	T smp5t5 = mp5t5.sum();
 	outln("have mp5t5 " << smp5t5 << "\n" << mp5t5.syncBuffers().toString());
 	assert(util<T>::almostEquals(smp5t5,698));
-	Matrix<T> mp5t5t = mp5 * mp5t5;
+	CuMatrix<T> mp5t5t = mp5 * mp5t5;
 	outln("have mp5t5t " << mp5t5t.sum() << "\n" << mp5t5t.syncBuffers().toString());
 
-	Matrix<T> prod1 = inv * m;
+	CuMatrix<T> prod1 = inv * m;
 	outln("after prod1 " << prod1.syncBuffers());
-	Matrix<T> prod2 = m * inv;
+	CuMatrix<T> prod2 = m * inv;
 	outln("after prod2 " << prod2.syncBuffers());
 	T s1 = prod1.sum();
 	outln("have prod1.sum() " << s1);
@@ -82,21 +81,23 @@ template <typename T> int testOps<T>::operator()(int argc, const char** args) co
 	outln("testOps finish");
 	return 0;
 }
+template int testOps<float>::operator()(int argc, char const ** args) const;
+template int testOps<double>::operator()(int argc, char const ** args) const;
 
 template int testSumSqrDiffsLoop<float>::operator()(int argc, char const ** args) const;
 template int testSumSqrDiffsLoop<double>::operator()(int argc, char const ** args) const;
 template <typename T> int testSumSqrDiffsLoop<T>::operator()(int argc, const char** args) const {
 	outln("testSumSqrDiffsLoop start");
-	Matrix<T> m1 = Matrix<T>::ones(1000, 1000);
+	CuMatrix<T> m1 = CuMatrix<T>::ones(1000, 1000);
 	outln("m1 " << &m1 << "\n");
-	Matrix<T> m2 = Matrix<T>::ones(1000, 1000) * 2;
+	CuMatrix<T> m2 = CuMatrix<T>::ones(1000, 1000) * 2;
 	outln("made mats m1 " << &m1 << " << m2 " << &m2 << "\n\n");
-	int blocks;
-	int threads;
+	uint blocks;
+	uint threads;
 	uint n = m1.m * m1.n;
-	m1.getReductionExecContext(blocks, threads, n);
+	getReductionExecContext(blocks, threads, n);
 	outln("blocks " << blocks << "\n");
-	Matrix<T> buffer = Matrix<T>::reductionBuffer(blocks);
+	CuMatrix<T> buffer = CuMatrix<T>::reductionBuffer(blocks);
 	outln("m1 " << m1.toShortString());
 	outln("m2 " << m2.toShortString());
 	outln("buffer" << buffer.toShortString());
@@ -111,7 +112,8 @@ template <typename T> int testSumSqrDiffsLoop<T>::operator()(int argc, const cha
 	}
 	float exeTime = timer.stop();
 	double delta = b_util::diffclock(clock(), lastTime) / 1000;
-	outln("s " << s << " took " << delta << " secs");
+	outln("s " << s << " took " << exeTime << " ms");
+	outln("delta " << delta);
 	outln("flow of " << m1.flow(count, 2, exeTime) << "GB/s");
 	outln("m1.d " << m1.d_elements);
 	outln("m2.d " << m2.d_elements);
@@ -124,29 +126,29 @@ template int testBinaryOps<float>::operator()(int argc, char const ** args) cons
 template int testBinaryOps<double>::operator()(int argc, char const ** args) const;
 template <typename T> int testBinaryOps<T>::operator()(int argc, const char** args) const {
 	outln("testBinaryOps start");
-	Matrix<T>::init(256, 64);
-	Matrix<T> m1 = Matrix<T>::ones(1000, 1000) * 3;
+	CuMatrix<T>::init(256, 64);
+	CuMatrix<T> m1 = CuMatrix<T>::ones(1000, 1000) * 3;
 	outln("m1 " << &m1 << "\n");
-	Matrix<T> m2 = Matrix<T>::ones(1000, 1000) * 2;
+	CuMatrix<T> m2 = CuMatrix<T>::ones(1000, 1000) * 2;
 	outln("made mats m1 " << &m1 << " << m2 " << &m2 << "\n\n");
-	Matrix<T> m3 = m1 % m2;
+	CuMatrix<T> m3 = m1 % m2;
 	outln("m3 = hadamard sum " << m3.sum());
 
-	Matrix<T> eye1000 = Matrix<T>::identity(1000);
-	Matrix<T> mpi = m1 + 5 * eye1000;
+	CuMatrix<T> eye1000 = CuMatrix<T>::identity(1000);
+	CuMatrix<T> mpi = m1 + 5 * eye1000;
 	outln("mpi.sum " << mpi.sum());
 
-	Matrix<T> v1 = Matrix<T>::sequence(0, 10250, 1);
-	Matrix<T> v2 = Matrix<T>::ones(10250, 1);
-	Matrix<T> v3  = v1 + v2;
+	CuMatrix<T> v1 = CuMatrix<T>::sequence(0, 10250, 1);
+	CuMatrix<T> v2 = CuMatrix<T>::ones(10250, 1);
+	CuMatrix<T> v3  = v1 + v2;
 	T sv1 = v1.sum(), sv2 = v2.sum(), sv3 = v3.sum();
 	outln("sv1 " << sv1 << ", sv2 " << sv2 << ", sv3 " << sv3);
 	assert(util<T>::almostEquals(sv3, sv1 + sv2));
 	outln("v3 " << v3.toShortString() << "; " << v3.sum());
 
-	Matrix<T> vb1 = Matrix<T>::sequence(0, 1, 10250);
-	Matrix<T> vb2 = Matrix<T>::ones(1,10250);
-	Matrix<T> vb3  = vb1 + vb2;
+	CuMatrix<T> vb1 = CuMatrix<T>::sequence(0, 1, 10250);
+	CuMatrix<T> vb2 = CuMatrix<T>::ones(1,10250);
+	CuMatrix<T> vb3  = vb1 + vb2;
 	T sbv1 = vb1.sum(), sbv2 = vb2.sum(), sbv3 = vb3.sum();
 	outln("sbv1 " << sbv1 << ", sbv2 " << sbv2 << ", sbv3 " << sbv3);
 	assert(util<T>::almostEquals(sbv3, sbv1 + sbv2));
@@ -158,9 +160,9 @@ template <typename T> int testBinaryOps<T>::operator()(int argc, const char** ar
 template int testReassign<float>::operator()(int argc, char const ** args) const;
 template int testReassign<double>::operator()(int argc, char const ** args) const;
 template <typename T> int testReassign<T>::operator()(int argc, const char** args) const {
-	Matrix<T> s = Matrix<T>::ones(5, 1).syncBuffers();
+	CuMatrix<T> s = CuMatrix<T>::ones(5, 1).syncBuffers();
 	outln(s.toString());
-	s = Matrix<T>::zeros(5, 1).syncBuffers();
+	s = CuMatrix<T>::zeros(5, 1).syncBuffers();
 	outln(s.toString());
 
 	return 0;
@@ -171,35 +173,41 @@ template int testLUdecomp<double>::operator()(int argc, char const ** args) cons
 template <typename T> int testLUdecomp<T>::operator()(int argc, const char** args) const {
 	// 5 0 2 3 4 ; 5 4 0 2 4 ; 2 3 4 0 5; 1 2 -4 3 5; 2 0 2 0 4
 	T vals[]= {5, 0, 2, 3., 4, 5, 4, 0, 2, 4, 2, 3, 4, 0, 5, 1, 2, -4, 3, 5, 2, 0, 2, 0, 4};
-	outln("count " << Matrix<T>::sizeOfArray( vals));
-	Matrix<T> mf = Matrix<T>::freeform(5,vals, Matrix<T>::sizeOfArray( vals)).syncBuffers();
-	outln("mf " << mf << "\ndet " << mf.determinant());
-	Matrix<T>imf = mf.inverse().syncBuffers();
-	outln("imf " << imf);
-	outln("imf * mf " << (imf * mf).syncBuffers());
+	//outln("count " << CuMatrix<T>::sizeOfArray( vals));
+	dassert(CuMatrix<T>::sizeOfArray( vals) == 25);
+	CuMatrix<T> mf = CuMatrix<T>::freeform(5,vals, CuMatrix<T>::sizeOfArray( vals)).syncBuffers();
+	dassert(mf.determinant() == 1050);
+	//outln("mf " << mf << "\ndet " << mf.determinant());
 
-	Matrix<T> i5 = Matrix<T>::identity(5).syncBuffers();
+	CuMatrix<T> i5 = CuMatrix<T>::identity(5).syncBuffers();
+	CuMatrix<T>imf = mf.inverse().syncBuffers();
+	//outln("imf " << imf);
+	//outln("imf * mf " << (imf * mf).syncBuffers());
+	outln("i5.sumSqrDiff(imf * mf) " << i5.sumSqrDiff(imf * mf));
+	outln(" util<T>::epsilon() " <<  util<T>::epsilon());
+	outln("i5.sumSqrDiff(imf * mf) < util<T>::epsilon() " << (i5.sumSqrDiff(imf * mf) < util<T>::epsilon()));
+	dassert(  i5.sumSqrDiff(imf * mf) < util<T>::epsilon());
+
 	LUDecomposition<T> lu5(mf);
-	Matrix<T> inv5 = lu5.solve(i5);
-	outln("inv5 " << inv5);
-	outln("inv5 * mf " << (inv5 * mf).syncBuffers());
+	CuMatrix<T> luInv5 = lu5.solve(i5);
+	dassert( (luInv5 * mf).sumSqrDiff(i5) < util<T>::epsilon());
 
 
-	Matrix<T> m400 = Matrix<T>::randn(400, 400).syncBuffers();
-	outln("m400 " << m400);
-	Matrix<T> i400 = Matrix<T>::identity(400).syncBuffers();
-	outln("i400 " << i400);
-	Matrix<T> iprod = i400 * m400;
-	Matrix<T> prodi = m400 * i400;
-	assert( ! (m400 - iprod).sum());
-	assert( (prodi - iprod).zeroQ());
-	assert( m400.almostEq(iprod ));
+	CuMatrix<T> m400 = CuMatrix<T>::randn(400, 400).syncBuffers();
+	//outln("m400 " << m400);
+	CuMatrix<T> i400 = CuMatrix<T>::identity(400).syncBuffers();
+	//outln("i400 " << i400);
+	CuMatrix<T> iprod = i400 * m400;
+	CuMatrix<T> prodi = m400 * i400;
+	dassert( ! (m400 - iprod).sum());
+	dassert( (prodi - iprod).zeroQ());
+	dassert( m400.almostEq(iprod ));
 	//outln("i400 " << i400);
 	LUDecomposition<T> lu400(m400);
-	Matrix<T> inv400 = lu400.solve(i400).syncBuffers();
-	outln("inv " << inv400.toShortString());
-	outln(inv400.toString());
-	Matrix<T> i400p = inv400 * m400;
+	CuMatrix<T> luInv400 = lu400.solve(i400).syncBuffers();
+	//outln("inv " << inv400.toShortString());
+	//outln(luInv400.toString());
+	CuMatrix<T> i400p = luInv400 * m400;
 	outln(i400p.syncBuffers().toString());
 	assert(util<T>::almostEquals(i400p.sum(), 400));
 	return 0;
@@ -230,32 +238,29 @@ template <typename T> int testFileIO<T>::operator()(int argc, const char** args)
 		else
 			outln( fileNameN << " successfully deleted");
 	}
-	Matrix<T> m400 = Matrix<T>::sin(400, 400).syncBuffers();
-	std::ofstream ofs(fileName, ios::binary);
-	m400.toStream(ofs);
-	ofs.close();
+	CuMatrix<T> m400 = CuMatrix<T>::sin(400, 400).syncBuffers();
+	m400.toFile(fileName);
 	pFile = fopen(fileName, "r");
 	assert(pFile);
 	outln("wrote " << fileName);
 	fclose(pFile);
-	Matrix<T> m400prime = Matrix<T>::fromFile("m400.mat");
-	Matrix<T> m40 = Matrix<T>::sin(40, 40).syncBuffers();
+	CuMatrix<T> m400prime = CuMatrix<T>::fromFile("m400.mat");
+	CuMatrix<T> m40 = CuMatrix<T>::sin(40, 40).syncBuffers();
 	outln("last element of m40 " << m40.get(39,39));
-	Matrix<T> m20 = Matrix<T>::sin(20, 20).syncBuffers();
+	CuMatrix<T> m20 = CuMatrix<T>::sin(20, 20).syncBuffers();
 	outln("last element of m20 " << m20.get(19,19));
-	Matrix<T> m60 = Matrix<T>::sin(60, 60).syncBuffers();
+	CuMatrix<T> m60 = CuMatrix<T>::sin(60, 60).syncBuffers();
 	outln("last element of m60 " << m60.get(59,59));
-	ofstream ofsN(fileNameN, ios::binary);
-	m40.toStream(ofsN);
-	m20.toStream(ofsN);
-	m60.toStream(ofsN);
-	ofsN.close();
+	m40.toFile(fileNameN);
+	m20.toFile(fileNameN);
+	m60.toFile(fileNameN);
 	pFile = fopen(fileNameN, "r");
 	assert(pFile);
 	outln("wrote " << fileNameN);
 	fclose(pFile);
-	std::vector<Matrix<T> > list = Matrix<T>::fromFileN(fileNameN);
+	std::vector<CuMatrix<T> > list = CuMatrix<T>::fromFileN(fileNameN);
 	//list.clear();
+	//util<T>::cudaFreeVector(list);
 	remove(fileName);
 	remove(fileNameN);
 	return 0;
@@ -266,10 +271,10 @@ template <typename T> int testFileIO<T>::operator()(int argc, const char** args)
 template int testAccuracy<float>::operator()(int argc, char const ** args) const;
 template int testAccuracy<double>::operator()(int argc, char const ** args) const;
 template <typename T> int testAccuracy<T>::operator()(int argc, const char** args) const {
-	Matrix<T> a = Matrix<T>::ones(1000,1);
+	CuMatrix<T> a = CuMatrix<T>::ones(1000,1);
 	outln("a " << a.toShortString());
-	Matrix<T> b = Matrix<T>::ones(1000,1);
-	Matrix<T> c = Matrix<T>::ones(1000,1);
+	CuMatrix<T> b = CuMatrix<T>::ones(1000,1);
+	CuMatrix<T> c = CuMatrix<T>::ones(1000,1);
 	outln("c " << c.toShortString());
 	c.syncBuffers();
 	outln("c " << c.toShortString());

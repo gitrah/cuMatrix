@@ -1,0 +1,3 @@
+#!/bin/sh
+#
+g++ -I/mnt/rd/cuda/include -L/mnt/rd/cuda/lib64 -lOpenCL  $*

@@ -7,14 +7,14 @@
 #ifndef VALIDATION_H_
 #define VALIDATION_H_
 
-#include "Matrix.h"
+#include "CuMatrix.h"
 
 template<typename T> class Validation {
 public:
-	static void toValidationSets(Matrix<T>& training,
-			Matrix<T>& crossValidation, Matrix<T>& testSet,
-			const Matrix<T>& input, T trainingFactor, T crossValidationFactor, vector<uint>& inputIndices, vector<uint>& leftoverIndices) {
-		Matrix<T> leftovers;
+	static void toValidationSets(CuMatrix<T>& training,
+			CuMatrix<T>& crossValidation, CuMatrix<T>& testSet,
+			const CuMatrix<T>& input, T trainingFactor, T crossValidationFactor, vector<uint>& inputIndices, vector<uint>& leftoverIndices) {
+		CuMatrix<T> leftovers;
 		input.shuffle(training, leftovers, trainingFactor,inputIndices);
 		leftovers.shuffle(crossValidation, testSet,
 				crossValidationFactor * input.m / leftovers.m,leftoverIndices);

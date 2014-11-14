@@ -1,0 +1,3 @@
+The 3.5 code is switched in via a Makefile-defined (and this may be gnu-specific)
+		-DCuMatrix_Enable_DynPar=true
+(g++ acts as if a source file #define-d CuMatrix_Enable_DynPar)

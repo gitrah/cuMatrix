@@ -1,0 +1,19 @@
+3.5 (debug) target
+-rwxrwxr-x. 1 reid reid 219883704 Jun 19 08:18 cumatrest
+-rwxrwxr-x. 1 reid reid 219914696 Jun 19 09:01 cumatrest
+real    0m1.428s
+user    0m0.780s
+sys     0m0.641s
+
+built with 3.5/5 linked with 3.5
+-rwxrwxr-x. 1 reid reid 238252215 Jun 19 08:57 cumatrest
+real    0m1.415s
+user    0m0.750s
+sys     0m0.653s
+
+3.5 and 5 (debug)
+rwxrwxr-x. 1 reid reid 427688119 Jun 19 08:45 cumatrest
+real    0m1.435s
+user    0m0.750s
+sys     0m0.675s
+
