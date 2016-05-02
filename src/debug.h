@@ -5,8 +5,7 @@
  *      Author: reid
  */
 
-#ifndef DEBUG_H_
-#define DEBUG_H_
+#pragma once
 
 //#define TESTTMPLT
 
@@ -16,8 +15,14 @@
 #include "util.h"
 #include "caps.h"
 #include "CMap.h"
+#include <thread>
+#include <cublas_v2.h>
 
-using namespace std;
+using std::string;
+using std::stringstream;
+using std::cout;
+using std::endl;
+
 extern __constant__ uint debugFlags;
 extern uint hDebugFlags;
 extern string gpuNames[];
@@ -40,7 +45,7 @@ enum CuMatrixException {
 	notRowVectorEx,
 	notColumnVectorEx,
 	notSyncedEx,
-	notSynceCUDART_DEVICEEx,
+	notSyncedDevEx,
 	notSyncedHostEx,
 	cantSyncHostFromDeviceEx,
 	notSquareEx,
@@ -49,6 +54,7 @@ enum CuMatrixException {
 	rowDimsDisagreeEx,
 	columnDimsDisagreeEx,
 	exceedsMaxBlockDimEx,
+	spansMultipleTileEx,
 	precisionErrorEx,
 	notImplementedEx,
 	nNeqPnotImplementedEx,
@@ -65,44 +71,82 @@ enum CuMatrixException {
 	wrongStreamEx,
 	insufficientGPUCountEx,
 	nullPointerEx,
+	multipleGpusEx,
 };
+extern  __device__ CuMatrixException lastEx;
 typedef __device_builtin__ enum CuMatrixException CuMatrixException_t;
-extern __managed__ CuMatrixException lastEx;
 
 #define debugUseTimers 	1
 #define debugExec 		(1 << 1)
 #define debugMem 		(1 << 2)
 #define debugCheckValid (1 << 3)
-#define debugLife  		(1 << 4)
+#define debugFtor  		(1 << 4)
 #define debugCopy  		(1 << 5)
 #define debugCopyDh  	(1 << 6)
 #define debugFill  		(1 << 7)
 #define debugMatProd  	(1 << 8)
-#define debugSync  		(1 << 9)
-#define debugCons  		(1 << 10)
+#define debugCons  		(1 << 9)
+#define debugDestr 		(1 << 10)
 #define debugTxp 		(1 << 11)
-#define debugStack  	(1 << 12)
+#define debugRefcount  	(1 << 12)
 #define debugVerbose  	(1 << 13)
 #define debugNn  		(1 << 14)
 #define debugCg  		(1 << 15)
 #define debugMultGPU  	(1 << 16)
-#define syncHappy  		(1 << 17)
+#define debugPm  		(1 << 17)
 #define debugMaths (1 << 18)
 #define debugAnomDet	(1 << 19)
 #define debugStream  	(1 << 20)
-#define debugRedux 	(1 << 21)
+#define debugRedux 		(1 << 21)
 #define debugSpoofSetLastError (1 << 22)
 #define debugMatProdBlockResize  	(1 << 23)
 #define debugMatStats  	(1 << 24)
-#define debugNoRedux  	(1 << 25)
+#define debugTiler  	(1 << 25)
 #define debugUnaryOp 	(1 << 26)
 #define debugPrecision 	(1 << 27)
 #define debugMeans 		(1 << 28)
 #define debugBinOp		(1 << 29)
+#define debugFile		(1 << 30)
+
+const auto allChoice = "all";
+const auto anomChoice = "anom";
+const auto memChoice = "mem";
+const auto copyChoice = "copy";
+const auto copyDhChoice = "copyDh";
+const auto execChoice = "exec";
+const auto fillChoice = "fill";
+const auto ftorChoice = "ftor";
+const auto matprodChoice = "matprod";
+const auto matprodBlockResizeChoice = "mpbr";
+const auto debugMatStatsChoice = "stats";
+
+const auto consChoice = "cons";
+const auto destrChoice = "dstr";
+const auto refcountChoice = "ref";
+const auto verboseChoice = "verb";
+const auto syncChoice = "sync";
+const auto nnChoice = "nn";
+const auto cgChoice = "cg";
+const auto txpChoice = "txp";
+const auto pmChoice = "pack";
+const auto smallBlkChoice = "sblk";
+const auto medBlkChoice = "mblk";
+const auto lrgBlkChoice = "lblk";
+const auto debugMultGPUChoice = "gpu";
+const auto debugMillisForMicrosChoice = "m4m";
+const auto debugReduxChoice = "rdx";
+const auto debugTilerChoice = "tlr";
+const auto debugUnaryOpChoice = "uny";
+const auto debugPrecisionChoice = "prec";
+const auto debugMeansChoice = "mean";
+const auto debugBinOpChoice = "bnop";
+const auto debugCheckValidChoice = "dcv";
+
+__host__ __device__ const char* __cudaGetErrorEnum(cudaError_t res);
+__host__ __device__ const char *__cublasGetErrorEnum(cublasStatus_t error);
 
 void cherr_(cudaError_t err, char* file, int line);
 //#define cherr(exp) cherr_((exp))
-#define cherr(exp) if((exp)!= cudaSuccess) {printf( "%s : %d --> %s\n", __FILE__, __LINE__ , __cudaGetErrorEnum(exp));assert(0);}
 #define chsuckor(exp,exp2) if((exp)!= cudaSuccess && (exp) != (exp2)) {printf( "%s : %d --> %s\n", __FILE__, __LINE__ , __cudaGetErrorEnum(exp));assert(0);}
 //#define cherr(exp) if(exp != cudaSuccess) {printf( "%s.%s : %d --> %s\n", __FILE__, __PRETTY_FUNCTION__, __LINE__ , __cudaGetErrorEnum(exp));assert(0);}
 //#define cherr(exp) if(exp != cudaSuccess) {printf( "%s --> %s\n", __FILE__, __cudaGetErrorEnum(exp));assert(0);}
@@ -111,13 +155,12 @@ void cherr_(cudaError_t err, char* file, int line);
 __host__ __device__ inline void cherrp(cudaError exp);
 #define arrrg(exp) assert(exp == cudaSuccess)
 #define maxAbs(exp) ((exp) < 0) ? -(exp) : (exp)
-#define chkerr(exp) do { \
+#define czeckerr(exp) do { \
 			if(exp != cudaSuccess) { \
 				printf( "%s : %d --> %s\n", __FILE__, __LINE__ , __cudaGetErrorEnum(exp)); \
 				assert(0);	}\
 		}while(0)
 
-extern __host__ __device__ const char *__cudaGetErrorEnum(cudaError_t error);
 
 __host__ __device__ __forceinline__ void cherrf(cudaError_t exp) {
 	if(exp != cudaSuccess) printf( "%s : %d --> %s\n", __FILE__, __LINE__ , __cudaGetErrorEnum(exp) );
@@ -184,10 +227,15 @@ template <typename K, typename V> void printMap(string name,CMap<K,V>& theMap) {
 }
 
 __host__ __device__ void printLongSizes();
+template<typename T> void printObjSizes();
 
 __host__ __device__ void setLastError(CuMatrixException lastEx);
+__host__ __device__ CuMatrixException getLastError();
 
-__host__ __device__ const char* __cudaGetErrorEnum(cudaError_t res);
+
+/*
+ * checkDebug / set[All/Curr]GpuDebugFlags
+ */
 inline __host__ __device__ bool checkDebug(uint flags) {
 #ifndef __CUDA_ARCH__
 	return hDebugFlags & flags;
@@ -201,12 +249,15 @@ inline __host__ __device__ bool checkDebug(uint flags) {
 }
 
 void setAllGpuDebugFlags(uint flags, bool orThem, bool andThem);
-void setCurrGpuDebugFlags(uint flags, bool orThem, bool andThem);
+void setCurrGpuDebugFlags(uint flags, bool orThem, bool andThem,  cudaStream_t stream = 0);
+
+#define VerbOn() setCurrGpuDebugFlags( debugVerbose,true,false)
+#define VerbOff() setCurrGpuDebugFlags( ~debugVerbose,false,true)
 
 template <typename T> void printAllDeviceGFlops();
 
 float pctChg(float a, float b);
-CuMatrixException getLastError();
+__host__ __device__ CuMatrixException getLastError();
 
 class ostreamlike {
 public:
@@ -236,4 +287,3 @@ __host__ __device__ ostreamlike& operator<<(ostreamlike& stream, const type& dat
   return stream.write(data);
 }
 
-#endif /* DEBUG_H_ */

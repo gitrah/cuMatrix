@@ -35,7 +35,7 @@ string CuMatrixExceptionStrings[] = {
 		"notRowVectorEx",
 		"notColumnVectorEx",
 		"notSyncedEx",
-		"notSynceCUDART_DEVICEEx",
+		"notSyncedDevEx",
 		"notSyncedHostEx",
 		"cantSyncHostFromDeviceEx",
 		"notSquareEx",
@@ -44,6 +44,7 @@ string CuMatrixExceptionStrings[] = {
 		"rowDimsDisagreeEx",
 		"columnDimsDisagreeEx",
 		"exceedsMaxBlockDimEx",
+		"spansMultipleTileEx",
 		"precisionErrorEx",
 		"notImplementedEx",
 		"nNeqPnotImplementedEx",
@@ -62,6 +63,34 @@ string CuMatrixExceptionStrings[] = {
 		"nullPointerEx",
 
 };
+
+string NvmlErrors[] = {
+    "NVML_SUCCESS",
+    "NVML_ERROR_UNINITIALIZED",
+    "NVML_ERROR_INVALID_ARGUMENT",
+    "NVML_ERROR_NOT_SUPPORTED",
+   	"NVML_ERROR_NO_PERMISSION",
+    "NVML_ERROR_ALREADY_INITIALIZED",
+    "NVML_ERROR_NOT_FOUND",
+    "NVML_ERROR_INSUFFICIENT_SIZE",
+    "NVML_ERROR_INSUFFICIENT_POWER",
+    "NVML_ERROR_DRIVER_NOT_LOADED",
+    "NVML_ERROR_TIMEOUT",
+    "NVML_ERROR_IRQ_ISSUE",
+    "NVML_ERROR_LIBRARY_NOT_FOUND",
+    "NVML_ERROR_FUNCTION_NOT_FOUND",
+    "NVML_ERROR_CORRUPTED_INFOROM",
+    "NVML_ERROR_GPU_IS_LOST",
+    "NVML_ERROR_RESET_REQUIRED",
+    "NVML_ERROR_OPERATING_SYSTEM",
+};
+
+const char* getNvmlErrorEnum(int en) {
+	if(en > -1 && en < 17) {
+		return NvmlErrors[en].c_str();
+	}
+	return "unknown nvml error";
+}
 
 string fromSeconds(double seconds) {
 	double days = 0;
@@ -113,9 +142,6 @@ string niceEpochMicros(long micros) {
 
 void dummy_1f1476811d0646db8cc4de3c21f85825() {}
 
-CuMatrixException getLastError() {
-	return lastEx;
-}
 
 float pctChg(float a, float b){  return .1*((int)((1 - a/b)*1000));}
 ///float pctChg(float a, float b){  return .1*((int)(((b-a)/b)*1000));}

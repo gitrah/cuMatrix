@@ -12,11 +12,19 @@
 //#include <sys/types.h>
 //#include <typeinfo.h>
 
+long biggestMult = 0;
+
 
 template<typename T> __host__ CUDART_DEVICE void matrixProductL(DMatrix<T>& d_res,
 		const DMatrix<T>& d_A, const DMatrix<T>& d_B, dim3* block,cudaStream_t stream) {
-	prlocf("matrixProductL enter\n");
+	cherr(cudaPeekAtLastError());
+#ifndef __CUDA_ARCH__
+	static CuMethodTimer mTimer((void(*)())matrixProductKernel4<T>);
+#endif
 	if(d_A.n != d_B.m) {
+		flprintf("d_A.n %u != d_B.m %u\n",d_A.n, d_B.m);
+		flprintf("d_A.m %u, d_B.n %u\n",d_A.m, d_B.n);
+		flprintf("d_A.elm %p, d_B.elements %p\n",d_A.elements, d_B.elements);
 		setLastError(matricesOfIncompatibleShapeEx);
 	}
 	if(d_res.m != d_A.m) {
@@ -45,13 +53,28 @@ template<typename T> __host__ CUDART_DEVICE void matrixProductL(DMatrix<T>& d_re
 	int rowBlocks = DIV_UP(d_B.m, block->y ); //d_B.m + block->y - 1) / block->y;
 
 	const int stepsPerResultBlock = MAX(columnBlocks,rowBlocks);
+	if (checkDebug(debugMatProd)) {
+		flprintf("stepsPerResultBlock %d\n", stepsPerResultBlock);
+	}
+
+	ExecCaps* caps = ExecCaps::currCaps();
 	if(checkDebug(debugMatProd)) {
-		flprintf("columnBlocks %d rowBlocks %d\n", columnBlocks , rowBlocks);
+		caps->printMaxDims(__FILE__ "::matrixProductL");
+		flprintf("div_up(%d,%d) columnBlocks %d %d\n",  d_A.n, block->x, columnBlocks);
+		flprintf("div_up(%d,%d) rowBlocks %d\n", d_B.m, block->y, rowBlocks);
+		if(!caps->okBlock(*block)) {
+			prlocf("block exceeds max ");
+			b_util::prd3(caps->maxBlock);
+		}
 	}
 	dim3 resultGrid(DIV_UP(d_res.n,block->x), DIV_UP(d_res.m, block->y));
 	if (checkDebug(debugMatProd)) {
 		prlocf("resultGrid ");
 		b_util::prd3(resultGrid);
+		if(!caps->okGrid(resultGrid)) {
+			prlocf("resultGrid exceeds max ");
+			b_util::prd3(caps->maxGrid);
+		}
 	}
 	uint smem = block->x * block->y * sizeof(T) * 2;
 	if (smem > ExecCaps::currCaps()->memSharedPerBlock) {
@@ -63,18 +86,33 @@ template<typename T> __host__ CUDART_DEVICE void matrixProductL(DMatrix<T>& d_re
 		prlocf("block ");
 		b_util::prd3(*block);
 	}
-	matrixProductKernel<<<resultGrid, *block, smem>>>(d_res, d_A, d_B , stepsPerResultBlock);
+
+#ifndef __CUDA_ARCH__
+	long nextBiggest = MAX(biggestMult,stepsPerResultBlock * block->x );
+	if (checkDebug(debugMatProd) && nextBiggest > biggestMult) {
+		flprintf("steps %d X blockDim.x %d--wide reduction == %d\n", stepsPerResultBlock, block->x, nextBiggest);
+		outln(util<T>::pdm(d_A) << " X b " << util<T>::pdm(d_B));
+		biggestMult = nextBiggest;
+	}
+#endif
+
+#ifndef __CUDA_ARCH__
+	mTimer.enter();
+#endif
+	matrixProductKernel4<<<resultGrid, *block, smem>>>(d_res, d_A, d_B , stepsPerResultBlock);
 #ifndef __CUDA_ARCH__
 		checkCudaError(cudaDeviceSynchronize());
+		mTimer.exit();
 #else
 		__syncthreads();
 #endif
-	prlocf("matrixProductL exit\n");
+	cherr(cudaPeekAtLastError());
 }
 
 
 template __host__ CUDART_DEVICE void matrixProductL<float>(DMatrix<float>&, DMatrix<float> const&, DMatrix<float> const&, dim3*, cudaStream_t);
 template __host__ CUDART_DEVICE void matrixProductL<double>(DMatrix<double>&, DMatrix<double> const&, DMatrix<double> const&, dim3*, cudaStream_t);
+template __host__ CUDART_DEVICE void matrixProductL<long>(DMatrix<long>&, DMatrix<long> const&, DMatrix<long> const&, dim3*, cudaStream_t);
 template __host__ CUDART_DEVICE void matrixProductL<ulong>(DMatrix<ulong>&, DMatrix<ulong> const&, DMatrix<ulong> const&, dim3*, cudaStream_t);
 template __host__ CUDART_DEVICE void matrixProductL<int>(DMatrix<int>&, DMatrix<int> const&, DMatrix<int> const&, dim3*, cudaStream_t);
 template __host__ CUDART_DEVICE void matrixProductL<uint>(DMatrix<uint>&, DMatrix<uint> const&, DMatrix<uint> const&, dim3*, cudaStream_t);
@@ -157,10 +195,6 @@ template<typename T> __host__ CUDART_DEVICE void matrixProductKPtrL(DMatrix<T>& 
 		setLastError(columnDimsDisagreeEx);
 		return;
 	}
-#ifndef __CUDA_ARCH__
-	if (syncHappy)
-		checkCudaError(cudaDeviceSynchronize());
-#endif
 
 	if(block) {
 		if (checkDebug(debugMatProd) ) {
@@ -220,12 +254,12 @@ template<typename T> __host__ CUDART_DEVICE void matrixProductKPtrL(DMatrix<T>& 
 
 	if (checkDebug(debugMatProd) ) {
 		prlocf("matrixProductKPtrL(..) A pre kernel is ");
-		util<T>::prdm(d_A);
+		util<T>::prdmln(d_A);
 	}
 
 	if (checkDebug(debugMatProd) )  {
 		prlocf("matrixProductKPtrL(..) B pre kernel is " );
-		util<T>::prdm(d_B);
+		util<T>::prdmln(d_B);
 	}
 
 	if (checkDebug(debugMatProd)) {
@@ -260,6 +294,7 @@ template<typename T> __host__ CUDART_DEVICE void matrixProductKPtrL(DMatrix<T>& 
 }
 template void matrixProductKPtrL<float>(DMatrix<float>&, void (*)(DMatrix<float>, DMatrix<float>, DMatrix<float>, int), DMatrix<float> const&, DMatrix<float> const&, dim3*, cudaStream_t);
 template void matrixProductKPtrL<double>(DMatrix<double>&, void (*)(DMatrix<double>, DMatrix<double>, DMatrix<double>, int), DMatrix<double> const&, DMatrix<double> const&, dim3*, cudaStream_t);
+template void matrixProductKPtrL<long>(DMatrix<long>&, void (*)(DMatrix<long>, DMatrix<long>, DMatrix<long>, int), DMatrix<long> const&, DMatrix<long> const&, dim3*, cudaStream_t);
 template void matrixProductKPtrL<ulong>(DMatrix<ulong>&, void (*)(DMatrix<ulong>, DMatrix<ulong>, DMatrix<ulong>, int), DMatrix<ulong> const&, DMatrix<ulong> const&, dim3*, cudaStream_t);
 template void matrixProductKPtrL<uint>(DMatrix<uint>&, void (*)(DMatrix<uint>, DMatrix<uint>, DMatrix<uint>, int), DMatrix<uint> const&, DMatrix<uint> const&, dim3*, cudaStream_t);
 template void matrixProductKPtrL<int>(DMatrix<int>&, void (*)(DMatrix<int>, DMatrix<int>, DMatrix<int>, int), DMatrix<int> const&, DMatrix<int> const&, dim3*, cudaStream_t);

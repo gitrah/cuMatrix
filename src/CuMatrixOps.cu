@@ -20,6 +20,10 @@ template<typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::operator=(c
 	if (this == &o) {
 		return *this;
 	}
+
+#ifndef __CUDA_ARCH__
+	if(checkDebug(debugCheckValid)) flprintf(" (%s) this %p; &o %p\n", b_util::caller().c_str(), this, &o);
+#endif
 	m = o.m;
 	n = o.n;
 	p = o.p;
@@ -31,24 +35,35 @@ template<typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::operator=(c
 		CuMatrix<T>::getMgr().freeHost(*this);
 #endif
 	}
-	if(d_elements) {
+	if(tiler.hasDmemQ()) {
 		if(checkDebug(debugMem)) printf( "%p operator=(const CuMatrix<T> o) freeing h %p\n", this,elements );
 #ifndef __CUDA_ARCH__
-		CuMatrix<T>::getMgr().freeDevice(*this);
+		CuMatrix<T>::getMgr().freeTiles(*this);
 #else
-		free(d_elements);
+		tiler.free();
 #endif
 	}
 	if(o.elements) {
 		elements=o.elements;
 #ifndef __CUDA_ARCH__
-		CuMatrix<T>::getMgr().addHost(*this);
+		if(checkDebug(debugMem))prlocf("adding host\n");
+
+		getMgr().addHost(*this);
 #endif
 	}
-	if(o.d_elements) {
-		d_elements=o.d_elements;
+	if(o.tiler.hasDmemQ()) {
+		tiler.tileSize = o.tiler.tileSize;
+		tiler.m_size = o.tiler.m_size;
+		tiler.buffers = o.tiler.buffers;
+		tiler.gpuMask = o.tiler.gpuMask;
+		tiler.m_m = o.m;
+		tiler.m_n = o.n;
+		tiler.m_p = o.p;
+		tiler.m_size = o.size;
+		tiler.m_elems = o.elements;
 #ifndef __CUDA_ARCH__
-		CuMatrix<T>::getMgr().addDevice(*this);
+		if(checkDebug(debugMem))prlocf("adding host\n");
+		CuMatrix<T>::getMgr().addTiles(&tiler);
 #endif
 	}
 	CuMatrix<T>::freeTxp();
@@ -101,7 +116,6 @@ template<typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::operator-(T
 }
 
 template<typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::operator*(CuMatrix<T> o)  const {
-	prlocf("operator* entre\n");
 	return matrixProduct(o);
 }
 

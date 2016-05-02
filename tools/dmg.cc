@@ -14,7 +14,10 @@ using namespace std;
 #define MAX_FUNC_NAME 512
 #define ADDRESS_STRING_LEN 20
 
-
+/*
+ * demangle link error code refs
+ *
+ */
 string dmg(const char* mangl) {
 	unsigned long unmangleBufferLength = MAX_FUNC_NAME;
 	char unmangleBuffer[MAX_FUNC_NAME];

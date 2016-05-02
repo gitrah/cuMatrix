@@ -41,10 +41,10 @@ template<typename T, template <typename> class UnaryOp> __host__ CUDART_DEVICE v
 template<typename T, int StateDim> __host__ CUDART_DEVICE void unaryOpL(DMatrix<T>& trg, const DMatrix<T>& src, UnaryOpF<T,StateDim> op, cudaStream_t stream )
 #endif
 {
-	uint threads = 512;
+	int threads = 512;
 	uint len = src.m * src.n;
 	dim3 dBlocks, dThreads;
-	b_util::execContext(threads, len, dBlocks, dThreads);
+	b_util::vectorExecContext(threads, len, dBlocks, dThreads);
 	unaryOp1dKernel<<<dBlocks,dThreads,0,stream>>>(trg.elements, src.elements, op, len);
 }
 #ifdef  CuMatrix_Enable_KTS
@@ -53,16 +53,92 @@ template __host__ CUDART_DEVICE void unaryOpL<double, approxInvSqrtUnaryOp>(DMat
 template __host__ CUDART_DEVICE void unaryOpL<float, slowInvSqrtUnaryOp>(DMatrix<float>&, DMatrix<float> const&, slowInvSqrtUnaryOp<float>, CUstream_st *);
 template __host__ CUDART_DEVICE void unaryOpL<double, slowInvSqrtUnaryOp>(DMatrix<double>&, DMatrix<double> const&, slowInvSqrtUnaryOp<double>, CUstream_st *);
 
+template __host__ CUDART_DEVICE void unaryOpL<float, floorUnaryOp>(DMatrix<float>&, DMatrix<float> const&, floorUnaryOp<float>, CUstream_st*);
+
+template __host__ CUDART_DEVICE void unaryOpL<unsigned int, absUnaryOp>(DMatrix<unsigned int>&, DMatrix<unsigned int> const&, absUnaryOp<unsigned int>, CUstream_st*);
+
+template __host__ CUDART_DEVICE void unaryOpL<double, ceilUnaryOp>(DMatrix<double>&, DMatrix<double> const&, ceilUnaryOp<double>, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpL<long, powUnaryOp>(DMatrix<long>&, DMatrix<long> const&, powUnaryOp<long>, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpL<long, sigmoidGradientUnaryOp>(DMatrix<long>&, DMatrix<long> const&, sigmoidGradientUnaryOp<long>, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpL<unsigned int, ceilUnaryOp>(DMatrix<unsigned int>&, DMatrix<unsigned int> const&, ceilUnaryOp<unsigned int>, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpL<long, oneOverUnaryOp>(DMatrix<long>&, DMatrix<long> const&, oneOverUnaryOp<long>, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpL<long, ltUnaryOp>(DMatrix<long>&, DMatrix<long> const&, ltUnaryOp<long>, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpL<long, ceilUnaryOp>(DMatrix<long>&, DMatrix<long> const&, ceilUnaryOp<long>, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpL<long, sqrtUnaryOp>(DMatrix<long>&, DMatrix<long> const&, sqrtUnaryOp<long>, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpL<unsigned long, floorUnaryOp>(DMatrix<unsigned long>&, DMatrix<unsigned long> const&, floorUnaryOp<unsigned long>, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpL<long, gtUnaryOp>(DMatrix<long>&, DMatrix<long> const&, gtUnaryOp<long>, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpL<int, ceilUnaryOp>(DMatrix<int>&, DMatrix<int> const&, ceilUnaryOp<int>, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpL<long, negateUnaryOp>(DMatrix<long>&, DMatrix<long> const&, negateUnaryOp<long>, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpL<double, floorUnaryOp>(DMatrix<double>&, DMatrix<double> const&, floorUnaryOp<double>, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpL<long, divSqrtUnaryOp>(DMatrix<long>&, DMatrix<long> const&, divSqrtUnaryOp<long>, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpL<long, logUnaryOp>(DMatrix<long>&, DMatrix<long> const&, logUnaryOp<long>, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpL<long, gteUnaryOp>(DMatrix<long>&, DMatrix<long> const&, gteUnaryOp<long>, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpL<unsigned int, floorUnaryOp>(DMatrix<unsigned int>&, DMatrix<unsigned int> const&, floorUnaryOp<unsigned int>, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpL<unsigned long, ceilUnaryOp>(DMatrix<unsigned long>&, DMatrix<unsigned long> const&, ceilUnaryOp<unsigned long>, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpL<long, eqUnaryOp>(DMatrix<long>&, DMatrix<long> const&, eqUnaryOp<long>, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpL<long, floorUnaryOp>(DMatrix<long>&, DMatrix<long> const&, floorUnaryOp<long>, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpL<long, lteUnaryOp>(DMatrix<long>&, DMatrix<long> const&, lteUnaryOp<long>, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpL<long, sqrUnaryOp>(DMatrix<long>&, DMatrix<long> const&, sqrUnaryOp<long>, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpL<float, ceilUnaryOp>(DMatrix<float>&, DMatrix<float> const&, ceilUnaryOp<float>, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpL<int, floorUnaryOp>(DMatrix<int>&, DMatrix<int> const&, floorUnaryOp<int>, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpL<long, sigmoidUnaryOp>(DMatrix<long>&, DMatrix<long> const&, sigmoidUnaryOp<long>, CUstream_st*);
+
+template __host__ CUDART_DEVICE void unaryOpL<unsigned long, absUnaryOp>(DMatrix<unsigned long>&, DMatrix<unsigned long> const&, absUnaryOp<unsigned long>, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpL<int, absUnaryOp>(DMatrix<int>&, DMatrix<int> const&, absUnaryOp<int>, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpL<double, absUnaryOp>(DMatrix<double>&, DMatrix<double> const&, absUnaryOp<double>, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpL<float, absUnaryOp>(DMatrix<float>&, DMatrix<float> const&, absUnaryOp<float>, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpL<long, absUnaryOp>(DMatrix<long>&, DMatrix<long> const&, absUnaryOp<long>, CUstream_st*);
+
+template __host__ CUDART_DEVICE void unaryOpDmL<unsigned int, absUnaryOp>(DMatrix<unsigned int>&, DMatrix<unsigned int> const&, absUnaryOp<unsigned int>, int, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpDmL<unsigned long, absUnaryOp>(DMatrix<unsigned long>&, DMatrix<unsigned long> const&, absUnaryOp<unsigned long>, int, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpDmL<int, absUnaryOp>(DMatrix<int>&, DMatrix<int> const&, absUnaryOp<int>, int, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpDmL<double, absUnaryOp>(DMatrix<double>&, DMatrix<double> const&, absUnaryOp<double>, int, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpDmL<float, absUnaryOp>(DMatrix<float>&, DMatrix<float> const&, absUnaryOp<float>, int, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpDmL<long, absUnaryOp>(DMatrix<long>&, DMatrix<long> const&, absUnaryOp<long>, int, CUstream_st*);
+
+template __host__ CUDART_DEVICE void unaryOpDmL<float, floorUnaryOp>(DMatrix<float>&, DMatrix<float> const&, floorUnaryOp<float>, int, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpDmL<double, ceilUnaryOp>(DMatrix<double>&, DMatrix<double> const&, ceilUnaryOp<double>, int, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpDmL<long, powUnaryOp>(DMatrix<long>&, DMatrix<long> const&, powUnaryOp<long>, int, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpDmL<long, sigmoidGradientUnaryOp>(DMatrix<long>&, DMatrix<long> const&, sigmoidGradientUnaryOp<long>, int, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpDmL<long, scaleUnaryOp>(DMatrix<long>&, DMatrix<long> const&, scaleUnaryOp<long>, int, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpDmL<unsigned int, ceilUnaryOp>(DMatrix<unsigned int>&, DMatrix<unsigned int> const&, ceilUnaryOp<unsigned int>, int, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpDmL<long, oneOverUnaryOp>(DMatrix<long>&, DMatrix<long> const&, oneOverUnaryOp<long>, int, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpDmL<long, ltUnaryOp>(DMatrix<long>&, DMatrix<long> const&, ltUnaryOp<long>, int, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpDmL<long, ceilUnaryOp>(DMatrix<long>&, DMatrix<long> const&, ceilUnaryOp<long>, int, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpDmL<long, translationUnaryOp>(DMatrix<long>&, DMatrix<long> const&, translationUnaryOp<long>, int, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpDmL<long, sqrtUnaryOp>(DMatrix<long>&, DMatrix<long> const&, sqrtUnaryOp<long>, int, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpDmL<unsigned long, floorUnaryOp>(DMatrix<unsigned long>&, DMatrix<unsigned long> const&, floorUnaryOp<unsigned long>, int, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpDmL<long, gtUnaryOp>(DMatrix<long>&, DMatrix<long> const&, gtUnaryOp<long>, int, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpDmL<int, ceilUnaryOp>(DMatrix<int>&, DMatrix<int> const&, ceilUnaryOp<int>, int, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpDmL<long, negateUnaryOp>(DMatrix<long>&, DMatrix<long> const&, negateUnaryOp<long>, int, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpDmL<double, floorUnaryOp>(DMatrix<double>&, DMatrix<double> const&, floorUnaryOp<double>, int, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpDmL<long, divSqrtUnaryOp>(DMatrix<long>&, DMatrix<long> const&, divSqrtUnaryOp<long>, int, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpDmL<long, logUnaryOp>(DMatrix<long>&, DMatrix<long> const&, logUnaryOp<long>, int, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpDmL<long, gteUnaryOp>(DMatrix<long>&, DMatrix<long> const&, gteUnaryOp<long>, int, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpDmL<unsigned int, floorUnaryOp>(DMatrix<unsigned int>&, DMatrix<unsigned int> const&, floorUnaryOp<unsigned int>, int, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpDmL<long, expUnaryOp>(DMatrix<long>&, DMatrix<long> const&, expUnaryOp<long>, int, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpDmL<unsigned long, ceilUnaryOp>(DMatrix<unsigned long>&, DMatrix<unsigned long> const&, ceilUnaryOp<unsigned long>, int, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpDmL<long, eqUnaryOp>(DMatrix<long>&, DMatrix<long> const&, eqUnaryOp<long>, int, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpDmL<long, floorUnaryOp>(DMatrix<long>&, DMatrix<long> const&, floorUnaryOp<long>, int, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpDmL<long, lteUnaryOp>(DMatrix<long>&, DMatrix<long> const&, lteUnaryOp<long>, int, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpDmL<long, sqrUnaryOp>(DMatrix<long>&, DMatrix<long> const&, sqrUnaryOp<long>, int, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpDmL<float, ceilUnaryOp>(DMatrix<float>&, DMatrix<float> const&, ceilUnaryOp<float>, int, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpDmL<int, floorUnaryOp>(DMatrix<int>&, DMatrix<int> const&, floorUnaryOp<int>, int, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpDmL<long, sigmoidUnaryOp>(DMatrix<long>&, DMatrix<long> const&, sigmoidUnaryOp<long>, int, CUstream_st*);
+
 template __host__ CUDART_DEVICE void unaryOpL<float,expUnaryOp>(DMatrix<float>&, const DMatrix<float>&, expUnaryOp<float>, CUstream_st *);
 template __host__ CUDART_DEVICE void unaryOpL<double,expUnaryOp>(DMatrix<double>&, const DMatrix<double>&, expUnaryOp<double>, CUstream_st *);
+template __host__ CUDART_DEVICE void unaryOpL<long,expUnaryOp>(DMatrix<long>&, const DMatrix<long>&, expUnaryOp<long>, CUstream_st *);
 template __host__ CUDART_DEVICE void unaryOpL<ulong,expUnaryOp>(DMatrix<ulong>&, const DMatrix<ulong>&, expUnaryOp<ulong>, CUstream_st *);
 
 template __host__ CUDART_DEVICE void unaryOpL<float,translationUnaryOp>(DMatrix<float>&, const DMatrix<float>&, translationUnaryOp<float>, CUstream_st *);
 template __host__ CUDART_DEVICE void unaryOpL<double,translationUnaryOp>(DMatrix<double>&, const DMatrix<double>&, translationUnaryOp<double>, CUstream_st *);
+template __host__ CUDART_DEVICE void unaryOpL<long,translationUnaryOp>(DMatrix<long>&, const DMatrix<long>&, translationUnaryOp<long>, CUstream_st *);
 template __host__ CUDART_DEVICE void unaryOpL<ulong,translationUnaryOp>(DMatrix<ulong>&, const DMatrix<ulong>&, translationUnaryOp<ulong>, CUstream_st *);
 
 template __host__ CUDART_DEVICE void unaryOpL<float,scaleUnaryOp>(DMatrix<float>&, const DMatrix<float>&, scaleUnaryOp<float>, CUstream_st *);
 template __host__ CUDART_DEVICE void unaryOpL<double,scaleUnaryOp>(DMatrix<double>&, const DMatrix<double>&, scaleUnaryOp<double>, CUstream_st *);
+template __host__ CUDART_DEVICE void unaryOpL<long,scaleUnaryOp>(DMatrix<long>&, const DMatrix<long>&, scaleUnaryOp<long>, CUstream_st *);
 template __host__ CUDART_DEVICE void unaryOpL<ulong,scaleUnaryOp>(DMatrix<ulong>&, const DMatrix<ulong>&, scaleUnaryOp<ulong>, CUstream_st *);
 
 template __host__ CUDART_DEVICE void unaryOpL<float,subFromUnaryOp>(DMatrix<float>&, const DMatrix<float>&, subFromUnaryOp<float>, CUstream_st *);
@@ -165,23 +241,28 @@ template __host__ CUDART_DEVICE void unaryOpL<unsigned int, gteUnaryOp>(DMatrix<
 template __host__ CUDART_DEVICE void unaryOpL<unsigned int, eqUnaryOp>(DMatrix<unsigned int>&, DMatrix<unsigned int> const&, eqUnaryOp<unsigned int>, CUstream_st*);
 template __host__ CUDART_DEVICE void unaryOpL<unsigned int, translationUnaryOp>(DMatrix<unsigned int>&, DMatrix<unsigned int> const&, translationUnaryOp<unsigned int>, CUstream_st*);
 
+template __host__ CUDART_DEVICE void unaryOpL<long, subFromUnaryOp>(DMatrix<long>&, DMatrix<long> const&, subFromUnaryOp<long>, CUstream_st*);
+template __host__ CUDART_DEVICE void unaryOpDmL<long, subFromUnaryOp>(DMatrix<long>&, DMatrix<long> const&, subFromUnaryOp<long>, int, CUstream_st*);
 
 
 #else
 template __host__ CUDART_DEVICE void unaryOpL<float,0>(DMatrix<float>&, const DMatrix<float>&, UnaryOpF<float,0>, CUstream_st *);
 template __host__ CUDART_DEVICE void unaryOpL<double,0>(DMatrix<double>&, const DMatrix<double>&, UnaryOpF<double,0>, CUstream_st *);
+template __host__ CUDART_DEVICE void unaryOpL<long,0>(DMatrix<long>&, const DMatrix<long>&, UnaryOpF<long,0>, CUstream_st *);
 template __host__ CUDART_DEVICE void unaryOpL<ulong,0>(DMatrix<ulong>&, const DMatrix<ulong>&, UnaryOpF<ulong,0>, CUstream_st *);
 template __host__ CUDART_DEVICE void unaryOpL<int,0>(DMatrix<int>&, const DMatrix<int>&, UnaryOpF<int,0>, CUstream_st *);
 template __host__ CUDART_DEVICE void unaryOpL<uint,0>(DMatrix<uint>&, const DMatrix<uint>&, UnaryOpF<uint,0>, CUstream_st *);
 
 template __host__ CUDART_DEVICE void unaryOpL<float,1>(DMatrix<float>&, const DMatrix<float>&, UnaryOpF<float,1>, CUstream_st *);
 template __host__ CUDART_DEVICE void unaryOpL<double,1>(DMatrix<double>&, const DMatrix<double>&, UnaryOpF<double,1>, CUstream_st *);
+template __host__ CUDART_DEVICE void unaryOpL<long,1>(DMatrix<long>&, const DMatrix<long>&, UnaryOpF<long,1>, CUstream_st *);
 template __host__ CUDART_DEVICE void unaryOpL<ulong,1>(DMatrix<ulong>&, const DMatrix<ulong>&, UnaryOpF<ulong,1>, CUstream_st *);
 template __host__ CUDART_DEVICE void unaryOpL<int,1>(DMatrix<int>&, const DMatrix<int>&, UnaryOpF<int,1>, CUstream_st *);
 template __host__ CUDART_DEVICE void unaryOpL<uint,1>(DMatrix<uint>&, const DMatrix<uint>&, UnaryOpF<uint,1>, CUstream_st *);
 
 template __host__ CUDART_DEVICE void unaryOpL<float,2>(DMatrix<float>&, const DMatrix<float>&, UnaryOpF<float,2>, CUstream_st *);
 template __host__ CUDART_DEVICE void unaryOpL<double,2>(DMatrix<double>&, const DMatrix<double>&, UnaryOpF<double,2>, CUstream_st *);
+template __host__ CUDART_DEVICE void unaryOpL<long,2>(DMatrix<long>&, const DMatrix<long>&, UnaryOpF<long,2>, CUstream_st *);
 template __host__ CUDART_DEVICE void unaryOpL<ulong,2>(DMatrix<ulong>&, const DMatrix<ulong>&, UnaryOpF<ulong,2>, CUstream_st *);
 #endif
 
@@ -324,17 +405,20 @@ template __host__ CUDART_DEVICE void unaryOpDmL<unsigned int, scaleUnaryOp>(DMat
 #else
 template __host__ CUDART_DEVICE void unaryOpDmL<float,0>(DMatrix<float>&, const DMatrix<float>&, UnaryOpF<float,0>,int, CUstream_st *);
 template __host__ CUDART_DEVICE void unaryOpDmL<double,0>(DMatrix<double>&, const DMatrix<double>&, UnaryOpF<double,0>,int, CUstream_st *);
+template __host__ CUDART_DEVICE void unaryOpDmL<long,0>(DMatrix<long>&, const DMatrix<long>&, UnaryOpF<long,0>,int, CUstream_st *);
 template __host__ CUDART_DEVICE void unaryOpDmL<ulong,0>(DMatrix<ulong>&, const DMatrix<ulong>&, UnaryOpF<ulong,0>,int, CUstream_st *);
 template __host__ CUDART_DEVICE void unaryOpDmL<int,0>(DMatrix<int>&, const DMatrix<int>&, UnaryOpF<int,0>,int, CUstream_st *);
 template __host__ CUDART_DEVICE void unaryOpDmL<uint,0>(DMatrix<uint>&, const DMatrix<uint>&, UnaryOpF<uint,0>,int, CUstream_st *);
 
 template __host__ CUDART_DEVICE void unaryOpDmL<float,1>(DMatrix<float>&, const DMatrix<float>&, UnaryOpF<float,1>,int, CUstream_st *);
 template __host__ CUDART_DEVICE void unaryOpDmL<double,1>(DMatrix<double>&, const DMatrix<double>&, UnaryOpF<double,1>,int, CUstream_st *);
+template __host__ CUDART_DEVICE void unaryOpDmL<long,1>(DMatrix<long>&, const DMatrix<long>&, UnaryOpF<long,1>,int, CUstream_st *);
 template __host__ CUDART_DEVICE void unaryOpDmL<ulong,1>(DMatrix<ulong>&, const DMatrix<ulong>&, UnaryOpF<ulong,1>,int, CUstream_st *);
 template __host__ CUDART_DEVICE void unaryOpDmL<int,1>(DMatrix<int>&, const DMatrix<int>&, UnaryOpF<int,1>,int, CUstream_st *);
 template __host__ CUDART_DEVICE void unaryOpDmL<uint,1>(DMatrix<uint>&, const DMatrix<uint>&, UnaryOpF<uint,1>,int, CUstream_st *);
 
 template __host__ CUDART_DEVICE void unaryOpDmL<float,2>(DMatrix<float>&, const DMatrix<float>&, UnaryOpF<float,2>,int, CUstream_st *);
 template __host__ CUDART_DEVICE void unaryOpDmL<double,2>(DMatrix<double>&, const DMatrix<double>&, UnaryOpF<double,2>,int, CUstream_st *);
+template __host__ CUDART_DEVICE void unaryOpDmL<long,2>(DMatrix<long>&, const DMatrix<long>&, UnaryOpF<long,2>,int, CUstream_st *);
 template __host__ CUDART_DEVICE void unaryOpDmL<ulong,2>(DMatrix<ulong>&, const DMatrix<ulong>&, UnaryOpF<ulong,2>,int, CUstream_st *);
 #endif

@@ -11,7 +11,7 @@ template <typename T> __device__ inline T devMaxValue() {
 	if(sizeof(T) == 4) {
 		*ptr = 0x7f7fffff;
 	} else if( sizeof(T) == 8) {
-		*ptr = 0x7fefffffffffffff;
+		*ptr = (T)0x7fefffffffffffff;
 	}
 	return ret;
 }
@@ -19,9 +19,9 @@ template <typename T> __device__ inline T devMaxValue() {
 template<typename T> __global__ void maxColumnIndicesSubTileWidthKernel(
 		const T* aElements,
 		T* bElements,
-		uint height,
-		uint width,
-		uint pitch
+		int height,
+		int width,
+		int pitch
 		) {
 	T* tile = SharedMemory<T>();
     uint xIndex = blockIdx.x * blockDim.x + threadIdx.x;
@@ -53,9 +53,9 @@ template<typename T> __global__ void maxColumnIndicesSubTileWidthKernel(
 template<typename T> __global__ void maxColumnGridValuesKernel(
 		const T* aElements,
 		T* bElements,
-		uint height,
-		uint width,
-		uint pitch
+		int height,
+		int width,
+		int pitch
 		) {
 	T* tile = SharedMemory<T>();
     uint xIndex = blockIdx.x * blockDim.x + threadIdx.x;
@@ -90,9 +90,9 @@ template<typename T> __global__ void indicesOfValuesKernel(
 		T* trgElements,
 		const T* source,
 		const T* values,
-		uint height,
-		uint width,
-		uint pitch)
+		int height,
+		int width,
+		int pitch)
 {
 	T* tile = SharedMemory<T>();
     uint xIndex = blockIdx.x * blockDim.x + threadIdx.x;
@@ -173,7 +173,7 @@ template<typename T> void CuMatrix<T>::toMaxColumnIndexVectorL(DMatrix<T>& trg, 
 	checkCudaError(cudaGetLastError());
 }
 
-template<typename T> inline IndexArray CuMatrix<T>::rowIndices(uint row) const {
+template<typename T> inline IndexArray CuMatrix<T>::rowIndices(int row) const {
 	dassert( validRowQ(row));
 	if (colMajor) {
 		uint* ary = new uint[n];
@@ -181,14 +181,13 @@ template<typename T> inline IndexArray CuMatrix<T>::rowIndices(uint row) const {
 			ary[i] = i + row * p;
 		}
 		return IndexArray(ary, n);
-
 	} else  {
 		uint start = row * n;
 		return IndexArray(start, start + n - 1);
 	}
 }
 
-template<typename T> inline IndexArray CuMatrix<T>::columnIndices(uint col) const {
+template<typename T> inline IndexArray CuMatrix<T>::columnIndices(int col) const {
 	dassert( validColQ(col));
 	if (colMajor) {
 		uint start = col * m;
@@ -203,30 +202,22 @@ template<typename T> inline IndexArray CuMatrix<T>::columnIndices(uint col) cons
 }
 
 template<typename T> CuMatrix<T> CuMatrix<T>::toMaxColumnIndexVector() const {
+	dassert(tiler.tileSize== tiler.m_size);
 	CuMatrix<T> ret(m,1,false, true);
 	DMatrix<T> d_A, d_res;
-	asDmatrix(d_A);
-	ret.asDmatrix(d_res, false);
+	tile0(d_A, lastMod == mod_host);
+	ret.tile0(d_res, lastMod == mod_host);
 	toMaxColumnIndexVectorL(d_res,d_A);
 	ret.invalidateHost();
 	return ret;
 }
 
-
 template<typename T> T CuMatrix<T>::min(  cudaStream_t stream ) const {
-	DMatrix<T> d_A;
-	asDmatrix(d_A);
-	if(checkDebug(syncHappy))b_util::syncGpu();
-	T res = reduce(d_A, Functory<T,minBinaryOp>::pinch(), util<T>::maxValue() );
-	return res;
+	return reduce(Functory<T,minBinaryOp>::pinch(), util<T>::maxValue());
 }
 
 template<typename T> T CuMatrix<T>::max( cudaStream_t stream ) const {
-	DMatrix<T> d_A;
-	asDmatrix(d_A);
-	if(checkDebug(syncHappy))b_util::syncGpu();
-	T res = reduce(d_A, Functory<T,maxBinaryOp>::pinch(), util<T>::minValue());
-	return res;
+	return reduce(Functory<T,maxBinaryOp>::pinch(), util<T>::minValue());
 }
 
 /*
@@ -239,9 +230,10 @@ template<typename T> T CuMatrix<T>::vectorLength() const {
 
 // fixme not stl on this side of the membrane! use float2 and double2
 template<typename T> pair<T,T> CuMatrix<T>::bounds() const {
+
 	DMatrix<T> d_A;
-	asDmatrix(d_A);
-	if(checkDebug(syncHappy))b_util::syncGpu();
+	tile0(d_A, lastMod == mod_host);
+
 	cudaStream_t stream[2];
 	for(int i = 0; i < 2; i++) {
 		checkCudaErrors(cudaStreamCreate(&stream[i]));
@@ -257,9 +249,10 @@ template<typename T> pair<T,T> CuMatrix<T>::bounds() const {
     watch.start();
     T min,max;
 
+    // toto find out why noworkdis
     reduceAsync(&min, d_A, Functory<T,minBinaryOp>::pinch(), util<T>::maxValue(), stream[0]);
     if(checkDebug(debugExec))outln("min launch");
-    reduceAsync(&max,d_A, Functory<T,maxBinaryOp>::pinch(), util<T>::minValue(), stream[1]);
+    reduceAsync(&max, d_A, Functory<T,maxBinaryOp>::pinch(), util<T>::minValue(), stream[1]);
     if(checkDebug(debugExec))outln("max launch");
 
     checkCudaErrors(cudaEventRecord(stop_event, 0));
@@ -276,9 +269,9 @@ template<typename T> pair<T,T> CuMatrix<T>::bounds() const {
 }
 
 template<typename T> void CuMatrix<T>::bounds(T* min, T* max) const {
+	dassert(tiler.tileSize== tiler.m_size);
 	DMatrix<T> d_A;
-	asDmatrix(d_A);
-	if(checkDebug(syncHappy))b_util::syncGpu();
+	tile0(d_A, lastMod == mod_host);
 	cudaStream_t stream[2];
 	for(int i = 0; i < 2; i++) {
 		checkCudaErrors(cudaStreamCreate(&stream[i]));
@@ -310,8 +303,7 @@ template<typename T> void CuMatrix<T>::bounds(T* min, T* max) const {
 	if(checkDebug(debugExec))outln("min " << exeTime << ", max " << exeTime2 << ", sync/destroy " << timer.stop());
 }
 
-template<typename T> void CuMatrix<T>::bounds( T* min, T* max, DMatrix<T>& minBuff, DMatrix<T>& maxBuff, const DMatrix<T>& src, uint blocks, uint threads, ulong nP) {
-	if(checkDebug(syncHappy))b_util::syncGpu();
+template<typename T> void CuMatrix<T>::bounds( T* min, T* max, DMatrix<T>& minBuff, DMatrix<T>& maxBuff, const DMatrix<T>& src, int blocks, int threads, long nP) {
 	cudaStream_t stream[2];
 	for(int i = 0; i < 2; i++) {
 		checkCudaErrors(cudaStreamCreate(&stream[i]));

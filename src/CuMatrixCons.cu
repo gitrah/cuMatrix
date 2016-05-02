@@ -14,249 +14,76 @@ __constant__ uint dDefaultMatProdBlockX;
 __constant__ uint dDefaultMatProdBlockY;
 __constant__ uint3 dgDefaultMatProdBlock;
 
+uint CuDestructs=0;
+__device__ uint CuDestructsD=0;
 
-void setAllGpuConstants() {
-	int devCount, currDev;
-	checkCudaErrors(cudaGetDeviceCount(&devCount));
-	checkCudaErrors(cudaGetDevice(&currDev));
+template<typename T> __host__ __device__ CuMatrix<T>::CuMatrix() :
+	elements{0},
+	m{0},n{0},p{0},
+	size{0},
+	oldM{0}, oldN{0},
+	posed{false}, colMajor{false},
+	lastMod{mod_neither},
+	ownsBuffers{true},
+	txp{0},
+	ownsTxp{true},
+	tiler{*this}
+{}
 
-	for(int i = 0; i < devCount;i++) {
-		if(strstr(gpuNames[i].c_str(), "750 Ti")) {
-			prlocf("skipping sluggish 750 ti\n");
-			continue;
-		}
-		flprintf("setting device %d\n",i);
-		checkCudaErrors(cudaSetDevice(i));
-		flprintf("setting constants for device %s %d\n",gpuNames[i].c_str(),i);
-		setCurrGpuConstants();
-	}
-	checkCudaErrors(cudaSetDevice(currDev));
-}
+template<typename T> __host__ __device__ CuMatrix<T>::CuMatrix(const CuMatrix<T>& o) :
+	lastMod{ o.lastMod},
+	elements{ o.elements},
+	m{ o.m},
+	n{ o.n},
+	p{ o.p},
+	size{ o.size},
+	posed{ o.posed},
+	colMajor{ o.colMajor},
+	ownsBuffers{ o.ownsBuffers},
+	txp{ o.txp},
+	ownsTxp{o.ownsTxp},
+	tiler{ o.tiler}
+{
 
-void setCurrGpuConstants() {
-	prlocf("setting gpu constants...\n");
-	checkCudaErrors(cudaMemcpyToSymbol(dDefaultMatProdBlockX,&gDefaultMatProdBlock.x, sizeof(uint)));
-	checkCudaErrors(cudaMemcpyToSymbol(dDefaultMatProdBlockY,&gDefaultMatProdBlock.y, sizeof(uint)));
-	checkCudaErrors(cudaMemcpyToSymbol(dgDefaultMatProdBlock,&gDefaultMatProdBlock, sizeof(uint3)));
-	prlocf("set gpu constants\n");
-}
-
-template<typename T> __host__ __device__ void CuMatrix<T>::initMembers() {
-	// ah, templates; do they not make the code beautiful?
-	// yes, they do not
-	elements = null;
-	d_elements = null;
-	m = 0;
-	n = 0;
-	p = 0;
-	size = 0;
-	oldM = 0;
-	oldN = 0;
-	posed = false;
-	colMajor = false;
-	lastMod = mod_neither;
-	ownsBuffers = true;
-	txp = null;
-#ifndef __CUDA_ARCH__
-	Constructed++;
-#endif
-}
-
-template<typename T> __host__ MemMgr<T>& CuMatrix<T>::getMgr() {
-	return *mgr;
-}
-
-template <typename T> string CuMatrix<T>::typeStr() {
-	if(theTypeStr.length() == 0) {
-		theTypeStr = string( typeid(T).name());
-	}
-	return theTypeStr;
-}
-
-__global__ void setCaps() {
-	if(threadIdx.x == blockIdx.x == 0) {
-/*
-		gd_devCaps = (ExecCaps**) malloc(g_devCount* sizeof(ExecCaps*));
-		for(int i = 0; i < g_devCount; i++) {
-			ExecCaps* cap = new ExecCaps();
-			gd_devCaps[i] = cap;
-			ExecCaps* d_ptr;
-			ExecCaps::getExecCaps(*cap, i);
-			d_ptr =
-			// copy caps
-			checkCudaError(cudaMemcpy(d_ptr, cap, sizeof(ExecCaps), cudaMemcpyHostToDevice));
-			// add to device-side caps array
-			checkCudaError(cudaMemcpy(gd_devCaps + i, d_ptr, sizeof(ExecCaps*), cudaMemcpyDeviceToDevice));
-			outln("adding " << i << "\n" << cap->toString() << "\n");
-		}
-*/
-	}
-}
-
-/*
- * must be called for each parameter instance, because memory managers are type-specific
- * also initialized cublas
- */
-template <typename T> void CuMatrix<T>::init(int maxThreads, int maxBlocks) {
-	b_util::dumpStack();
-
-#ifdef CuMatrix_DebugBuild
-	buildType = debug;
-#else
-	buildType = release;
-#endif
-	outln((buildType == debug ? "Debug" : "Release" ) << " CuMatrix<" << typeStr() << ">::init creating MemMgr arch " );
-	mgr = new MemMgr<T>();
-	outln(" CuMatrix<" << typeStr() << ">::init created MemMgr " << mgr);
-	MaxThreads = maxThreads;
-	MaxBlocks = maxBlocks;
-
-	setCurrGpuConstants();
-	warmup<<<1,1>>>();
-	setMaxColsDisplayed(25);
-	setMaxRowsDisplayed(25);
-
-	cublasStatus_t ret;
-
-	ret = cublasCreate(&g_handle);
-
-	if (ret != CUBLAS_STATUS_SUCCESS)
-	{
-	   printf("cublasCreate returned error code %d, line(%d)\n", ret, __LINE__);
-	   exit(EXIT_FAILURE);
-	}
-
-}
-
-
-template <typename T> void CuMatrix<T>::cleanup() {
-	if(mgr) {
-		outln(" CuMatrix<T>::cleanup mgr " << mgr);
-		delete mgr;
-		mgr = null;
-	}
-    //ExecCaps::freeDevCaps();
-
-	util<T>::deletePtrArray(g_devCaps,g_devCount);
-	free(g_devCaps);
-	//freeDevSideDevCaps<<<1,1>>>();
-
-    cublasStatus_t error = cublasDestroy(g_handle);
-
-	if (error != CUBLAS_STATUS_SUCCESS) {
-		printf("cublasDestroy h_CUBLAS d_C returned error code %d, line(%d)\n",
-				error, __LINE__);
-		exit(EXIT_FAILURE);
-	}
-	cudaDeviceReset(); // cleans up the dev
-	outln("\nConstructed " << Constructed << "\nDestructed " << Destructed);
-
-	outln("HDCopied " << HDCopied << ", mem " << b_util::expNotation(MemHdCopied));
-	outln("DDCopied " << DDCopied << ", mem " << b_util::expNotation(MemDdCopied));
-	outln("DHCopied " << DHCopied << ", mem " << b_util::expNotation(MemDhCopied));
-	outln("HHCopied " << HHCopied << ", mem " << b_util::expNotation(MemHhCopied));
-}
-
-template<typename T> __host__ __device__ CuMatrix<T>::CuMatrix() {
-	elements = null;
-	d_elements = null;
-	m = 0;
-	n = 0;
-	p = 0;
-	size = 0;
-	oldM = 0;
-	oldN = 0;
-	posed = false;
-	colMajor = false;
-	lastMod = mod_neither;
-	ownsBuffers = true;
-	txp = null;
-	currSum = 0;
-/*
-	if (checkDebug(debugCons | debugLife)) {
-		outln( "default constructor CuMatrix() -> " << toShortString());
-		b_util::dumpStack();
-	}
-*/
-}
-
-template<typename T> __host__ __device__ CuMatrix<T>::CuMatrix(const CuMatrix<T>& o) {
-	elements = o.elements;
-	d_elements = o.d_elements;
-	m =  o.m;
-	n =  o.n;
-	p =  o.p;
-	size = o.size;
-	posed = o.posed;
-	colMajor = o.colMajor;
-	lastMod = o.lastMod;
-	ownsBuffers = o.ownsBuffers;
-	txp = o.txp;
-	ownsTxp = o.ownsTxp;
-	currSum = 0;
 #ifndef __CUDA_ARCH__
 	if (elements)
 		getMgr().addHost(*this);
-	if (d_elements)
-		getMgr().addDevice(*this);
+
+	getMgr().addTiles(&tiler);
+
 	Constructed++;
 #endif
 
-	if (checkDebug(debugCons | debugLife)) {
-		printf("CuMatrix::CuMatrix() this %p\n",this);
+	if (checkDebug(debugCons )) {
+		flprintf("CuMatrix::CuMatrix(const CuMatrix<T>& o %p) copy cons this %p\n",&o, this);
 #ifndef __CUDA_ARCH__
+		outln("a copy am i " << toShortString());
 		b_util::dumpStack();
 #endif
 	}
 
 }
 
-/*
-template<typename T> __host__ __device__ CuMatrix<T>::CuMatrix(const CuMat<T>& o) {
-	elements = o.elements;
-	d_elements = o.d_elements;
-	m =  o.m;
-	n =  o.n;
-	p =  o.p;
-	size = o.size;
-	posed = o.posed;
-	colMajor = o.colMajor;
-	lastMod = o.lastMod;
-	ownsTxp = ownsBuffers = o.ownsBuffers;
-	txp = null;
-	oldN = oldM = 0;
-#ifndef __CUDA_ARCH__
-	if (!d_elements)
-		getMgr().allocDevice(*this);
-	else
-		getMgr().addDevice(*this);
-	Constructed++;
-#endif
-
-}
-*/
-
-
-template<typename T> __host__ __device__ CuMatrix<T>::CuMatrix( T* h_data, uint m, uint n, bool allocateD )  {
-	initMembers();
-	elements = h_data;
-	this->m = m;
-	this->n = n;
-	p = n;
-	size = m * n * sizeof(T);
+template<typename T> __host__ __device__ CuMatrix<T>::CuMatrix( T* h_data, int m, int n, bool allocateD ) :
+	lastMod{ mod_host},
+	elements{ h_data},
+	m{ m},
+	n{ n},
+	p{ n},
+	size{ m * p * sizeof(T)},
+	posed{ false },
+	colMajor{ false },
+	ownsBuffers{ true },
+	txp{ 0 },
+	tiler{*this, allocateD} {
 #ifndef __CUDA_ARCH__
 	getMgr().addHost(*this);
 #endif
 	if(allocateD) {
 		lastMod = mod_host;
-#ifndef __CUDA_ARCH__
-		getMgr().allocDevice(*this);
-		syncBuffers();
-#else
-		d_elements = (T*) malloc(size);
-#endif
+		getMgr().addTiles(&tiler);
 	}
-	if (checkDebug(debugCons | debugLife)) {
+	if (checkDebug(debugCons )) {
 		printf("cons CuMatrix(%p, %u, %u, %s)\n", h_data,  m ,n ,tOrF(allocateD) );
 #ifndef __CUDA_ARCH__
 		b_util::dumpStack();
@@ -264,39 +91,52 @@ template<typename T> __host__ __device__ CuMatrix<T>::CuMatrix( T* h_data, uint 
 	}
 }
 
-template<typename T> __host__ __device__ CuMatrix<T>::CuMatrix( T* h_data, uint m, uint n, uint p, bool allocateD) {
-	initMembers();
-	elements = h_data;
-	this->m = m;
-	this->n = n;
-	this->p = p;
-	size = m * p * sizeof(T);
+template<typename T> __host__ __device__ CuMatrix<T>::CuMatrix( T* h_data, int m, int n, int p, bool allocateD) :
+	lastMod{ mod_host},
+	elements{ h_data},
+	m{ m},
+	n{ n},
+	p{ p},
+	size{ m * p * sizeof(T)},
+	posed{ false },
+	colMajor{ false },
+	ownsBuffers{ true },
+	txp{ 0 },
+	tiler{*this, allocateD} {
 #ifndef __CUDA_ARCH__
 	getMgr().addHost(*this);
+	if(allocateD)getMgr().addTiles(&tiler);
 #endif
-	if(allocateD) {
-		lastMod = mod_host;
-#ifndef __CUDA_ARCH__
-		getMgr().allocDevice(*this);
-		syncBuffers();
-#else
-		d_elements = (T*) malloc(size);
-#endif
-	}
-	if (checkDebug(debugCons | debugLife)) {
-		printf("cons CuMatrix(%p, %u, %u, %u, %s)\n", h_data,  m ,n,p, tOrF(allocateD) );
+	if (checkDebug(debugCons )) {
+		flprintf("cons CuMatrix(%p, %u, %u, %u, %s)\n", h_data,  m ,n,p, tOrF(allocateD) );
 #ifndef __CUDA_ARCH__
 		b_util::dumpStack();
 #endif
 	}
 }
 
-template<typename T> __host__ __device__ CuMatrix<T>::CuMatrix(uint m, uint n, bool allocateH, bool allocateD) {
-	initMembers();
-	this->m = m;
-	this->n = n;
-	p = n;
-	size = m * n * sizeof(T);
+template<typename T> __host__ __device__ CuMatrix<T>::CuMatrix(int m, int n, bool allocateH, bool allocateD):
+		CuMatrix(m,n,n,Tiler<T>::gpuMaskFromGpu(ExecCaps::currDev()),allocateH,allocateD) {
+}
+
+template<typename T> __host__ __device__ CuMatrix<T>::CuMatrix(int m, int n, int p, bool allocateH, bool allocateD) :
+		CuMatrix(m,n,p,Tiler<T>::gpuMaskFromGpu(ExecCaps::currDev()),allocateH,allocateD) {
+}
+
+template<typename T> __host__ __device__ CuMatrix<T>::CuMatrix(int m, int n, int p, int gpuMaskm,bool allocateH, bool allocateD):
+			elements{0},
+			m{m},n{n},p{p},
+			size{m * p * sizeof(T)},
+			oldM{0}, oldN{0},
+			posed{false}, colMajor{false},
+			lastMod{allocateH ? ( allocateD ? mod_synced : mod_host) : ( allocateD ? mod_device : mod_neither ) },
+			ownsBuffers{true},
+			txp{0},
+			ownsTxp{true},
+		tiler(*this, allocateD) {
+
+	//if(checkDebug(debugMem))usedDevMem();
+
 	if (size) {
 		if(allocateH) {
 #ifndef __CUDA_ARCH__
@@ -305,21 +145,67 @@ template<typename T> __host__ __device__ CuMatrix<T>::CuMatrix(uint m, uint n, b
 			setLastError(hostAllocationFromDeviceEx);
 #endif
 		}
-		if(allocateD) {
+		if(allocateD){
 #ifndef __CUDA_ARCH__
-			checkCudaError(getMgr().allocDevice(*this));
-#else
-			d_elements = (T*) malloc(size);
+
+			if (checkDebug(debugCons )) outln("calling add tiles on tiler " << tiler);
+			getMgr().addTiles(&tiler);
+			if(checkDebug(debugMem))usedDevMem();
 #endif
 		}
+	} else {
+		if (checkDebug(debugCons ))prlocf("size == 0!");
 	}
-	if (checkDebug(debugCons | debugLife)) {
-		printf("cons CuMatrix(%u, %u, %s, %s)\n",  m ,n,tOrF(allocateD),tOrF(allocateH) );
+	if (checkDebug(debugCons | debugRefcount )) {
+		flprintf("cons CuMatrix(%u, %u, %u, %s, %s) ->%p on device %d\n",  m ,n,p, tOrF(allocateH), tOrF(allocateD),this,ExecCaps::currDev() );
 #ifndef __CUDA_ARCH__
 		b_util::dumpStack();
 #endif
 	}
 }
+
+
+template<typename T> __host__ __device__ CuMatrix<T>::CuMatrix(int m, int n,
+		int p, int tileM, int tileN, int gpuMask, bool allocateH,
+		bool allocateD) :
+			elements{0},
+			m{m},n{n},p{p},
+			size{m * p * (int)sizeof(T)},
+			oldM{0}, oldN{0},
+			posed{false}, colMajor{false},
+			lastMod{mod_neither},
+			ownsBuffers{true},
+			txp{0},
+			ownsTxp{true},
+		tiler(*this) {
+		tiler.gpuMask = gpuMask;
+		if(allocateD) tiler.allocTiles();
+
+	if(checkDebug(debugMem))usedDevMem();
+
+	if (size) {
+		if(allocateH) {
+#ifndef __CUDA_ARCH__
+			getMgr().allocHost(*this);
+#else
+			setLastError(hostAllocationFromDeviceEx);
+#endif
+#ifndef __CUDA_ARCH__
+		if(checkDebug(debugMem))usedDevMem();
+#endif
+		}
+#ifndef __CUDA_ARCH__
+		if(allocateD)getMgr().addTiles(&tiler);
+#endif
+	}
+	if (checkDebug(debugCons )) {
+		flprintf("cons CuMatrix(%u, %u, %u, %s, %s) ->%p on device %d\n",  m ,n,p, tOrF(allocateD),tOrF(allocateH), this,ExecCaps::currDev() );
+#ifndef __CUDA_ARCH__
+		b_util::dumpStack();
+#endif
+	}
+}
+
 
 template<typename T> __host__ __device__  void CuMatrix<T>::freeTxp() {
 	if( txp ) {
@@ -333,12 +219,21 @@ template<typename T> __host__ __device__  void CuMatrix<T>::freeTxp() {
 	}
 }
 
-
 template<typename T> __host__ __device__ CuMatrix<T>::~CuMatrix() {
+
+	if(checkDebug( debugRefcount )) flprintf("die: %dX%dX%d h %p %s d{%p,%p,%p,%p}\n", m,n,p, elements, ownsBuffers ? "owns" : "", tiler.buffers.x, tiler.buffers.y, tiler.buffers.z, tiler.buffers.w);
+//
 #ifndef __CUDA_ARCH__
+	CuDestructs++;
+	if(checkDebug(debugRefcount)) {
+		//flprintf("(%uX%u) this %p h %p d %p clr: %s\n",m,n,this,elements,tiler.currBuffer(), b_util::caller().c_str());
+		outln("~" <<toShortString());
+	}
 	stringstream disposition;
 	int refcount;
 	disposition << "~CuMatrix() " << toShortString();
+#else
+	if(checkDebug(debugCons))flprintf("~CuMatrix (%u X %u) on th %p h %p d %p\n",m,n,this,elements,tiler.currBuffer());
 #endif
 	T* e_ptr = elements;
 	if (e_ptr != null )  {
@@ -357,47 +252,176 @@ template<typename T> __host__ __device__ CuMatrix<T>::~CuMatrix() {
 #endif
 		elements = null;
 	}
-	e_ptr = d_elements;
-	if (e_ptr != null) {
-		if(ownsBuffers) {
-#ifndef __CUDA_ARCH__
-			refcount = getMgr().freeDevice(*this);
-			if(refcount) {
-				disposition << "\n\tdevice " << d_elements << " still has " << refcount << " refs";
+
+
+			if(ownsBuffers) {
+	#ifndef __CUDA_ARCH__
+				T* currBuff = tiler.currBuffer();
+				refcount = getMgr().freeTiles(*this);
+				if(refcount) {
+					disposition << "\n\tdevice " << currBuff << " still has " << refcount << " refs";
+				} else {
+					disposition << "\n\tdevice " << currBuff << " freed";
+				}
+	#else
+				for(int i =0; i < tiler.countGpus();i++) {
+					e_ptr = tiler.buffer(tiler.nextGpu(i));
+					if (e_ptr != null) {
+						if (checkDebug(debugCons ))printf("~CuMatrix() free(buffer(%d) %p)\n", i, e_ptr);
+						free(e_ptr);
+					}
+				}
+	#endif
 			} else {
-				disposition << "\n\tdevice " << e_ptr << " freed";
+				if(checkDebug(debugCons))flprintf("buffer not owned %p %uX%uX%u\n", tiler.buff(), m,n,p);
 			}
-#else
-			if (checkDebug(debugCons | debugLife))printf("~CuMatrix() d_elements %p\n", d_elements);
-			free(d_elements);
-#endif
-		}
-		d_elements = null;
-	}
+//		}
+//	}
 	freeTxp();
+
+	if(checkDebug(debugMem)) b_util::usedDmem();
 #ifndef __CUDA_ARCH__
 	Destructed++;
 #endif
-	if (checkDebug(debugCons | debugLife)) {
+	if (checkDebug(debugCons ) || cudaGetLastError() != cudaSuccess) {
 #ifndef __CUDA_ARCH__
 		outln(disposition.str());
-		if(checkDebug(debugLife)) {
-			b_util::dumpStack();
-		}
+		b_util::dumpStack();
 #endif
 	}
 }
 
-template <typename T> CuMatrix<T> CuMatrix<T>::fromBuffer(void* buffer, uint elemBytes, T (*converter)(void*), uint m, uint n, uint p) {
+void setAllGpuConstants() {
+	int devCount, currDev;
+	checkCudaErrors(cudaGetDeviceCount(&devCount));
+	checkCudaErrors(cudaGetDevice(&currDev));
+
+	for(int i = 0; i < devCount;i++) {
+		if(strstr(gpuNames[i].c_str(), "750 Ti")) {
+			prlocf("skipping sluggish 750 ti\n");
+			continue;
+		}
+		flprintf("setting device %d\n",i);
+		ExecCaps_setDevice(i);
+		flprintf("setting constants for device %s %d\n",gpuNames[i].c_str(),i);
+		setCurrGpuConstants();
+	}
+	ExecCaps_setDevice(currDev);
+}
+
+void setCurrGpuConstants() {
+	prlocf("setting gpu constants...\n");
+	checkCudaErrors(cudaMemcpyToSymbol(dDefaultMatProdBlockX,&gDefaultMatProdBlock.x, sizeof(uint)));
+	checkCudaErrors(cudaMemcpyToSymbol(dDefaultMatProdBlockY,&gDefaultMatProdBlock.y, sizeof(uint)));
+	checkCudaErrors(cudaMemcpyToSymbol(dgDefaultMatProdBlock,&gDefaultMatProdBlock, sizeof(uint3)));
+	prlocf("set gpu constants\n");
+}
+
+template<typename T> __host__ __device__ void CuMatrix<T>::initMembers() {
+	// ah, templates; do they not make the code beautiful?
+	// yes, they do not
+	elements = null;
+	m = 0;
+	n = 0;
+	p = 0;
+	size = 0;
+	oldM = 0;
+	oldN = 0;
+	posed = false;
+	colMajor = false;
+	lastMod = mod_neither;
+	ownsBuffers = true;
+	txp = null;
+//	mgr->addTiles(&tiler);
+
+#ifndef __CUDA_ARCH__
+	Constructed++;
+#endif
+}
+
+template<typename T> __host__ MemMgr<T>& CuMatrix<T>::getMgr() const {
+	return *mgr;
+}
+
+template <typename T> string CuMatrix<T>::typeStr() {
+	if(theTypeStr.length() == 0) {
+		theTypeStr = string( typeid(T).name());
+	}
+	return theTypeStr;
+}
+
+/*
+ * must be called for each parameter instance, because memory managers are type-specific
+ * also initialized cublas
+ */
+template <typename T> void CuMatrix<T>::initMemMgrForType(int maxThreads, int maxBlocks) {
+	b_util::dumpStack();
+
+#ifdef CuMatrix_DebugBuild
+	buildType = debug;
+#else
+	buildType = release;
+#endif
+	outln( "\n\n\tExecutable version:  " << (buildType == debug ? "Debug" : "Release" ) << " CuMatrix<" << typeStr() << ">::init creating MemMgr arch " );
+
+
+	mgr = new MemMgr<T>();
+	outln(" CuMatrix<" << typeStr() << ">::init created MemMgr " << mgr);
+	MaxThreads = maxThreads;
+	MaxBlocks = maxBlocks;
+
+	setCurrGpuConstants();
+	setMaxColsDisplayed(25);
+	setMaxRowsDisplayed(25);
+
+
+}
+
+
+template <typename T> void CuMatrix<T>::cleanup() {
+	if(mgr) {
+		outln(" CuMatrix<T>::cleanup mgr " << mgr);
+		delete mgr;
+		mgr = null;
+	}
+    //ExecCaps::freeDevCaps();
+
+	util<T>::deletePtrArray(g_devCaps,ExecCaps::deviceCount);
+	free(g_devCaps);
+	//freeDevSideDevCaps<<<1,1>>>();
+
+#ifdef CuMatrix_UseCublas
+    cublasStatus_t error = cublasDestroy(g_handle);
+
+	if (error != CUBLAS_STATUS_SUCCESS) {
+		printf("cublasDestroy h_CUBLAS d_C returned error code %d, line(%d)\n",
+				error, __LINE__);
+		exit(EXIT_FAILURE);
+	}
+#endif
+	//void (*ftor) =  }
+	b_util::allDevices( [] (){cherr(cudaDeviceReset());});
+
+	outln("\nConstructed " << Constructed << "\nDestructed " << Destructed);
+
+	outln("HDCopied " << HDCopied << ", mem " << b_util::expNotation(MemHdCopied));
+	outln("DDCopied " << DDCopied << ", mem " << b_util::expNotation(MemDdCopied));
+	outln("DHCopied " << DHCopied << ", mem " << b_util::expNotation(MemDhCopied));
+	outln("HHCopied " << HHCopied << ", mem " << b_util::expNotation(MemHhCopied));
+}
+
+
+template <typename T> CuMatrix<T> CuMatrix<T>::fromBuffer(void* buffer, int elemBytes, T (*converter)(void*), int m, int n, int p) {
+	outln("m " << m << ", n " << p);
 	CuMatrix<T> ret = CuMatrix<T>::zeros(m,p);
 	ret.n = n;
 	ret.syncBuffers();
 	T* elemOut;
 	char * elemIn;
-	for(uint row = 0; row < m; row++) {
+	for(int row = 0; row < m; row++) {
 		elemOut = ret.elements + row * p;
 		elemIn = (char*)buffer + row * n * elemBytes;
-		for(uint col =0; col < n; col++) {
+		for(int col =0; col < n; col++) {
 			*(elemOut + col) = (*converter)(elemIn + col * elemBytes);
 		}
 	}

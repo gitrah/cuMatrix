@@ -77,6 +77,7 @@ template<typename T> CuMatrix<T> LinearRegression<T>::gradientDescent(T alpha,
 	CuMatrix<T> jHist = CuMatrix<T>::zeros(iters, 1);
 	outln("theta " << theta.toShortString());
 	theta.syncBuffers();
+	assert(x.tiler.tileSize == x.tiler.m_size);
 	outln("x " << x.toShortString());
 	CuMatrix<T> xb = x.addBiasColumn();
 	outln("xb " << xb.toShortString());
@@ -89,12 +90,12 @@ template<typename T> CuMatrix<T> LinearRegression<T>::gradientDescent(T alpha,
 
 	CuMatrix<T> xbTheta(xb.m, theta.n, true, true);
 	DMatrix<T> dxbTheta;
-	xbTheta.asDmatrix(dxbTheta, false);
+	xbTheta.tile0(dxbTheta, false);
 	CuMatrix<T> txXbTheta = xbTheta.transpose();
 	DMatrix<T> dTxbTheta = txXbTheta.asDmatrix(false);
 
 	DMatrix<T> dTheta;
-	theta.asDmatrix(dTheta, true);
+	theta.tile0(dTheta, true);
 
 	CuMatrix<T> xbTrans = xb.transpose();
 	//DMatrix<T> dxbTrans = xbTrans.asDmatrix(true);
@@ -185,6 +186,7 @@ template<typename T> CuMatrix<T> LinearRegression<T>::gradientDescentLoop(
 	outln("theta " << theta.toShortString());
 	theta.syncBuffers();
 	outln("x " << x.toShortString());
+	assert(x.tiler.tileSize == x.tiler.m_size);
 	CuMatrix<T> xb = x.addBiasColumn();
 	outln("xb " << xb.toShortString());
 	CuMatrix<T> yt = y.transpose();
@@ -196,15 +198,14 @@ template<typename T> CuMatrix<T> LinearRegression<T>::gradientDescentLoop(
 
 	CuMatrix<T> xbTheta(xb.m, theta.n, true, true);
 	DMatrix<T> dxbTheta;
-	xbTheta.asDmatrix(dxbTheta, false);
+	xbTheta.tile0(dxbTheta,   false);
 	CuMatrix<T> txXbTheta = xbTheta.transpose();
 	DMatrix<T> dTxbTheta = txXbTheta.asDmatrix(false);
 
 	DMatrix<T> dTheta;
-	theta.asDmatrix(dTheta, true);
+	theta.tile0(dTheta,  true);
 
 	CuMatrix<T> xbTrans = xb.transpose();
-	//DMatrix<T> dxbTrans = xbTrans.asDmatrix(true);
 
 	CuMatrix<T> scalar = CuMatrix<T>::zeros(1, 1);
 	DMatrix<T> dscalar = scalar.asDmatrix();
@@ -286,7 +287,7 @@ template<typename T> T LinearRegression<T>::costFunctionNoReg(
 
 template<typename T> T LinearRegression<T>::costFunction(CuMatrix<T>& a,
 		CuMatrix<T>& y, T lambda, vector<CuMatrix<T> > thetas) {
-	uint m = y.m;
+	int m = y.m;
 	T jDel = 0.;
 	if (lambda != 0) {
 		uint i = 0;
@@ -349,3 +350,4 @@ template<typename T> template< template <typename> class CostFunction > CuMatrix
 	}
 	return gradApprox;
 }
+

@@ -11,19 +11,20 @@
 #include "tests.h"
 
 
-template int testFeatureMeans<float>::operator()(int argc, char const ** args) const;
-template int testFeatureMeans<double>::operator()(int argc, char const ** args) const;
-template<typename T> int testFeatureMeans<T>::operator()(int argc, const char** args) const {
+template int testFeatureMeans<float>::operator()(int argc, const char **argv) const;
+template int testFeatureMeans<double>::operator()(int argc, const char **argv) const;
+template int testFeatureMeans<ulong>::operator()(int argc, const char **argv) const;
+template<typename T> int testFeatureMeans<T>::operator()(int argc, const char **argv) const {
 	outln("testFeatureMeans start");
-	int count = b_util::getCount(argc,args,100);
+	int count = b_util::getCount(argc,argv,100);
 	CuMatrix<T> x = CuMatrix<T>::increasingColumns(100, 5000, 1000) + 500;
 	//outln("x " << x.syncBuffers());
 	CuMatrix<T> tx= x.transpose();
 	CuMatrix<T> means = CuMatrix<T>::zeros(x.n,1);
 	DMatrix<T> d_Means, d_X, d_tX;
-	x.asDmatrix(d_X);
-	tx.asDmatrix(d_tX);
-	means.asDmatrix(d_Means);
+	x.tile0(d_X,true);
+	tx.tile0(d_tX,true);
+	means.tile0(d_Means,true);
 
 	CuTimer timer;
 	flprintf("%d feature means the old fashioned way\n", count);
@@ -45,16 +46,16 @@ template<typename T> int testFeatureMeans<T>::operator()(int argc, const char** 
 	return 0;
 }
 
-template int testMeansLoop<float>::operator()(int argc, char const ** args) const;
-template int testMeansLoop<double>::operator()(int argc, char const ** args) const;
-template<typename T> int testMeansLoop<T>::operator()(int argc, const char** args) const {
+template int testMeansLoop<float>::operator()(int argc, const char **argv) const;
+template int testMeansLoop<double>::operator()(int argc, const char **argv) const;
+template<typename T> int testMeansLoop<T>::operator()(int argc, const char **argv) const {
 	CuMatrix<T> bign = CuMatrix<T>::increasingColumns(0,1000,1000);
 	CuMatrix<T> txBign = bign.transpose();
 	CuMatrix<T> bignMeans(1, bign.n,false,true);
 	CuMatrix<T> bignMeansSum = CuMatrix<T>::zeros(1,bign.n);
 	CuMatrix<T> txBignMeans(1, bign.n,false,true);
 	CuMatrix<T> txBignMeansSum = CuMatrix<T>::zeros(1,bign.n);
-	int count = b_util::getCount(argc,args,1);
+	int count = b_util::getCount(argc,argv,1);
 	CuTimer timer;
 	float exeTime;
 
@@ -84,24 +85,30 @@ template<typename T> int testMeansLoop<T>::operator()(int argc, const char** arg
 }
 
 
-template int testMeansFile<float>::operator()(int argc, char const ** args) const;
-template int testMeansFile<double>::operator()(int argc, char const ** args) const;
-template<typename T> int testMeansFile<T>::operator()(int argc, const char** args) const {
+template int testMeansFile<float>::operator()(int argc, const char **argv) const;
+template int testMeansFile<double>::operator()(int argc, const char **argv) const;
+template int testMeansFile<ulong>::operator()(int argc, const char **argv) const;
+template<typename T> int testMeansFile<T>::operator()(int argc, const char **argv) const {
 	outln( "opening " << ANOMDET_SAMPLES_FILE);
-	map<string, CuMatrix<T>*> results = util<T>::parseOctaveDataFile(ANOMDET_SAMPLES_FILE,false, true);
+	map<string, CuMatrix<T>*> results = CuMatrix<T>::parseOctaveDataFile(ANOMDET_SAMPLES_FILE,false, true);
 
 	if(!results.size()) {
 		outln("no " << ANOMDET_SAMPLES_FILE << "; exiting");
 		return -1;
 	}
-	typedef typename map<string, CuMatrix<T>*>::iterator iterator;
-	iterator it;
-	it = results.begin();
 
 	outln("loaded " << ANOMDET_SAMPLES_FILE);
+
 	T fac20 = CuMatrix<T>::factorial(20);
-	outln("20! " << fac20);
-	dassert(fac20 == 2.43290200817664e+18);
+	outln("fac20 " << fac20);
+	outln("diff " << fac20-2.432902023e+18);
+	if(sizeof(T) > 4) {
+		dassert(fac20 == 2.43290200817664e+18);
+	}else {
+		dassert(util<T>::almostEquals(fac20,2.4329e+18,163674624) );
+	}
+
+
 
 	CuMatrix<T> seq =  CuMatrix<T>::sequence(1,1,10).extrude(5); // 1 row sequence + 5 row copies
 	seq = seq /= CuMatrix<T>::ones(1,10); // plus row of ones
@@ -174,7 +181,7 @@ template<typename T> int testMeansFile<T>::operator()(int argc, const char** arg
 	outln("bfmeans2 " << bfmeans2.syncBuffers());
 	T bdiff = bfmeans2.sumSqrDiff(bfmeans);
 	outln("bfmeans2.sumSqrDiff(bfmeans) " << bdiff);
-	assert(bdiff == 0);
+	assert(bdiff < util<T>::epsilon());
 
 	util<CuMatrix<T> >::deletePtrMap(results);
 
@@ -182,42 +189,58 @@ template<typename T> int testMeansFile<T>::operator()(int argc, const char** arg
 }
 
 
-template int testKmeans<float>::operator()(int argc, char const ** args) const;
-template int testKmeans<double>::operator()(int argc, char const ** args) const;
-template int testKmeans<ulong>::operator()(int argc, char const ** args) const;
-template<typename T> int testKmeans<T>::operator()(int argc, const char** args) const {
+template int testKmeans<float>::operator()(int argc, const char **argv) const;
+template int testKmeans<double>::operator()(int argc, const char **argv) const;
+template int testKmeans<ulong>::operator()(int argc, const char **argv) const;
+template<typename T> int testKmeans<T>::operator()(int argc, const char **argv) const {
 	outln("testKmeans start");
 	checkCudaErrors(cudaGetLastError());
 	outln( "opening " << KMEANS_FILE);
-	map<string, CuMatrix<T>*> results = util<T>::parseOctaveDataFile(KMEANS_FILE,false, true);
+	map<string, CuMatrix<T>*> results = CuMatrix<T>::parseOctaveDataFile(KMEANS_FILE,false, true);
 	checkCudaError(cudaGetLastError());
 
-	int count = b_util::getCount(argc,args,10);
+	int count = b_util::getCount(argc,argv,10);
 
 	if(!results.size()) {
 		outln("no " << KMEANS_FILE << "; exiting");
 		return -1;
 	}
-	typedef typename map<string, CuMatrix<T>*>::iterator iterator;
-	iterator it;
-	it = results.begin();
 
-	outln("loaded " << KMEANS_FILE);
+	outln("\n\nloaded file: " << KMEANS_FILE);
 
 	CuMatrix<T>& x = *results["X"];
+	x.syncBuffers();
+	DMatrix<T> dm;
+	x.tile0(dm,true);
+	x.lastMod = mod_synced;
+
+	outln("x.lastMod " << b_util::modStr(x.lastMod));
+	outln("x.tiler.hasDmemQ() " << x.tiler.hasDmemQ());
+	assert(x.gpuReadyQ());
 	CuMatrix<T> wx = x |= x |= x;
 
-	outln("x\n"<< x.syncBuffers());
+	setCurrGpuDebugFlags( debugMeans,true,false);
+	CuMatrix<T> orgmeans = x.featureMeans(true);
+	setCurrGpuDebugFlags( ~debugMeans,false,true);
+	outln("\n\nx\n"<< x.syncBuffers());
+	outln("orgmeans\n"<< orgmeans.syncBuffers());
 	outln("wx\n"<< wx.syncBuffers());
 	//int k = 3;
 	//T spread = 10;
-	T arry[] = {3., 3., 6., 2., 8., 5.};
+	T arry[] = {(T)3., (T)3., (T)6., (T)2., (T)8., (T)5.};
 	CuMatrix<T> means(arry, 3,2,2, true);
+	checkCudaError(cudaGetLastError());
+	outln("means\n"<< means.syncBuffers());
 	CuMatrix<T> wmeans = means |= means |= means;
+	outln("wmeans\n"<< wmeans.syncBuffers());
+	checkCudaError(cudaGetLastError());
 	//CuMatrix<T> means = CuMatrix<T>::randn(k,x.n,spread);
 	CuMatrix<T> nuMeans = CuMatrix<T>::zeros(3,2);
+	outln("nuMeans " << nuMeans);
+	checkCudaError(cudaGetLastError());
 	CuMatrix<T> wNuMeans = nuMeans |= nuMeans|= nuMeans;
 
+	cherr(cudaPeekAtLastError());
 	outln("initial means\n" << means.syncBuffers());
 /*
 	srand (time(null));
@@ -235,14 +258,22 @@ template<typename T> int testKmeans<T>::operator()(int argc, const char** args) 
 	T delta = util<T>::maxValue();
 	T wdelta = util<T>::maxValue();
 	int iterations;
+	cherr(cudaPeekAtLastError());
 	for(iterations = 0; iterations < count && wdelta > util<T>::epsilon(); iterations++ ) {
 
+		cherr(cudaPeekAtLastError());
 		outln("finding closet indices for means " << means.syncBuffers());
 		Kmeans<T>::findClosest(indices, means, x);
+		cherr(cudaPeekAtLastError());
 		outln("distortion " << Kmeans<T>::distortion(indices, means, x));
+		cherr(cudaPeekAtLastError());
 		outln("\n\n\n\n\n\n");
 		outln("finding closet indices for wmeans " << wmeans.syncBuffers());
 		Kmeans<T>::findClosest(windices, wmeans, wx);
+		outln("found closest");
+
+		cherr(cudaPeekAtLastError());
+
 		CuMatrix<T> mind = CuMatrix<T>::fromBuffer(indices.indices, sizeof(uint), toT<T>::fromUint, x.m, 1,1);
 		outln("mind " << mind.toShortString());
 		CuMatrix<T> mwind = CuMatrix<T>::fromBuffer(windices.indices, sizeof(uint), toT<T>::fromUint, x.m, 1,1);
@@ -282,6 +313,47 @@ template<typename T> int testKmeans<T>::operator()(int argc, const char** args) 
 
 	return 0;
 }
+
+
+template int testMeansPitch<float>::operator()(int argc, const char **argv) const;
+template int testMeansPitch<double>::operator()(int argc, const char **argv) const;
+template int testMeansPitch<ulong>::operator()(int argc, const char **argv) const;
+template<typename T> int testMeansPitch<T>::operator()(int argc, const char **argv) const {
+	outln("testMeansPitch start");
+
+	CuMatrix<T> src = CuMatrix<T>::increasingColumns(1,1000,1000);
+	printArray( src.currBuffer(), 100);
+
+	//outln("src.sum " << src.sum());
+
+	CuMatrix<T> col;
+	col.m = src.m;
+	col.n = 1;
+	col.p = src.p;
+	col.size = col.m * col.p * sizeof(T);
+	col.ownsBuffers = false;
+	col.tiler.set( src.tiler.buffers);
+	col.elements = src.elements;
+	col.tiler.reset(col);
+	//col.lastMod = mod_synced;
+	col.invalidateHost();
+	col.syncBuffers();
+
+	outln("col ss " << col.toShortString());
+
+	outln("col  " << col);
+	T colKahan = col.kahanSum();
+	outln("col kahanSum()  " << colKahan );
+	T colSum = col.sum();
+	outln("col.sum " << colSum);
+
+	assert(colSum == colKahan);
+
+	CuMatrix<T> col2 = src.columnMatrix(2);
+
+	outln("col2.sum " << col2.sum());
+}
+
 
 #include "tests.cc"
 

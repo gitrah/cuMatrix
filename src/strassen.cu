@@ -2,7 +2,8 @@
 #include<vector>
 #include "test/tests.h"
 
-using namespace std;
+using std::vector;
+using std::cout;
 
 __device__ void sum(int* A, int* B, int* C, int tam) {
 	int i, j;
@@ -175,9 +176,9 @@ void printMatrix(int* matrix, int n) {
 	}
 }
 
-template int testStrassen<float>::operator()(int argc, char const ** args) const;
-template int testStrassen<double>::operator()(int argc, char const ** args) const;
-template <typename T> int testStrassen<T>::operator()(int argc, const char** args) const {
+template int testStrassen<float>::operator()(int argc, const char **argv) const;
+template int testStrassen<double>::operator()(int argc, const char **argv) const;
+template <typename T> int testStrassen<T>::operator()(int argc, const char **argv) const {
 
 	/*   int A[]={1,3,4,
 	 3,1,2};

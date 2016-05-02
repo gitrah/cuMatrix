@@ -1,9 +1,7 @@
 #include "caps.h"
 #include "Kernels.h"
 #include <cuda.h>
-
-
-//extern __host__ __device__ void setLastError(CuMatrixException lastEx);
+#include "MemMgr.h"
 
 __device__ int d_MaxThreads = 512;
 __device__ int d_MaxBlocks = 128;
@@ -11,7 +9,7 @@ __device__ int d_MaxBlocks = 128;
 __device__ ExecCaps** gd_devCaps = null;
 __constant__ int gd_devCount[MAX_GPUS];
 
- __host__ __device__ void getReductionExecContext(uint &blocks, uint &threads, ulong nP,int maxBlocks, int maxThreads) {
+ __host__ __device__ void getReductionExecContext(int &blocks, int &threads, long nP,int maxBlocks, int maxThreads) {
 	int x = (nP + 1) / 2;
 	if(x < 2) {
 		 x=2;
@@ -29,18 +27,7 @@ __constant__ int gd_devCount[MAX_GPUS];
 	blocks =  DIV_UP(nP, threads*2);
 
 	blocks = MIN(maxBlocks, blocks);
-	if(checkDebug(debugUnaryOp))flprintf("np %d -> blocks %d of threads %d\n", nP, blocks, threads);
-/*
-	if (debugExec) {
-			char buff[5];
-			T blockOcc = threads* 1. / ExecCaps::currCaps()->thrdPerBlock;
-			sprintf(buff,"%1.3g",blockOcc);
-			ot("nP " << nP << ", threads " << threads << "(" << buff << ")");
-			T globOcc = threads*blocks *1./ (ExecCaps::currCaps()->totalThreads());
-			sprintf(buff,"%1.3g",globOcc);
-			outln(", blocks " << blocks  << "(" << buff << ")" );
-	}
-*/
+	if(checkDebug(debugRedux))flprintf("np %d -> blocks %d of threads %d\n", nP, blocks, threads);
 }
 
 __host__ __device__ ExecCaps::~ExecCaps() {
@@ -50,12 +37,56 @@ __host__ __device__ ExecCaps::~ExecCaps() {
 #endif
 }
 
+__host__ __device__ int ExecCaps::currDev() {
+	int dev = 0;
+#ifndef __CUDA_ARCH__
+	cherr(cudaGetDevice(&dev));
+	if(checkDebug(debugTiler)) flprintf("currDevice %d\n", dev);
+#endif
+	return dev;
+}
+__host__ __device__ int ExecCaps::setDevice(const char* filename,const char* func, int line, int dev) {
+	int orgDev = currDev();
+#ifndef __CUDA_ARCH__
+//	if(checkDebug(debugCheckValid))
+		if(orgDev != dev) {
+			checkCudaErrors(cudaSetDevice(dev));
+			printf( "%s:%d %s changing device to %d from %d\n", filename, line, func, dev, orgDev);
+		}
+#endif
+	return orgDev;
+}
+__host__ __device__ int ExecCaps::visitDevice(const char* filename,const char* func, int line, int dev) {
+	int orgDev = currDev();
+#ifndef __CUDA_ARCH__
+//	if(checkDebug(debugCheckValid))
+		if(orgDev != dev) {
+			checkCudaErrors(cudaSetDevice(dev));
+			if(checkDebug(debugExec))printf( "%s:%d %s visiting (temporarily) device %d from %d\n", filename, line, func, dev, orgDev);
+		}
+#endif
+	return orgDev;
+}
+
+__host__ __device__ int ExecCaps::restoreDevice(const char* filename,const char* func, int line, int dev) {
+	int orgDev = currDev();
+#ifndef __CUDA_ARCH__
+//	if(checkDebug(debugCheckValid))
+		if(orgDev != dev) {
+			cherr(cudaSetDevice(dev));
+			if(checkDebug(debugExec))printf( "%s:%d %s restoring device %d from %d\n", filename, line, func, dev, orgDev);
+		}
+#endif
+	return orgDev;
+}
+
+
 __global__ void freeDevSideDevCaps() {
 	//flprintf( "freeDevSideDevCaps freeing gd_devCaps %p gd_devCount %d \n", gd_devCaps, gd_devCount);
 	prlocf("freeDevSideDevCaps\n");
 /*
 	FirstThread {
-		for(int i = 0; i < g_devCount; i++) {
+		for(int i = 0; i < ExecCaps::deviceCount; i++) {
 			flprintf("freeDevSideDevCaps deleting gd_devCaps[%d] %p\n", i, gd_devCaps[i]);
 			delete gd_devCaps[i];
 		}
@@ -67,9 +98,7 @@ __global__ void freeDevSideDevCaps() {
 
 void ExecCaps::freeDevCaps() {
 	flprintf( "ExecCaps::freeDevCaps freeDevCaps enter this %d\n",0);
-	checkCudaError(cudaGetDeviceCount(&g_devCount));
-	outln("gpuCount " << g_devCount);
-	for(int i = 0; i < g_devCount; i++) {
+	for(int i = 0; i < ExecCaps::deviceCount; i++) {
 		flprintf("ExecCaps::freeDevCaps deleting g_devCaps[device = %d] %p\n",i, g_devCaps[i]);
 		delete g_devCaps[i];
 	}
@@ -82,22 +111,24 @@ void ExecCaps::freeDevCaps() {
 __host__ __device__ cudaError_t ExecCaps::currCaps(ExecCaps** caps, int dev) {
 
 #ifndef __CUDA_ARCH__
-	if(dev < g_devCount) {
+	if(dev < ExecCaps::deviceCount) {
 		*caps = g_devCaps[dev];
 		return cudaSuccess;
 	}
+	return cudaErrorUnknown;
 #else
 	if(true) {
 	//s	setLastError(notImplementedEx);
 		return cudaErrorAssert;
 	}
 #endif
+
 }
 
 __host__ __device__ ExecCaps* ExecCaps::currCaps(int dev ) {
 #ifndef __CUDA_ARCH__
-	if(checkDebug(debugExec))flprintf( "in ExecCaps::currCaps g_devCount %d\n",g_devCount);
-	if(dev < g_devCount) {
+	if(checkDebug(debugExec))flprintf( "in ExecCaps::currCaps ExecCaps::deviceCount %d\n",ExecCaps::deviceCount);
+	if(dev < ExecCaps::deviceCount) {
 		return g_devCaps[dev];
 	}
 //#else
@@ -112,6 +143,13 @@ __host__ __device__ ExecCaps* ExecCaps::currCaps(int dev ) {
 #endif
 	return null;
 }
+
+
+__host__ __device__ void ExecCaps::printMaxDims(const char* msg) {
+	printf("%s for dev %d maxGrid(%u,%u,%u)", msg, devNumber, maxGrid.x,maxGrid.y,maxGrid.z);
+	printf("maxBlock(%u,%u,%u)", maxBlock.x,maxBlock.y,maxBlock.z);
+}
+
 
 /*
 __host__ __device__  cudaError_t ExecCaps::currStream(cudaStream_t* stream,int dev) {
@@ -374,6 +412,37 @@ __host__ __device__ const char *__cudaGetErrorEnum(cudaError_t error)
     return "<unknown>";
 }
 
+__host__ __device__ const char *__cublasGetErrorEnum(cublasStatus_t error)
+{
+    switch (error)
+    {
+    case CUBLAS_STATUS_SUCCESS:
+    	return "CUBLAS_STATUS_SUCCESS =0";
+    case   CUBLAS_STATUS_NOT_INITIALIZED:
+    	return "CUBLAS_STATUS_NOT_INITIALIZED =1";
+    case CUBLAS_STATUS_ALLOC_FAILED:
+    	return "CUBLAS_STATUS_ALLOC_FAILED    =3";
+    case CUBLAS_STATUS_INVALID_VALUE:
+    	return "CUBLAS_STATUS_INVALID_VALUE   =7";
+    case CUBLAS_STATUS_ARCH_MISMATCH:
+    	return "CUBLAS_STATUS_ARCH_MISMATCH   =8";
+    case CUBLAS_STATUS_MAPPING_ERROR:
+    	return "CUBLAS_STATUS_MAPPING_ERROR   =11";
+    case CUBLAS_STATUS_EXECUTION_FAILED:
+    	return "CUBLAS_STATUS_EXECUTION_FAILED=13";
+    case CUBLAS_STATUS_INTERNAL_ERROR:
+    	return "CUBLAS_STATUS_INTERNAL_ERROR  =14";
+    case CUBLAS_STATUS_NOT_SUPPORTED:
+    	return "CUBLAS_STATUS_NOT_SUPPORTED   =15";
+    case CUBLAS_STATUS_LICENSE_ERROR:
+    	return "CUBLAS_STATUS_LICENSE_ERROR   =16";
+    default:
+    	return "UNKNOWN";
+    }
+
+
+}
+
 __host__ __device__ int ExecCaps::maxThreads() {
 #ifndef __CUDA_ARCH__
 		return MaxThreads;
@@ -387,6 +456,24 @@ __host__ __device__ int ExecCaps::maxBlocks() {
 #else
 		return d_MaxBlocks;
 #endif
+}
+
+/*
+ * survey all gpus and find the smallest 'reasonable' max buffer (as headroom fraction of total)
+ */
+__host__ __device__ size_t ExecCaps::minMaxReasonable(int gpuMask, float headroom) {
+	int devCnt;
+	checkCudaError(cudaGetDeviceCount(&devCnt));
+	size_t minMax = 0, currMax = 0;
+
+	for(int i = 0; i < devCnt; i++) {
+		if(gpuMask & (1 << i)) {
+			currMax = ExecCaps::currCaps(i)->maxReasonable(headroom);
+			if(checkDebug(debugMem))flprintf("device %d has total %lu maxreas %lu (at %2.2f head)\n", i,  ExecCaps::currCaps(i)->deviceProp.totalGlobalMem, currMax, headroom);
+			minMax = minMax == 0 ? currMax : MIN(minMax, currMax);
+		}
+	}
+	return minMax;
 }
 
 __global__ void createCapsPPtr(int devCount) {
@@ -405,33 +492,61 @@ __global__ void addCaps(int dev, ExecCaps caps) {
 	}
 }
 
-cudaError_t ExecCaps::setDevice(int dev) {
-	cudaError_t res = cudaSetDevice(dev);
-	checkCudaError(res);
-//	checkCudaError(cudaMemcpyToSymbol(gd_devCount, (void*) &g_devCount, sizeof(int)));
-//	CUdevice device;
-//	cuDeviceGet(&device,dev);
+cudaError_t ExecCaps::addDevice(int dev) {
+	ExecCaps_setDevice(dev);
+//	checkCudaError(cudaMemcpyToSymbol(gd_devCount, (void*) &ExecCaps::deviceCount, sizeof(int)));
+ //	cuDeviceGet(&device,dev);
 
-	createCapsPPtr<<<1,1>>>(g_devCount);
+	createCapsPPtr<<<1,1>>>(ExecCaps::deviceCount);
 	addCaps<<<1,1>>>(dev, *g_devCaps[dev]);
-	return res;
+	return cudaSuccess;
 }
 
-void ExecCaps::findDevCaps() {
-	//flprintf("%s enter\n","ExecCaps::findDevCaps");
-	prlocf("ExecCaps::findDevCaps enter\n");
-	checkCudaError(cudaGetDeviceCount(&g_devCount));
-
+void ExecCaps::initDevCaps() {
+	//flprintf("%s enter\n","ExecCaps::initDevCaps");
+	if(checkDebug(debugVerbose))prlocf("enter\n");
+	checkCudaError(cudaGetDeviceCount(&ExecCaps::deviceCount));
 	//ExecCaps* g_devCaps[];
-	g_devCaps = (ExecCaps**) malloc(g_devCount* sizeof(ExecCaps*));
-	flprintf("ExecCaps::findDevCaps gpuCount %d, malloced-> %d\n",g_devCount,g_devCount* sizeof(ExecCaps*) );
-	//outln("gpuCount " << g_devCount << " mallocd " <<(g_devCount* sizeof(ExecCaps*)));
-	for(int i = 0; i < g_devCount; i++) {
+	g_devCaps = (ExecCaps**) malloc(ExecCaps::deviceCount* sizeof(ExecCaps*));
+	if(checkDebug(debugVerbose))flprintf("gpuCount %d, malloced-> %d\n",ExecCaps::deviceCount,ExecCaps::deviceCount* sizeof(ExecCaps*) );
+	//outln("gpuCount " << ExecCaps::deviceCount << " mallocd " <<(ExecCaps::deviceCount* sizeof(ExecCaps*)));
+	for(int i = 0; i < ExecCaps::deviceCount; i++) {
 		ExecCaps* cap = new ExecCaps();
-		flprintf("created cap %p\n", cap);
+		if(checkDebug(debugVerbose))flprintf("created cap %p\n", cap);
 		g_devCaps[i] = cap;
 		ExecCaps::getExecCaps(*cap, i);
-		outln("adding " << i << "\n" << cap->toString() << "\n");
+		if(checkDebug(debugVerbose))outln("adding " << i << "\n" << cap->toString() << "\n");
 	}
 }
 
+__host__ void ExecCaps::allGpuMem(size_t* free, size_t* total) {
+	if(checkDebug(debugVerbose))outln("allGpuMem free " << free <<  ", total " << total);
+    int orgDev = ExecCaps::currDev();
+    if(checkDebug(debugVerbose))outln("orgDev " << orgDev);
+    *free=0;
+    *total=0;
+    size_t lFree = 0, lTotal = 0;
+	int devCnt;
+	char buff[20];
+	cherr(cudaGetDeviceCount(&devCnt));
+	if(checkDebug(debugVerbose))outln("devCnt " << devCnt);
+//cout << "  ";
+	float* dtest = nullptr;
+
+	b_util::dumpStack();
+	for(int i = devCnt -1; i >-1;i--) {
+		ExecCaps_visitDevice(i);
+		if(checkDebug(debugVerbose))outln("ExecCaps_setDevice  " << i );
+		cherr(cudaMalloc(&dtest, 10 * sizeof(float)));
+		if(checkDebug(debugVerbose))outln("cudaMalloc  dtest " << dtest << "...checking valid") ;
+		MemMgr<float>::checkValid(dtest, "ExecCaps::allGpuMem dtest ");
+		if(checkDebug(debugVerbose))outln("ExecCaps_setDevice  " << i );
+		cherr(cudaMemGetInfo(&lFree, &lTotal));
+		*free += lFree;
+		*total += lTotal;
+		sprintf(buff, " (%.2f%% used)", 100 * (1 - lFree * 1. / lTotal));
+		if(checkDebug(debugMem)) cout << "[" << i <<":  " <<  b_util::expNotation(lFree) << " free /" << b_util::expNotation(lTotal) << buff<< "] ";
+	}
+	//cout << endl;
+	ExecCaps_setDevice(orgDev);
+}

@@ -32,7 +32,7 @@ template<typename T> void launchTestShuffleKernel() {
 	T* dary;
 	T* dres;
 	T res;
-	plusBinaryOp<T> plus;
+	plusBinaryOp<T> plus = Functory<T,plusBinaryOp>::pinch();
 
 	checkCudaError(cudaMalloc(&dary, len * sizeof(T)));
 	checkCudaError(cudaMalloc(&dres, sizeof(T)));
@@ -47,8 +47,10 @@ template<typename T> void launchTestShuffleKernel() {
 }
 template void launchTestShuffleKernel<float>();
 template void launchTestShuffleKernel<double>();
+template void launchTestShuffleKernel<ulong>();
 
 __global__ void testSetLastErrorKernel(CuMatrixException ex) {
+	flprintf("ex %d\n",ex);
 	setLastError(ex);
 }
 
@@ -64,13 +66,35 @@ template<typename T> __global__ void testCdpKernel(T* res, CuMatrix<T> mat) {
 
 template<typename T> void launchTestCdpKernel(T* res, CuMatrix<T> mat) {
 	mat.printShortString("in launchTestCdpKernel");
+
+	cudaFuncAttributes fatts;
+	cudaFuncGetAttributes(&fatts, testCdpKernel<T>);
+	cudaError_t err;
+#ifdef CuMatrix_DebugBuild
+	// default size of 1024 results in 'Lane User Stack Overflow'
+	size_t currVal = 2048;
+	err = cudaDeviceSetLimit(cudaLimitStackSize,currVal);
+#endif
+	flprintf( "atts for testCdpKernel (regs=%d, shared %lu local %lu maxtpb %d )", fatts.numRegs,fatts.sharedSizeBytes, fatts.localSizeBytes, fatts.maxThreadsPerBlock);
+	//err = cudaDeviceGetLimit(&currVal,cudaLimitStackSize);
 	testCdpKernel<T><<<1,1>>>(res,mat);
+	cherr(cudaDeviceSynchronize());
+	if(err != cudaSuccess) {
+		outln("err " << err);
+	}
+
+	outln("invoked testCdpKernel");
+	outln("sanched");
+/*
 	dim3 grid(1);
 	dim3 block(1);
 	testCdpKernel<T><<<grid,block>>>(res,mat);
+*/
 }
+
 template void launchTestCdpKernel<float>(float*,CuMatrix<float>);
 template void launchTestCdpKernel<double>(double*,CuMatrix<double>);
+template void launchTestCdpKernel<ulong>(ulong*,CuMatrix<ulong>);
 
 
 template<typename T> void launchRedux(T* res, CuMatrix<T> mat) {
@@ -113,13 +137,13 @@ template<typename T> __global__ void testSmemcpy(T* out, const T* in, int count)
 	memcpy(out,sdata,count * sizeof(T));
 }
 
-template int testMemcpyShared<float>::operator()(int argc, char const ** args) const;
-template int testMemcpyShared<double>::operator()(int argc, char const ** args) const;
-template <typename T> int testMemcpyShared<T>::operator()(int argc, char const ** args) const{
+template int testMemcpyShared<float>::operator()(int argc, const char **argv) const;
+template int testMemcpyShared<double>::operator()(int argc, const char **argv) const;
+template <typename T> int testMemcpyShared<T>::operator()(int argc, const char **argv) const{
 	CuMatrix<T> ones = CuMatrix<T>::ones(1024,1);
 	CuMatrix<T> res = CuMatrix<T>::zeros(1024,1);
 	//auto z = 5;
-	testSmemcpy<<<1, 1, ones.size>>>( res.d_elements, ones.d_elements, ones.size );
+	testSmemcpy<<<1, 1, ones.size>>>( res.tiler.currBuffer(), ones.tiler.currBuffer(), ones.size );
 	res.invalidateHost();
 	checkCudaError(cudaDeviceSynchronize());
 	outln("res " << res.syncBuffers());
@@ -142,10 +166,10 @@ __global__ void testSignKernel() {
 	}
 }
 
-template int testSign<float>::operator()(int argc, char const ** args) const;
-template int testSign<double>::operator()(int argc, char const ** args) const;
-template int testSign<ulong>::operator()(int argc, char const ** args) const;
-template <typename T> int testSign<T>::operator()(int argc, char const ** args) const{
+template int testSign<float>::operator()(int argc, const char **argv) const;
+template int testSign<double>::operator()(int argc, const char **argv) const;
+template int testSign<ulong>::operator()(int argc, const char **argv) const;
+template <typename T> int testSign<T>::operator()(int argc, const char **argv) const{
 	testSignKernel<<<1,1>>>();
 	return 0;
 }
@@ -170,10 +194,10 @@ template <typename T> __global__ void gpoly2_1(void* fptr, T x) {
 
 //template <typename T> __global__ void getFunction(typename func1<T>::inst fn&, )
 
-template int testBisection<float>::operator()(int argc, char const ** args) const;
-template int testBisection<double>::operator()(int argc, char const ** args) const;
-template int testBisection<ulong>::operator()(int argc, char const ** args) const;
-template <typename T> int testBisection<T>::operator()(int argc, char const ** args) const{
+template int testBisection<float>::operator()(int argc, const char **argv) const;
+template int testBisection<double>::operator()(int argc, const char **argv) const;
+template int testBisection<ulong>::operator()(int argc, const char **argv) const;
+template <typename T> int testBisection<T>::operator()(int argc, const char **argv) const{
 	outln("testBisection start " );
 	//bisection<T,deg2>(fn, -10, 10, util<T>::epsilon(), 1024);
 	typename func1<T>::inst fn = null;
@@ -206,7 +230,7 @@ template <typename T> int testBisection<T>::operator()(int argc, char const ** a
 	flprintf("testBisection fn %p\n", fn);
 	outln("testBisection pfunc "  << pfunc);
 	flprintf("testBisection pfunc %p\n", pfunc);
-	int count = b_util::getCount(argc,args,5);
+	int count = b_util::getCount(argc,argv,5);
 	uint maxRoots = 5;
 	uint* rootCount;
 	T* roots;
@@ -270,10 +294,10 @@ __global__ void dFreeDmem(uint* trg) {
 #endif
 }
 
-template int testHfreeDalloc<float>::operator()(int argc, char const ** args) const;
-template int testHfreeDalloc<double>::operator()(int argc, char const ** args) const;
-template int testHfreeDalloc<ulong>::operator()(int argc, char const ** args) const;
-template <typename T> int testHfreeDalloc<T>::operator()(int argc, char const ** args) const{
+template int testHfreeDalloc<float>::operator()(int argc, const char **argv) const;
+template int testHfreeDalloc<double>::operator()(int argc, const char **argv) const;
+template int testHfreeDalloc<ulong>::operator()(int argc, const char **argv) const;
+template <typename T> int testHfreeDalloc<T>::operator()(int argc, const char **argv) const{
 	ulong* trg;
 	uint *hdmem;
 	checkCudaError(cudaMalloc(&trg, sizeof(ulong)));
@@ -284,7 +308,7 @@ template <typename T> int testHfreeDalloc<T>::operator()(int argc, char const **
 	outln("hdem  " << hdmem);
 	// should cause error
 
-	if(b_util::getParameter(argc,args,"hfreed",0)) {
+	if(b_util::getParameter(argc,argv,"hfreed",0)) {
 		checkCudaError(cudaFree(hdmem));
 	} else{
 		dFreeDmem<<<1,1>>>(hdmem);
@@ -345,11 +369,12 @@ __global__ void inc4(float4* data, int count) {
 	}
 }
 
-template int testInc<float>::operator()(int argc, char const ** args) const;
-template int testInc<double>::operator()(int argc, char const ** args) const;
-template <typename T> int testInc<T>::operator()(int argc, char const ** args) const{
+template int testInc<float>::operator()(int argc, const char **argv) const;
+template int testInc<double>::operator()(int argc, const char **argv) const;
+template int testInc<ulong>::operator()(int argc, const char **argv) const;
+template <typename T> int testInc<T>::operator()(int argc, const char **argv) const{
 	CuTimer timer;
-	int count = b_util::getCount(argc,args,5);
+	int count = b_util::getCount(argc,argv,5);
 	ulong size0 =  64 * Mega + 5;
 	outln("size0 " << size0);
 	int size[] = {size0, DIV_UP(size0, 2), DIV_UP(size0, 3), DIV_UP(size0, 4)};
@@ -396,20 +421,20 @@ template <typename T> int testInc<T>::operator()(int argc, char const ** args) c
 					sliceSize = size[sz] - (slices - 1 ) * sliceSize;
 					thisBlock = DIV_UP(bf[sz],slices);
 				}
-
+				int currDev = ExecCaps::currDev();
 				//outln( "thisBlock " << thisBlock << ", offset " << offset << ", sliceSize " << sliceSize);
 				switch(sz) {
 				case 0:
-					inc<<< thisBlock, block>>>(m.d_elements + offset, sliceSize);
+					inc<<< thisBlock, block>>>(m.tiler.buffer(currDev) + offset, sliceSize);
 					break;
 				case 1:
-					inc2<<< thisBlock, block>>>( ((float2*)m.d_elements )+ offset, sliceSize);
+					inc2<<< thisBlock, block>>>( ((float2*)m.tiler.buffer(currDev) )+ offset, sliceSize);
 					break;
 				case 2:
-					inc3<<< thisBlock, block>>>( ((float3*)m.d_elements )+ offset, sliceSize);
+					inc3<<< thisBlock, block>>>( ((float3*)m.tiler.buffer(currDev) )+ offset, sliceSize);
 					break;
 				case 3:
-					inc4<<< thisBlock, block>>>( ((float4*)m.d_elements )+ offset, sliceSize);
+					inc4<<< thisBlock, block>>>( ((float4*)m.tiler.buffer(currDev) )+ offset, sliceSize);
 					break;
 				}
 				lastIdx = offset;
@@ -473,9 +498,10 @@ template<typename T> __global__ void gShufPlus(T* out, T* arry) {
 	out[tidy + tidx * 5] = val2;
 }
 
-template int testShufflet<float>::operator()(int argc, char const ** args) const;
-template int testShufflet<double>::operator()(int argc, char const ** args) const;
-template <typename T> int testShufflet<T>::operator()(int argc, char const ** args) const{
+template int testShufflet<float>::operator()(int argc, const char **argv) const;
+template int testShufflet<double>::operator()(int argc, const char **argv) const;
+template int testShufflet<ulong>::operator()(int argc, const char **argv) const;
+template <typename T> int testShufflet<T>::operator()(int argc, const char **argv) const{
 	//shufflet<T><<<31,2,0>>>();
 	T harry[] = {	1,2,
 					3,4,
@@ -544,4 +570,51 @@ template<typename T>void constFillKrnleL( ){
 	checkCudaErrors(cudaDeviceSynchronize());
 }
 template void constFillKrnleL<float>();
+
+
+template int testMemset<float>::operator()(int argc, const char **argv) const;
+template int testMemset<ulong>::operator()(int argc, const char **argv) const;
+template int testMemset<double>::operator()(int argc, const char **argv) const;
+template <typename T> int testMemset<T>::operator()(int argc, const char **argv) const {
+	outln("testMemset start");
+
+    int total = b_util::getCount(argc,argv,1000);
+
+    CuTimer timer;
+
+    T* buffer;
+
+	cherr(cudaMalloc(&buffer,1000*sizeof(T)));
+
+	T val = 42;
+
+	timer.start();
+	for(int i =0; i < total; i++) {
+		util<T>::setNDev(buffer, val, 1000);
+	}
+	float ndevTime=timer.stop();
+
+	outln("ndevTime " << ndevTime/1000);
+
+	printArray(buffer, 1000);
+
+	int threads = 512;
+	dim3 dBlocks, dThreads;
+	b_util::vectorExecContext(threads, 1000, dBlocks, dThreads);
+
+	val = 43;
+	timer.start();
+	for(int i =0; i < total; i++) {
+		fillKernel<<<dBlocks,dThreads>>>(buffer, val, 1000);
+		cherr(cudaDeviceSynchronize());
+	}
+	float fillkTime=timer.stop();
+
+	outln("fillkTime " << fillkTime/1000);
+
+	printArray(buffer, 1000);
+
+	cherr(cudaFree(buffer));
+	return 0;
+}
 

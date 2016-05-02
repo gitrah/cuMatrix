@@ -19,63 +19,63 @@ template<typename T> __global__ void cubeKernel(T* res, T input) {
 	*res = cube<T>(input);
 }
 
-template int testCubes<float>::operator()(int argc, char const ** args) const;
-template int testCubes<double>::operator()(int argc, char const ** args) const;
-template int testCubes<ulong>::operator()(int argc, char const ** args) const;
-template <typename T> int testCubes<T>::operator()(int argc, const char** args) const {
+template int testCubes<float>::operator()(int argc, const char **argv) const;
+template int testCubes<double>::operator()(int argc, const char **argv) const;
+template int testCubes<ulong>::operator()(int argc, const char **argv) const;
+template <typename T> int testCubes<T>::operator()(int argc, const char **argv) const {
 
 	uint xui = 3, *d_resui =null, h_resui =0;
-	chkerr(cudaMalloc(&d_resui,sizeof(uint)));
+	czeckerr(cudaMalloc(&d_resui,sizeof(uint)));
 	cubeKernel<<<1,1>>>(d_resui, xui);
 	checkCudaErrors(cudaDeviceSynchronize());
-	chkerr(cudaMemcpy(&h_resui, d_resui,sizeof(uint), cudaMemcpyDeviceToHost));
+	czeckerr(cudaMemcpy(&h_resui, d_resui,sizeof(uint), cudaMemcpyDeviceToHost));
 	outln("h_resui " << h_resui);
 	assert(h_resui == 27);
 
 	cubeKernel<<<1,1>>>(d_resui, 776u);
 	checkCudaErrors(cudaDeviceSynchronize());
-	chkerr(cudaMemcpy(&h_resui, d_resui,sizeof(uint), cudaMemcpyDeviceToHost));
+	czeckerr(cudaMemcpy(&h_resui, d_resui,sizeof(uint), cudaMemcpyDeviceToHost));
 	outln("h_resui " << h_resui);
 	assert(h_resui == 467288576u );
 
 
-	chkerr(cudaFree(d_resui));
+	czeckerr(cudaFree(d_resui));
 
 	int xi = 3, *d_resi =null, h_resi =0;
-	chkerr(cudaMalloc(&d_resi,sizeof(int)));
+	czeckerr(cudaMalloc(&d_resi,sizeof(int)));
 	cubeKernel<<<1,1>>>(d_resi, xi);
 	checkCudaErrors(cudaDeviceSynchronize());
-	chkerr(cudaMemcpy(&h_resi, d_resi,sizeof(int), cudaMemcpyDeviceToHost));
+	czeckerr(cudaMemcpy(&h_resi, d_resi,sizeof(int), cudaMemcpyDeviceToHost));
 	outln("h_resi " << h_resi);
 	assert(h_resi == 27);
-	chkerr(cudaFree(d_resi));
+	czeckerr(cudaFree(d_resi));
 
 	long xl = 3, *d_resl =null, h_resl =0;
-	chkerr(cudaMalloc(&d_resl,sizeof(long)));
+	czeckerr(cudaMalloc(&d_resl,sizeof(long)));
 	cubeKernel<<<1,1>>>(d_resl, xl);
 	checkCudaErrors(cudaGetLastError());
-	chkerr(cudaMemcpy(&h_resl, d_resl,sizeof(long), cudaMemcpyDeviceToHost));
+	czeckerr(cudaMemcpy(&h_resl, d_resl,sizeof(long), cudaMemcpyDeviceToHost));
 	outln("h_resl " << h_resl);
 	assert(h_resl == 27);
-	chkerr(cudaFree(d_resl));
+	czeckerr(cudaFree(d_resl));
 
 	float xf = 3, *d_resf =null, h_resf =0;
-	chkerr(cudaMalloc(&d_resf,sizeof(float)));
+	czeckerr(cudaMalloc(&d_resf,sizeof(float)));
 	cubeKernel<<<1,1>>>(d_resf, xf);
 	checkCudaErrors(cudaDeviceSynchronize());
-	chkerr(cudaMemcpy(&h_resf, d_resf,sizeof(float), cudaMemcpyDeviceToHost));
+	czeckerr(cudaMemcpy(&h_resf, d_resf,sizeof(float), cudaMemcpyDeviceToHost));
 	outln("h_resf " << h_resf);
 	assert(h_resf == 27);
-	chkerr(cudaFree(d_resf));
+	czeckerr(cudaFree(d_resf));
 
 	return 0;
 }
 
 
-template int testNextPowerOf2<float>::operator()(int argc, char const ** args) const;
-template int testNextPowerOf2<double>::operator()(int argc, char const ** args) const;
-template int testNextPowerOf2<ulong>::operator()(int argc, char const ** args) const;
-template <typename T> int testNextPowerOf2<T>::operator()(int argc, const char** args) const {
+template int testNextPowerOf2<float>::operator()(int argc, const char **argv) const;
+template int testNextPowerOf2<double>::operator()(int argc, const char **argv) const;
+template int testNextPowerOf2<ulong>::operator()(int argc, const char **argv) const;
+template <typename T> int testNextPowerOf2<T>::operator()(int argc, const char **argv) const {
 	uint pow2 = 0;
 	for(uint i = 0; i < 100; i++) {
 		uint p2 = b_util::nextPowerOf2(i);
@@ -98,10 +98,10 @@ __global__ void testLargestFactorKernel() {
 	assert(false);
 #endif
 }
-template int testLargestFactor<float>::operator()(int argc, char const ** args) const;
-template int testLargestFactor<double>::operator()(int argc, char const ** args) const;
-template int testLargestFactor<ulong>::operator()(int argc, char const ** args) const;
-template <typename T> int testLargestFactor<T>::operator()(int argc, const char** args) const {
+template int testLargestFactor<float>::operator()(int argc, const char **argv) const;
+template int testLargestFactor<double>::operator()(int argc, const char **argv) const;
+template int testLargestFactor<ulong>::operator()(int argc, const char **argv) const;
+template <typename T> int testLargestFactor<T>::operator()(int argc, const char **argv) const {
 
 	outln( "largestFactor(2415) " << largestFactor(2415));
 	outln( "largestFactor(28) " << largestFactor(28));
@@ -112,13 +112,13 @@ template <typename T> int testLargestFactor<T>::operator()(int argc, const char*
 	return 0;
 }
 
-__global__ void spanrowQkernel(uint* res, uint row, uint n) {
+__global__ void spanrowQkernel(uint* res, int row, int n) {
 	if(threadIdx.x == 0 && threadIdx.y == 0 && threadIdx.z ==0) {
 		*res = spanrowQ(row,n);
 	}
 }
 
-bool spanrowKL(uint row, uint n) {
+bool spanrowKL(int row, int n) {
 	uint* res;
 	uint hres;
 	cherr(cudaMalloc(&res, sizeof(uint)));
@@ -129,13 +129,13 @@ bool spanrowKL(uint row, uint n) {
 	return hres;
 }
 
-template int testCountSpanrows<float>::operator()(int argc, char const ** args) const;
-template int testCountSpanrows<double>::operator()(int argc, char const ** args) const;
-template int testCountSpanrows<ulong>::operator()(int argc, char const ** args) const;
-template <typename T> int testCountSpanrows<T>::operator()(int argc, const char** args) const {
+template int testCountSpanrows<float>::operator()(int argc, const char **argv) const;
+template int testCountSpanrows<double>::operator()(int argc, const char **argv) const;
+template int testCountSpanrows<ulong>::operator()(int argc, const char **argv) const;
+template <typename T> int testCountSpanrows<T>::operator()(int argc, const char **argv) const {
 
 	CuMatrix<T> n7 = CuMatrix<T>::ones(100,7);
-	//  b_util::countSpanrows( uint m, uint n, uint warpSize )
+	//  b_util::countSpanrows( int m, int n, uint warpSize )
 	outln( "b_util::countSpanrows( 1, 7) " <<  b_util::countSpanrows( 1, 7));
 
 	outln( "b_util::countSpanrows( 100, 7) " <<  b_util::countSpanrows( 100, 7));
@@ -199,10 +199,10 @@ uint modKL(uint x, uint div) {
 	return hres;
 }
 
-template int testMod<float>::operator()(int argc, char const ** args) const;
-template int testMod<double>::operator()(int argc, char const ** args) const;
-template int testMod<ulong>::operator()(int argc, char const ** args) const;
-template <typename T> int testMod<T>::operator()(int argc, const char** args) const {
+template int testMod<float>::operator()(int argc, const char **argv) const;
+template int testMod<double>::operator()(int argc, const char **argv) const;
+template int testMod<ulong>::operator()(int argc, const char **argv) const;
+template <typename T> int testMod<T>::operator()(int argc, const char **argv) const {
 
 	outln("modKL(4,4) " << modKL(4,4));
 	outln("modKL(4,5) " << modKL(4,5));
@@ -222,16 +222,19 @@ template <typename T> int testMod<T>::operator()(int argc, const char** args) co
 	return 0;
 }
 
-template int testMatRowMath<float>::operator()(int argc, char const ** args) const;
-template int testMatRowMath<double>::operator()(int argc, char const ** args) const;
-template int testMatRowMath<ulong>::operator()(int argc, char const ** args) const;
-template <typename T> int testMatRowMath<T>::operator()(int argc, const char** args) const {
+template int testMatRowMath<float>::operator()(int argc, const char **argv) const;
+template int testMatRowMath<double>::operator()(int argc, const char **argv) const;
+template int testMatRowMath<ulong>::operator()(int argc, const char **argv) const;
+template <typename T> int testMatRowMath<T>::operator()(int argc, const char **argv) const {
 
-	CuMatrix<T> src = CuMatrix<T>::increasingColumns(0,10,10);
+	CuMatrix<T> src = CuMatrix<T>::increasingColumns(1,28,28);
 	outln("src " << src.syncBuffers());
-	CuMatrix<T> row = CuMatrix<T>::increasingColumns(1,1,10);
+	CuMatrix<T> row = CuMatrix<T>::increasingColumns(1,1,28);
+	CuMatrix<T> col = 2.5 * CuMatrix<T>::increasingColumns(.0001,28,1);
 
 	CuMatrix<T> sum = src + src;
+	CuMatrix<T> rowsum = row + row;
+	CuMatrix<T> colsum = col + col;
 	int blockSize=256;
 	int maxBlocks;
 #ifdef  CuMatrix_Enable_KTS
@@ -239,12 +242,16 @@ template <typename T> int testMatRowMath<T>::operator()(int argc, const char** a
 #else
 	b_util::kernelOccupancy((void*)binaryOpKernel1dNeqP<T, 1>, &maxBlocks, blockSize );
 #endif
-	outln("sum " << sum.syncBuffers());
+	outln("sum\n" << sum.syncBuffers());
+	outln("row\n" << row.syncBuffers());
+	outln("col\n" << col.syncBuffers());
+	outln("rowsum" << rowsum.syncBuffers());
+	outln("colsum" << colsum.syncBuffers());
 	CuMatrix<T> rsum = src + row;
 	outln("rsum " << rsum.syncBuffers());
 	CuMatrix<T> diff = src - row;
 	outln("diff " << diff.syncBuffers());
-	if(b_util::getParameter(argc,args,"boom",0)) {
+	if(b_util::getParameter(argc,argv,"boom",0)) {
 		CuMatrix<T> diffbad = row - src;
 		outln("diffbad " << diffbad.syncBuffers());
 	}

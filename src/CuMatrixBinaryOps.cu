@@ -27,33 +27,33 @@ void binaryOpKernel1dNeqP(T* trg, const T* src1, const T* src2, BinaryOpF<T,Stat
 
 #ifdef  CuMatrix_Enable_KTS
 template<typename T, template <typename> class BinaryOp> __global__
-void binaryOpKernel1dNeqPRow(T* trg, const T* src1, const T* src2, ulong n, BinaryOp<T> op,
+void binaryOpKernel1dNeqPRow(T* trg, const T* src1, const T* src2, long n, BinaryOp<T> op,
 		ulong len)
 #else
 template<typename T, int StateDim> __global__
-void binaryOpKernel1dNeqPRow(T* trg, const T* src1, const T* src2, ulong n, BinaryOpF<T,StateDim> op,
+void binaryOpKernel1dNeqPRow(T* trg, const T* src1, const T* src2, long n, BinaryOpF<T,StateDim> op,
 		ulong len)
 #endif
 {
-	ulong i = blockIdx.x * blockDim.x + threadIdx.x;
+	long i = blockIdx.x * blockDim.x + threadIdx.x;
 	if (i < len) {
-		trg[i] = op(src1[i], src2[mod(i,n)]);
+		trg[i] = op(src1[i], src2[mod<long>(i,n)]);
 	}
 }
 
 #ifdef  CuMatrix_Enable_KTS
 template<typename T, template <typename> class BinaryOp> __global__
 void binaryOpKernel2(T* trg, const T* src1, const T* src2, BinaryOp<T> op,
-		ulong len, uint p, uint * misses)
+		ulong len, int p, uint * misses)
 #else
 template<typename T, int StateDim> __global__
 void binaryOpKernel2(T* trg, const T* src1, const T* src2, BinaryOpF<T,StateDim> op,
-		ulong len, uint p, uint * misses)
+		ulong len, int p, uint * misses)
 #endif
 {
 	// 2 A + 2 M
-	uint col = threadIdx.x  + blockIdx.x *blockDim.x;
-	uint row = threadIdx.y  + blockIdx.y *blockDim.x;
+	int col = threadIdx.x  + blockIdx.x *blockDim.x;
+	int row = threadIdx.y  + blockIdx.y *blockDim.x;
 
 	ulong i =  col + row * p;
 	ulong j = i;
@@ -103,8 +103,8 @@ void binaryOpDmKernel2(DMatrix<T> trg, const DMatrix<T> src1, const DMatrix<T> s
 {
 	uint x = blockIdx.x * blockDim.x + threadIdx.x;
 	uint y = blockIdx.y * blockDim.x + threadIdx.y;
-	uint n = MIN(src1.n,src2.n);
-	uint m = MIN(src1.m,src2.m);
+	int n = MIN(src1.n,src2.n);
+	int m = MIN(src1.m,src2.m);
 
 	uint src1Off = y * src1.p + x;
 	uint src2Off = y * src2.p + x;
@@ -124,10 +124,10 @@ template<typename T, int StateDim> __host__ CUDART_DEVICE
 void binaryOpL(DMatrix<T>& trg, const DMatrix<T>& src1, const DMatrix<T>& src2, BinaryOpF<T,StateDim> op, cudaStream_t stream)
 #endif
 {
-	uint threads = 256;
+	int threads = 256;
 	uint len = src1.m * src2.n;
 	dim3 dBlocks, dThreads;
-	b_util::execContext(threads, len, dBlocks, dThreads);
+	b_util::vectorExecContext(threads, len, dBlocks, dThreads);
 
 /*
 #ifndef __CUDA_ARCH__
@@ -206,41 +206,99 @@ void binaryOpDmL(DMatrix<T>& trg, const DMatrix<T>& src1, const DMatrix<T>& src2
 
 #ifdef  CuMatrix_Enable_KTS
 template<typename T> template<template <typename> class BinaryOp> __host__ CUDART_DEVICE
-void CuMatrix<T>::binaryOp(CuMatrix<T>& res, const CuMatrix<T>& o, BinaryOp<T> op  ) const
+void CuMatrix<T>::binaryOp(CuMatrix<T>& res, const CuMatrix<T>& o, BinaryOp<T> op, cudaStream_t stream   ) const
 #else
 template<typename T> template<int StateDim> __host__ CUDART_DEVICE
-void CuMatrix<T>::binaryOp(CuMatrix<T>& res, const CuMatrix<T>& o, BinaryOpF<T, StateDim> op  ) const
+void CuMatrix<T>::binaryOp(CuMatrix<T>& res, const CuMatrix<T>& o, BinaryOpF<T, StateDim> op , cudaStream_t stream  ) const
 #endif
 {
 	DMatrix<T> d_A, d_B, d_res;
-	asDmatrix(d_A);
-	o.asDmatrix(d_B);
-	res.asDmatrix(d_res, false);
-	if(checkDebug(debugExec)) {
-		prlocf("void CuMatrix<T>::binaryOp(CuMatrix<T> &,CuMatrix<T> &, BinaryOp -> " );
-	}
-#ifndef __CUDA_ARCH__
-	if(checkDebug(debugExec)){
-		flprintf(" %s  " , b_util::unmangl(typeid(op).name()).c_str());
-	}
-#endif
-	if(checkDebug(debugExec)) {
-	}
-	if(n == p) {
-		binaryOpL( d_res, d_A, d_B,op);
-		//if(0==p)binaryOpL2( d_res, d_A, d_B,op,1);
+
+	assert( compatibleQ(o));
+	if(tiler.tileSize == tiler.m_size) {
+
+		tile0(d_A,lastMod==mod_host,stream);
+		if (checkDebug(debugTiler)) prlocf("this tile0\n");
+		o.tile0( d_B, tiler != o.tiler && o.lastMod==mod_host,stream);
+		if (checkDebug(debugTiler)) prlocf("o.tile0\n");
+		res.tile0( d_res, false,stream);
+		if(n == p) {
+			binaryOpL( d_res, d_A, d_B,op,stream);
+			//if(0==p)binaryOpL2( d_res, d_A, d_B,op,1);
+		} else {
+			binaryOpDmL( d_res, d_A, d_B,op,DefaultWidth2Height,stream);
+		}
+		res.invalidateHost();
 	} else {
-		binaryOpDmL( d_res, d_A, d_B,op);
+		uint tileM, tileN;
+		if (checkDebug(debugTiler)) {
+			flprintf("this %p, &o %p, &res %p\n",this, &o, &res);
+			o.printShortString("matrix o");
+			printShortString("this");
+			res.printShortString("ret");
+		}
+		tiler.tileDims(tileM, tileN, tdRows);
+		int tileCount = DIV_UP(m,tileM);
+		uint roff,coff;
+		int gpuCount = tiler.countGpus();
+		int orgDevice = ExecCaps::currDev();
+		int lastGpu =gpuCount > 1 ? 0 : -1;
+		cudaStream_t* streams = null;
+		if(gpuCount > 1) {
+			assert(!stream);
+			cudaStream_t* streams = (cudaStream_t*)malloc(gpuCount * sizeof(cudaStream_t));
+			for(int i =0 ; i < gpuCount; i++) {
+				lastGpu = tiler.nextGpu(lastGpu);
+				ExecCaps_setDevice(lastGpu);
+				cherr(cudaStreamCreateWithFlags(&streams[i],cudaStreamNonBlocking));
+			}
+		}
+
+		lastGpu = tiler.nextGpu(0);
+		for(int i =0; i < tileCount; i++ ) {
+			ExecCaps_setDevice(lastGpu); // do it here so this (i)tile, (j) b-tile and (i,j) res-tile all on same dev
+			if (checkDebug(debugTiler))prlocf("binaryOp tileLike d_A");
+			tiler.tileLike(d_A, roff,coff, tileM, tileN, i, tdRows, true,lastGpu,gpuCount > 1 ? streams[i] : stream);
+			if (checkDebug(debugTiler))prlocf("binaryOp tileLike d_B");
+			o.tiler.tileLike( d_B, roff,coff, tileM, tileN, i, tdRows, tiler != o.tiler, lastGpu,gpuCount > 1 ? streams[i] : stream);
+			if (checkDebug(debugTiler))prlocf("binaryOp tileLike d_Res");
+			lastGpu = res.tiler.tileLike( d_res, roff,coff, tileM, tileN, i, tdRows, false,lastGpu,gpuCount > 1 ? streams[i] : stream);
+			if(checkDebug(debugExec)) {
+				prlocf("void CuMatrix<T>::binaryOp(CuMatrix<T> &,CuMatrix<T> &, BinaryOp -> " );
+			}
+		#ifndef __CUDA_ARCH__
+			if(checkDebug(debugExec)){
+				flprintf(" %s  " , b_util::unmangl(typeid(op).name()).c_str());
+			}
+		#endif
+			if(n == p) {
+				binaryOpL( d_res, d_A, d_B,op,stream);
+				//if(0==p)binaryOpL2( d_res, d_A, d_B,op,1);
+			} else {
+				binaryOpDmL( d_res, d_A, d_B,op,DefaultWidth2Height,stream);
+			}
+			// flush tile to hostmem
+			res.tiler.syncTile(d_res, roff, coff, stream);
+		}
+		if(gpuCount > 1) {
+			for(int i =0 ; i < gpuCount; i++) {
+				cherr(cudaStreamDestroy(streams[i]));
+			}
+			free(streams);
+		}
+		if(orgDevice != ExecCaps::currDev()) {
+			ExecCaps_setDevice(orgDevice);
+		}
+		res.lastMod = mod_synced;  // have to
 	}
-	res.invalidateHost();
 }
 
 #ifdef  CuMatrix_Enable_KTS
 template<typename T> template<template <typename> class BinaryOp> __host__ CUDART_DEVICE
-CuMatrix<T> CuMatrix<T>::binaryOp(const CuMatrix<T>& o, BinaryOp<T> op ) const
+CuMatrix<T> CuMatrix<T>::binaryOp(const CuMatrix<T>& o, BinaryOp<T> op, cudaStream_t stream  ) const
 #else
 template<typename T> template<int StateDim> __host__ CUDART_DEVICE
-CuMatrix<T> CuMatrix<T>::binaryOp(const CuMatrix<T>& o, BinaryOpF<T,StateDim> op ) const
+CuMatrix<T> CuMatrix<T>::binaryOp(const CuMatrix<T>& o, BinaryOpF<T,StateDim> op , cudaStream_t stream  ) const
 #endif
 {
 	if(!equalDims(o)  && !( o.vectorQ() && o.n == n ) ) {
@@ -248,15 +306,20 @@ CuMatrix<T> CuMatrix<T>::binaryOp(const CuMatrix<T>& o, BinaryOpF<T,StateDim> op
 		o.printShortString();
 		setLastError(matricesOfIncompatibleShapeEx);
 	}
-	CuMatrix<T> res(m, n, false, true);
-	binaryOp(res, o, op);
+	if(checkDebug(debugBinOp)) prlocf("binaryOp(const CuMatrix<T>&,...) creating res\n" );
+
+	CuMatrix<T> res(m, n, true, true);
+	binaryOp(res, o, op,stream);
 	return res;
 }
 #ifdef  CuMatrix_Enable_KTS
-template __host__ CUDART_DEVICE CuMatrix<float> CuMatrix<float>::binaryOp<almostEqualsBinaryOp>(CuMatrix<float> const&, almostEqualsBinaryOp<float>) const;
-template __host__ CUDART_DEVICE CuMatrix<double> CuMatrix<double>::binaryOp<almostEqualsBinaryOp>(CuMatrix<double> const&, almostEqualsBinaryOp<double>) const;
-template __host__ CUDART_DEVICE CuMatrix<unsigned long> CuMatrix<unsigned long>::binaryOp<almostEqualsBinaryOp>(CuMatrix<unsigned long> const&, almostEqualsBinaryOp<unsigned long>) const;
+template __host__ CUDART_DEVICE CuMatrix<float> CuMatrix<float>::binaryOp<almostEqualsBinaryOp>(CuMatrix<float> const&, almostEqualsBinaryOp<float>, CUstream_st*) const;
+template __host__ CUDART_DEVICE CuMatrix<double> CuMatrix<double>::binaryOp<almostEqualsBinaryOp>(CuMatrix<double> const&, almostEqualsBinaryOp<double>, CUstream_st*) const;
+template __host__ CUDART_DEVICE CuMatrix<unsigned long> CuMatrix<unsigned long>::binaryOp<almostEqualsBinaryOp>(CuMatrix<unsigned long> const&, almostEqualsBinaryOp<unsigned long>, CUstream_st*) const;
 #else
+template __host__ CUDART_DEVICE CuMatrix<float> CuMatrix<float>::binaryOp<1>(CuMatrix<float> const&, BinaryOpF<float, 1>, CUstream_st*) const;
+template __host__ CUDART_DEVICE CuMatrix<double> CuMatrix<double>::binaryOp<1>(CuMatrix<double> const&, BinaryOpF<double, 1>, CUstream_st*) const;
+template __host__ CUDART_DEVICE CuMatrix<ulong> CuMatrix<ulong>::binaryOp<1>(CuMatrix<ulong> const&, BinaryOpF<ulong, 1>, CUstream_st*) const;
 #endif
 
 template<typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::operator+( const CuMatrix<T> o) const {

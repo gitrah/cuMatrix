@@ -15,9 +15,9 @@
 #include <helper_string.h>
 #include "tests.h"
 
-template int testPrint<float>::operator()(int argc, char const ** args) const;
-template int testPrint<double>::operator()(int argc, char const ** args) const;
-template <typename T> int testPrint<T>::operator()(int argc, const char** args) const {
+template int testPrint<float>::operator()(int argc, const char **argv) const;
+template int testPrint<double>::operator()(int argc, const char **argv) const;
+template <typename T> int testPrint<T>::operator()(int argc, const char** argv) const {
 	outln("testPrint start");
 	CuMatrix<T> seq = CuMatrix<T>::sequence(1, 100, 1).syncBuffers();
 	outln("seq\n" << seq);
@@ -42,7 +42,7 @@ template <typename T> int testPrint<T>::operator()(int argc, const char** args) 
  }
 
 
-template <typename T> int testOps<T>::operator()(int argc, const char** args) const {
+template <typename T> int testOps<T>::operator()(int argc, const char **argv) const {
 	//float els[]= {1., 2, 3, 0, 5, 6, 3, 8, 9};
 	outln("testOps start");
 	T els[] = { 1, 2, 3., 0, 1, 5, 6, 3, 2, 8, 9, 4.3, 9, 2, .3, 4 };
@@ -81,20 +81,20 @@ template <typename T> int testOps<T>::operator()(int argc, const char** args) co
 	outln("testOps finish");
 	return 0;
 }
-template int testOps<float>::operator()(int argc, char const ** args) const;
-template int testOps<double>::operator()(int argc, char const ** args) const;
+template int testOps<float>::operator()(int argc, const char **argv) const;
+template int testOps<double>::operator()(int argc, const char **argv) const;
 
-template int testSumSqrDiffsLoop<float>::operator()(int argc, char const ** args) const;
-template int testSumSqrDiffsLoop<double>::operator()(int argc, char const ** args) const;
-template <typename T> int testSumSqrDiffsLoop<T>::operator()(int argc, const char** args) const {
+template int testSumSqrDiffsLoop<float>::operator()(int argc, const char **argv) const;
+template int testSumSqrDiffsLoop<double>::operator()(int argc, const char **argv) const;
+template <typename T> int testSumSqrDiffsLoop<T>::operator()(int argc, const char **argv) const {
 	outln("testSumSqrDiffsLoop start");
 	CuMatrix<T> m1 = CuMatrix<T>::ones(1000, 1000);
 	outln("m1 " << &m1 << "\n");
 	CuMatrix<T> m2 = CuMatrix<T>::ones(1000, 1000) * 2;
 	outln("made mats m1 " << &m1 << " << m2 " << &m2 << "\n\n");
-	uint blocks;
-	uint threads;
-	uint n = m1.m * m1.n;
+	int blocks;
+	int threads;
+	int n = m1.m * m1.n;
 	getReductionExecContext(blocks, threads, n);
 	outln("blocks " << blocks << "\n");
 	CuMatrix<T> buffer = CuMatrix<T>::reductionBuffer(blocks);
@@ -106,7 +106,7 @@ template <typename T> int testSumSqrDiffsLoop<T>::operator()(int argc, const cha
 	clock_t lastTime = clock();
 	CuTimer timer;
 	timer.start();
-	int count = b_util::getCount(argc,args,10000);
+	int count = b_util::getCount(argc,argv,10000);
 	for (int i = 0; i < count; i++) {
 		s += m1.sumSqrDiff(buffer, m2 );
 	}
@@ -115,18 +115,18 @@ template <typename T> int testSumSqrDiffsLoop<T>::operator()(int argc, const cha
 	outln("s " << s << " took " << exeTime << " ms");
 	outln("delta " << delta);
 	outln("flow of " << m1.flow(count, 2, exeTime) << "GB/s");
-	outln("m1.d " << m1.d_elements);
-	outln("m2.d " << m2.d_elements);
-	outln("buff.d " << buffer.d_elements);
+	outln("m1.d " << m1.tiler.currBuffer());
+	outln("m2.d " << m2.tiler.currBuffer());
+	outln("buff.d " << buffer.tiler.currBuffer());
 	outln("testSumSqrDiffsLoop finish");
 	return 0;
 }
 
-template int testBinaryOps<float>::operator()(int argc, char const ** args) const;
-template int testBinaryOps<double>::operator()(int argc, char const ** args) const;
-template <typename T> int testBinaryOps<T>::operator()(int argc, const char** args) const {
+template int testBinaryOps<float>::operator()(int argc, const char **argv) const;
+template int testBinaryOps<double>::operator()(int argc, const char **argv) const;
+template <typename T> int testBinaryOps<T>::operator()(int argc, const char **argv) const {
 	outln("testBinaryOps start");
-	CuMatrix<T>::init(256, 64);
+	CuMatrix<T>::initMemMgrForType(256, 64);
 	CuMatrix<T> m1 = CuMatrix<T>::ones(1000, 1000) * 3;
 	outln("m1 " << &m1 << "\n");
 	CuMatrix<T> m2 = CuMatrix<T>::ones(1000, 1000) * 2;
@@ -157,22 +157,12 @@ template <typename T> int testBinaryOps<T>::operator()(int argc, const char** ar
 }
 
 
-template int testReassign<float>::operator()(int argc, char const ** args) const;
-template int testReassign<double>::operator()(int argc, char const ** args) const;
-template <typename T> int testReassign<T>::operator()(int argc, const char** args) const {
-	CuMatrix<T> s = CuMatrix<T>::ones(5, 1).syncBuffers();
-	outln(s.toString());
-	s = CuMatrix<T>::zeros(5, 1).syncBuffers();
-	outln(s.toString());
-
-	return 0;
-}
-
-template int testLUdecomp<float>::operator()(int argc, char const ** args) const;
-template int testLUdecomp<double>::operator()(int argc, char const ** args) const;
-template <typename T> int testLUdecomp<T>::operator()(int argc, const char** args) const {
+template int testLUdecomp<float>::operator()(int argc, const char **argv) const;
+template int testLUdecomp<double>::operator()(int argc, const char **argv) const;
+template int testLUdecomp<ulong>::operator()(int argc, const char **argv) const;
+template <typename T> int testLUdecomp<T>::operator()(int argc, const char **argv) const {
 	// 5 0 2 3 4 ; 5 4 0 2 4 ; 2 3 4 0 5; 1 2 -4 3 5; 2 0 2 0 4
-	T vals[]= {5, 0, 2, 3., 4, 5, 4, 0, 2, 4, 2, 3, 4, 0, 5, 1, 2, -4, 3, 5, 2, 0, 2, 0, 4};
+	T vals[]= { 5, 0, 2, (T)3., 4, 5, 4, 0, 2, 4, 2, 3, 4, 0, 5, 1, 2, (T)-4, 3, 5, 2, 0, 2, 0, 4};
 	//outln("count " << CuMatrix<T>::sizeOfArray( vals));
 	dassert(CuMatrix<T>::sizeOfArray( vals) == 25);
 	CuMatrix<T> mf = CuMatrix<T>::freeform(5,vals, CuMatrix<T>::sizeOfArray( vals)).syncBuffers();
@@ -213,9 +203,9 @@ template <typename T> int testLUdecomp<T>::operator()(int argc, const char** arg
 	return 0;
 }
 
-template int testFileIO<float>::operator()(int argc, char const ** args) const;
-template int testFileIO<double>::operator()(int argc, char const ** args) const;
-template <typename T> int testFileIO<T>::operator()(int argc, const char** args) const {
+template int testFileIO<float>::operator()(int argc, const char **argv) const;
+template int testFileIO<double>::operator()(int argc, const char **argv) const;
+template <typename T> int testFileIO<T>::operator()(int argc, const char **argv) const {
 	const char* fileName = "m400.mat";
 	const char* fileNameN = "thetas.mat";
 	FILE * pFile;
@@ -268,9 +258,9 @@ template <typename T> int testFileIO<T>::operator()(int argc, const char** args)
 
 
 
-template int testAccuracy<float>::operator()(int argc, char const ** args) const;
-template int testAccuracy<double>::operator()(int argc, char const ** args) const;
-template <typename T> int testAccuracy<T>::operator()(int argc, const char** args) const {
+template int testAccuracy<float>::operator()(int argc, const char **argv) const;
+template int testAccuracy<double>::operator()(int argc, const char **argv) const;
+template <typename T> int testAccuracy<T>::operator()(int argc, const char **argv) const {
 	CuMatrix<T> a = CuMatrix<T>::ones(1000,1);
 	outln("a " << a.toShortString());
 	CuMatrix<T> b = CuMatrix<T>::ones(1000,1);
@@ -279,7 +269,7 @@ template <typename T> int testAccuracy<T>::operator()(int argc, const char** arg
 	c.syncBuffers();
 	outln("c " << c.toShortString());
 	MemMgr<T>::checkValid(c.elements);
-	MemMgr<T>::checkValid(c.d_elements);
+	MemMgr<T>::checkValid(c.tiler.currBuffer());
 	for(int i = 0; i < 1000; i++) {
 		if((1. * rand()) / (RAND_MAX - 1) > .7){
 			c.set(i, 0);
@@ -292,48 +282,46 @@ template <typename T> int testAccuracy<T>::operator()(int argc, const char** arg
 }
 
 
-template int testSuite<float>::operator()(int argc, char const ** args) const;
-template int testSuite<double>::operator()(int argc, char const ** args) const;
-template <typename T> int testSuite<T>::operator()(int argc, char const ** args) const {
+template int testSuite<float>::operator()(int argc, const char **argv) const;
+template int testSuite<double>::operator()(int argc, const char **argv) const;
+template <typename T> int testSuite<T>::operator()(int argc, const char **argv) const {
 	outln("in testSuite");
 	int ret,status;
-	tests<T>::timeTest(testAccuracy<T>(), argc, args, &ret);
+	tests<T>::timeTest(testAccuracy<T>(), argc, argv, &ret);
     status = ret;
-    tests<T>::timeTest(testFileIO<T>(), argc, args, &ret);
+    tests<T>::timeTest(testFileIO<T>(), argc, argv, &ret);
     status += ret;
-    tests<T>::timeTest(testLUdecomp<T>(), argc, args, &ret);
+    tests<T>::timeTest(testLUdecomp<T>(), argc, argv, &ret);
     status += ret;
-    tests<T>::timeTest(testNeural2l<T>(), argc, args, &ret);
+    tests<T>::timeTest(testNeural2l<T>(), argc, argv, &ret);
     status += ret;
-    tests<T>::timeTest(testSubmatrices<T>(), argc, args, &ret);
+    tests<T>::timeTest(testSubmatrices<T>(), argc, argv, &ret);
     status += ret;
-    tests<T>::timeTest(testAutodot<T>(), argc, args, &ret);
+    tests<T>::timeTest(testAutodot<T>(), argc, argv, &ret);
     status += ret;
-    tests<T>::timeTest(testCat<T>(), argc, args, &ret);
+    tests<T>::timeTest(testCat<T>(), argc, argv, &ret);
     status += ret;
-    tests<T>::timeTest(testEqualsEtc<T>(), argc, args, &ret);
+    tests<T>::timeTest(testEqualsEtc<T>(), argc, argv, &ret);
     status += ret;
-    tests<T>::timeTest(testOps<T>(), argc, args, &ret);
+    tests<T>::timeTest(testOps<T>(), argc, argv, &ret);
     status += ret;
-    tests<T>::timeTest(testPrint<T>(), argc, args, &ret);
+    tests<T>::timeTest(testPrint<T>(), argc, argv, &ret);
     status += ret;
-    tests<T>::timeTest(testProductShapes<T>(), argc, args, &ret);
+    tests<T>::timeTest(testProductShapes<T>(), argc, argv, &ret);
     status += ret;
-    tests<T>::timeTest(testReassign<T>(),argc, args, &ret);
+    tests<T>::timeTest(testReshape<T>(), argc, argv, &ret);
     status += ret;
-    tests<T>::timeTest(testReshape<T>(), argc, args, &ret);
+    tests<T>::timeTest(testTranspose<T>(), argc, argv, &ret);
     status += ret;
-    tests<T>::timeTest(testTranspose<T>(), argc, args, &ret);
+    tests<T>::timeTest(testTransposeLoop<T>(), argc, argv, &ret);
     status += ret;
-    tests<T>::timeTest(testTransposeLoop<T>(), argc, args, &ret);
+    tests<T>::timeTest(testMaxColIdxs<T>(), argc, argv, &ret);
     status += ret;
-    tests<T>::timeTest(testMaxColIdxs<T>(), argc, args, &ret);
+    tests<T>::timeTest(testMemUsage<T>(), argc, argv, &ret);
     status += ret;
-    tests<T>::timeTest(testMemUsage<T>(), argc, args, &ret);
+    tests<T>::timeTest(testMultLoop<T>(), argc, argv, &ret);
     status += ret;
-    tests<T>::timeTest(testMultLoop<T>(), argc, args, &ret);
-    status += ret;
-    tests<T>::timeTest(testSumSqrDiffsLoop<T>(), argc, args, &ret);
+    tests<T>::timeTest(testSumSqrDiffsLoop<T>(), argc, argv, &ret);
     status += ret;
 	return ret;
 }

@@ -19,8 +19,8 @@ template<typename T> void Path<T>::draw()const {
 	T sz = data.size();
 	T clr[] = {0,0,0};
 
-	typedef typename vector<T3<T> >::iterator iterator;
-	iterator it = data.begin();
+	//typedef typename vector<T3<T> >::iterator iterator;
+	auto it = data.begin();
 	while(it != data.end()) {
 		Vutil<T>::inc3(clr, 1.0/sz);
 		glColor3f (clr[0],clr[1],clr[2]);

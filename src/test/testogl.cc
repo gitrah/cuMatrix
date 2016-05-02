@@ -57,9 +57,9 @@ void idle() {
 	printf("^");
 }
 
-template int testOglHelloworld<float>::operator()(int argc, char const ** args) const;
-template int testOglHelloworld<double>::operator()(int argc, char const ** args) const;
-template <typename T> int testOglHelloworld<T>::operator()(int argc, const char** args) const {
+template int testOglHelloworld<float>::operator()(int argc, const char **argv) const;
+template int testOglHelloworld<double>::operator()(int argc, const char **argv) const;
+template <typename T> int testOglHelloworld<T>::operator()(int argc, const char **argv) const {
     glutInit(&argc, (char **)args);
     glutInitDisplayMode (GLUT_SINGLE | GLUT_RGB);
     glutInitWindowSize (250, 250);
@@ -136,9 +136,9 @@ void mouseAnim0(int button, int state, int x, int y)
          break;
    }
 }
-template int testOglAnim0<float>::operator()(int argc, char const ** args) const;
-template int testOglAnim0<double>::operator()(int argc, char const ** args) const;
-template <typename T> int testOglAnim0<T>::operator()(int argc, const char** args) const {
+template int testOglAnim0<float>::operator()(int argc, const char **argv) const;
+template int testOglAnim0<double>::operator()(int argc, const char **argv) const;
+template <typename T> int testOglAnim0<T>::operator()(int argc, const char **argv) const {
 	glutInit(&argc, (char**)args);
 	glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB);
 	glutInitWindowSize(250, 250);
@@ -189,7 +189,7 @@ double* p3;
 double *thePoints[6];// = {&theLookAt->eyeX,&theLookAt->eyeY,&theLookAt->eyeZ,&theLookAt->centerX,&theLookAt->centerY,&theLookAt->centerZ};
 const char* theVars[] = {"eyeX","eyeY","eyeZ","centerX","centerY","centerZ"};
 int idx = 0;
-char const * * theText = null;
+const char * * theText = null;
 
 template <typename T> void keyboardFn(unsigned char key, int x, int y)
 {
@@ -282,9 +282,9 @@ template <typename T> void keyboardFn(unsigned char key, int x, int y)
 
 
 
-template int testOglPointAnim<float>::operator()(int argc, char const ** args) const;
-template int testOglPointAnim<double>::operator()(int argc, char const ** args) const;
-template <typename T> int testOglPointAnim<T>::operator()(int argc, const char** args) const {
+template int testOglPointAnim<float>::operator()(int argc, const char **argv) const;
+template int testOglPointAnim<double>::operator()(int argc, const char **argv) const;
+template <typename T> int testOglPointAnim<T>::operator()(int argc, const char **argv) const {
 	glutInit(&argc, (char**)args);
 	glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB);
 	glutInitWindowSize(750, 750);
@@ -305,9 +305,9 @@ template <typename T> int testOglPointAnim<T>::operator()(int argc, const char**
 
 const char* sevenSamples = "/home/reid/kaggle/accel/frag7.csv";
 
-template int testFrag7Csv<float>::operator()(int argc, char const ** args) const;
-template int testFrag7Csv<double>::operator()(int argc, char const ** args) const;
-template<typename T> int testFrag7Csv<T>::operator()(int argc, const char** args) const {
+template int testFrag7Csv<float>::operator()(int argc, const char **argv) const;
+template int testFrag7Csv<double>::operator()(int argc, const char **argv) const;
+template<typename T> int testFrag7Csv<T>::operator()(int argc, const char **argv) const {
 	outln( "opening " << sevenSamples);
 	map<string, CuMatrix<T>*> results = util<T>::parseCsvDataFile(sevenSamples,",",false, true, false);
 
@@ -315,9 +315,6 @@ template<typename T> int testFrag7Csv<T>::operator()(int argc, const char** args
 		outln("no " << sevenSamples << "; exiting");
 		return -1;
 	}
-	typedef typename map<string, CuMatrix<T>*>::iterator iterator;
-	iterator it;
-	it = results.begin();
 
 	outln("loaded " << sevenSamples);
 

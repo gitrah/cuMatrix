@@ -152,6 +152,24 @@ template <> __device__ ulong shflDown(ulong& v, int lane, int width) {
 	return lv;
 }
 
+// is this correct?  test
+template <> __device__ long shflDown(long& v, int lane, int width) {
+/*
+	int lo, hi;
+	asm volatile( "mov.b32 {%0,%1}, %2;" : "=r"(lo), "=r"(hi) : "l"(v));
+	lo = __shfl(lo, lane, width);
+	hi = __shfl(hi, lane, width);
+	asm volatile( "mov.b64 %0, {%1,%2};" : "=l"(v) : "r"(lo), "r"(hi));
+*/
+	uint half1 = *((uint*)&v);
+	uint half2 = *(((uint*)&v) + 1);
+	half1 = __shfl_down((int)half1,lane, width);
+	half2 = __shfl_down((int)half2,lane, width);
+	ulong lv;
+	*((uint*)&lv) = half1;
+	*(((uint*)&lv) + 1) = half2;
+	return (long)lv;
+}
 
 template<typename T> __global__ void dot(T* res, const T* a, const T* b, int len) {
 	int idx = threadIdx.x + blockIdx.x * blockDim.x;
@@ -189,10 +207,10 @@ template<typename T, int StateDim> __global__ void shuffle(T* res, const T* a, u
 
 #ifdef  CuMatrix_Enable_KTS
 #else
-template void __global__ shuffle<float, 1>(float*, float const*, unsigned long, MonoidF<float, 1>);
-template void __global__ shuffle<double, 1>(double*, double const*, unsigned long, MonoidF<double, 1>);
-template void __global__ shuffle<int, 1>(int*, int const*, unsigned long, MonoidF<int, 1>);
-template void __global__ shuffle<uint, 1>(uint*, uint const*, unsigned long, MonoidF<uint, 1>);
+template void __global__ shuffle<float, 1>(float*, float const*, ulong, MonoidF<float, 1>);
+template void __global__ shuffle<double, 1>(double*, double const*, ulong, MonoidF<double, 1>);
+template void __global__ shuffle<int, 1>(int*, int const*, ulong, MonoidF<int, 1>);
+template void __global__ shuffle<uint, 1>(uint*, uint const*, ulong, MonoidF<uint, 1>);
 
 #endif
 
@@ -264,6 +282,7 @@ template <typename T, int StateDim > __host__ CUDART_DEVICE T shuffle(  const T*
 #ifndef __CUDA_ARCH__
 	T res;
 	checkCudaErrors(cudaMemcpy(&res, d_res, sizeof(T), cudaMemcpyDeviceToHost));
+//	outln("cudaFree " << d_ary);
 	checkCudaErrors(cudaFree(d_ary));
 	return res;
 #else
@@ -275,18 +294,16 @@ template <typename T, int StateDim > __host__ CUDART_DEVICE T shuffle(  const T*
 template float shuffle<float, plusBinaryOp<float> >(const float*, ulong, plusBinaryOp<float>);
 template double shuffle<double, plusBinaryOp<double> >(const double*, ulong, plusBinaryOp<double>);
 template ulong shuffle<ulong, plusBinaryOp<ulong> >(const ulong*, ulong, plusBinaryOp<ulong>);
-template int shuffle<int, plusBinaryOp<int> >(int const*, unsigned long, plusBinaryOp<int>);
-template unsigned int shuffle<unsigned int, plusBinaryOp<unsigned int> >(unsigned int const*, unsigned long, plusBinaryOp<unsigned int>);
+template int shuffle<int, plusBinaryOp<int> >(int const*, ulong, plusBinaryOp<int>);
+template uint shuffle<uint, plusBinaryOp<uint> >(uint const*, ulong, plusBinaryOp<uint>);
+template long shuffle<long, plusBinaryOp<long> >(long const*, ulong, plusBinaryOp<long>);
 
 template float shuffle<float, multBinaryOp<float> >(const float*, ulong, multBinaryOp<float>);
 template double shuffle<double, multBinaryOp<double> >(const double*, ulong, multBinaryOp<double>);
 template ulong shuffle<ulong, multBinaryOp<ulong> >(const ulong*, ulong, multBinaryOp<ulong>);
-template int shuffle<int, multBinaryOp<int> >(int const*, unsigned long, multBinaryOp<int>);
-template unsigned int shuffle<unsigned int, multBinaryOp<unsigned int> >(unsigned int const*, unsigned long, multBinaryOp<unsigned int>);
-
-template float shuffle<float, sqrPlusBinaryOp<float> >(const float*, ulong, sqrPlusBinaryOp<float>);
-template double shuffle<double, sqrPlusBinaryOp<double> >(const double*, ulong, sqrPlusBinaryOp<double>);
-template ulong shuffle<ulong, sqrPlusBinaryOp<ulong> >(const ulong*, ulong, sqrPlusBinaryOp<ulong>);
+template int shuffle<int, multBinaryOp<int> >(int const*, ulong, multBinaryOp<int>);
+template uint shuffle<uint, multBinaryOp<uint> >(uint const*, ulong, multBinaryOp<uint>);
+template long shuffle<long, multBinaryOp<long> >(long const*, ulong, multBinaryOp<long>);
 
 template float shuffle<float, maxBinaryOp<float> >(const float*, ulong, maxBinaryOp<float>);
 template double shuffle<double, maxBinaryOp<double> >(const double*, ulong, maxBinaryOp<double>);
@@ -296,29 +313,28 @@ template float shuffle<float, minBinaryOp<float> >(const float*, ulong, minBinar
 template double shuffle<double, minBinaryOp<double> >(const double*, ulong, minBinaryOp<double>);
 template ulong shuffle<ulong, minBinaryOp<ulong> >(const ulong*, ulong, minBinaryOp<ulong>);
 
-template float shuffle<float, andBinaryOp<float> >(float const*, unsigned long, andBinaryOp<float>);
-template double shuffle<double, andBinaryOp<double> >(double const*, unsigned long, andBinaryOp<double>);
-template ulong shuffle<ulong, andBinaryOp<ulong> >(ulong const*, unsigned long, andBinaryOp<ulong>);
+template float shuffle<float, andBinaryOp<float> >(float const*, ulong, andBinaryOp<float>);
+template double shuffle<double, andBinaryOp<double> >(double const*, ulong, andBinaryOp<double>);
+template ulong shuffle<ulong, andBinaryOp<ulong> >(ulong const*, ulong, andBinaryOp<ulong>);
 
-template float shuffle<float, orBinaryOp<float> >(float const*, unsigned long, orBinaryOp<float>);
-template double shuffle<double, orBinaryOp<double> >(double const*, unsigned long, orBinaryOp<double>);
-template ulong shuffle<ulong, orBinaryOp<ulong> >(ulong const*, unsigned long, orBinaryOp<ulong>);
+template float shuffle<float, orBinaryOp<float> >(float const*, ulong, orBinaryOp<float>);
+template double shuffle<double, orBinaryOp<double> >(double const*, ulong, orBinaryOp<double>);
+template ulong shuffle<ulong, orBinaryOp<ulong> >(ulong const*, ulong, orBinaryOp<ulong>);
 
-template int shuffle<int, maxBinaryOp<int> >(int const*, unsigned long, maxBinaryOp<int>);
-template int shuffle<int, minNotZeroBinaryOp<int> >(int const*, unsigned long, minNotZeroBinaryOp<int>);
-template int shuffle<int, andBinaryOp<int> >(int const*, unsigned long, andBinaryOp<int>);
-template unsigned int shuffle<unsigned int, andBinaryOp<unsigned int> >(unsigned int const*, unsigned long, andBinaryOp<unsigned int>);
-template int shuffle<int, sqrPlusBinaryOp<int> >(int const*, unsigned long, sqrPlusBinaryOp<int>);
-template unsigned int shuffle<unsigned int, sqrPlusBinaryOp<unsigned int> >(unsigned int const*, unsigned long, sqrPlusBinaryOp<unsigned int>);
-template int shuffle<int, minBinaryOp<int> >(int const*, unsigned long, minBinaryOp<int>);
-template unsigned int shuffle<unsigned int, maxBinaryOp<unsigned int> >(unsigned int const*, unsigned long, maxBinaryOp<unsigned int>);
-template unsigned int shuffle<unsigned int, minBinaryOp<unsigned int> >(unsigned int const*, unsigned long, minBinaryOp<unsigned int>);
+template int shuffle<int, maxBinaryOp<int> >(int const*, ulong, maxBinaryOp<int>);
+template int shuffle<int, minNotZeroBinaryOp<int> >(int const*, ulong, minNotZeroBinaryOp<int>);
+template int shuffle<int, andBinaryOp<int> >(int const*, ulong, andBinaryOp<int>);
+template uint shuffle<uint, andBinaryOp<uint> >(uint const*, ulong, andBinaryOp<uint>);
+template int shuffle<int, minBinaryOp<int> >(int const*, ulong, minBinaryOp<int>);
+template uint shuffle<uint, maxBinaryOp<uint> >(uint const*, ulong, maxBinaryOp<uint>);
+template uint shuffle<uint, minBinaryOp<uint> >(uint const*, ulong, minBinaryOp<uint>);
 
 #else
 template float shuffle<float,1>(float const*, ulong, MonoidF<float, 1>);
 template double shuffle<double,1>(double const*, ulong, MonoidF<double, 1>);
 template int shuffle<int,1>(int const*, ulong, MonoidF<int, 1>);
 template uint shuffle<uint,1>(uint const*, ulong, MonoidF<uint, 1>);
+template long shuffle<long, 1>(long const*, ulong, MonoidF<long, 1>);
 template ulong shuffle<ulong, 1>(ulong const*, ulong, MonoidF<ulong, 1>);
 #endif
 

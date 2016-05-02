@@ -10,10 +10,18 @@
 
 #include <cuda_runtime_api.h>
 #include "util.h"
+#include "CMap.h"
 //#include "Matrix.h"
+
+using std::reference_wrapper;
 
 template<typename T> class CuMatrix;
 //template<typename T> struct MatrixD;
+template<typename T> class Tiler;
+extern bool pinnedQ;
+
+#define mCheckValid(ptr) 	MemMgr<T>::checkValid(ptr, __func__ )
+
 template<typename T> class MemMgr {
 private:
 	long hBytesAllocated;
@@ -22,27 +30,29 @@ private:
 	long dBytesFreed;
 	long mmHHCopied;
 	long memMmHhCopied;
-	long currHost;
-	long currDevice;
+	long currHostB;
+	long currDeviceB;
 
-	std::map<std::string, int> hDimCounts;
-	std::map<std::string, int> dDimCounts;
-	std::map<std::string, int> hDimFreeCounts;
-	std::map<std::string, int> dDimFreeCounts;
-	std::map<T*, std::string> ptrDims;
-	std::map<T*, int> hBuffers;
-	std::map<T*, int> dBuffers;
-	std::map<T*, long> hSizes;
-	std::map<T*, long> dSizes;
-	std::map<CuMatrix<T>*, T*> mhBuffers;
-	std::map<CuMatrix<T>*, T*> mdBuffers;
+	CMap<std::string, int> hDimCounts;
+	CMap<std::string, int> dDimCounts;
+	CMap<std::string, int> hDimFreeCounts;
+	CMap<std::string, int> dDimFreeCounts;
+	CMap<T*, std::string> ptrDims;
+	CMap<T*, int> hBuffers;
+	CMap<T*, int> dBuffers;
+	CMap<T*, long> hSizes;
+	CMap<T*, long> dSizes;
+	CMap<CuMatrix<T>*, T*> mhBuffers;
+	//CMap<CuMatrix<T>*, T*> mdBuffers;
 
-	std::map<const T*,const T*> parents;
-
+	CMap<const T*,const T*> parents;
+	size_t page_size;
 public:
 	__host__ MemMgr();
 	__host__ ~MemMgr();
 	__host__ string stats();
+	__host__ int refCount( T* els);
+	__host__ std::pair<int,int> refCounts(const CuMatrix<T>& mat);
 	__host__ cudaError_t allocHost(CuMatrix<T>& mat, T* source = null);
 	__host__ void dumpUsage();
 	__host__ void addHostDims( const CuMatrix<T>& mat) ;
@@ -51,16 +61,22 @@ public:
 	__host__ bool submatrixQ( const CuMatrix<T>& mat);
 	__host__ cudaError_t getHost( CuMatrix<T>& mat);
 	__host__ int freeHost(	CuMatrix<T>& mat);
-	__host__ void addDeviceDims( const CuMatrix<T>& mat);
-	__host__ cudaError_t allocDevice(CuMatrix<T>& mat);
-	__host__ __device__ cudaError_t allocDevice(T** pElements, uint size );
-	__host__ void addDevice(  CuMatrix<T>& mat);
-	__host__ cudaError_t getDevice(	 CuMatrix<T>& mat);
-	__host__ int freeDevice(CuMatrix<T>& mat);
+	__host__ void addDeviceDims( const CuMatrix<T>& mat,ulong tileSize = 0);
+	__host__ cudaError_t allocDevice(CuMatrix<T>& mat,int device = ExecCaps::currDev(), ulong tileSize = 0);
+	__host__ __device__ cudaError_t allocDevice(T** pElements, CuMatrix<T>& mat, uint size );
+	__host__ void addTiles( const Tiler<T>* tiler);
+	__host__ int freeTiles(CuMatrix<T>& mat);
 	__host__ void dumpLeftovers();
-	__host__ void migrate(int dev, CuMatrix<T>& m);
-	__host__ void locate(int dev, CuMatrix<T>& m);
-	__host__ static bool checkValid(const T* addr);
+
+	__host__ int migrate(int dev, CuMatrix<T>& m);
+	__host__ int meet(const vector<CuMatrix<T> >& mats);
+	__host__ void copy(int dev, CuMatrix<T>& m);
+	__host__ pair<size_t,size_t> migrate(int dev, vector< reference_wrapper<CuMatrix<T>>>  ms);
+
+	__host__ static bool checkValid(const T* addr, const char* msg = null);
+
+	__host__ static void checkRange(const T* addr, int endIdx, const char* msg = null);
+
 
 };
 

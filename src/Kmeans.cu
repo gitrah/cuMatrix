@@ -111,6 +111,7 @@ template <typename T> __global__ void findClosestKernel(uint* indices, const DMa
 template <typename T> __host__ CUDART_DEVICE void Kmeans<T>::findClosest(IndexArray& indices, const CuMatrix<T>& centroids, const CuMatrix<T>& x) {
 	assert(indices.count == x.m);
 	assert(centroids.n == x.n);
+	assert( x.tiler.tileSize == x.tiler.m_size); // todo tile impl
 	uint threadX, threadY;
 	threadX = x.n;
 	ExecCaps* pcaps = ExecCaps::currCaps();
@@ -124,14 +125,20 @@ template <typename T> __host__ CUDART_DEVICE void Kmeans<T>::findClosest(IndexAr
 	threadY = MIN(x.m, MIN( (pcaps->thrdPerBlock-1)/threadX,  MIN( (pcaps->memSharedPerBlock - centroidsSize)/ perRowSmemSize, pcaps->maxBlock.y)));
 	if(checkDebug(debugMeans))flprintf("threadY %u\n",threadY);
 	assert(threadX * threadY < pcaps->thrdPerBlock);
-	dim3 block(threadX, threadY);
+
+	struct cudaFuncAttributes funcAttrib;
+    cherr(cudaFuncGetAttributes(&funcAttrib, findClosestKernel<T>));
+    flprintf("findClosestKernel numRegs=%d maxThreadsPerBlock=%d localSizeBytes=%d, sharedSizeBytes =%d \n",funcAttrib.numRegs, funcAttrib.maxThreadsPerBlock, funcAttrib.localSizeBytes, funcAttrib.sharedSizeBytes);
 	uint gridY = DIV_UP(x.m,threadY);
-	assert(gridY < pcaps->maxGrid.y);
-	dim3 grid(1,gridY);
+	uint gridX = 1;
+    dim3 block(threadX, threadY);
+	dim3 grid(gridX,gridY);
+
+	b_util::adjustExpectations(grid,block,funcAttrib);
 	uint smemSize = centroidsSize + perRowSmemSize * threadY;
 	if(checkDebug(debugMeans)){
-		flprintf("findClosest x: %uX%u, (%p-%p), means; %uX%u, (%p-%p)\n", x.m,x.n, x.d_elements, x.d_elements + (x.m -1) * x.p + x.n - 1,
-				centroids.m,centroids.n, centroids.d_elements, centroids.d_elements + centroids.m * centroids.n -1);
+		flprintf("findClosest x: %uX%u, (%p-%p), means; %uX%u, (%p-%p)\n", x.m,x.n, x.tiler.currBuffer(), x.tiler.currBuffer() + (x.m -1) * x.p + x.n - 1,
+				centroids.m,centroids.n, centroids.tiler.currBuffer(), centroids.tiler.currBuffer()+ centroids.m * centroids.n -1);
 		flprintf("findClosest smemSize %u, block %uX%u, grid %uX%u\n",smemSize, threadY, threadX, gridY, 1);
 	}
 	uint *d_indx;
@@ -140,6 +147,12 @@ template <typename T> __host__ CUDART_DEVICE void Kmeans<T>::findClosest(IndexAr
 #else
 	d_indx = indices.indices;
 #endif
+
+	flprintf("smemSize %d, grid ", smemSize);
+	b_util::prd3(grid);
+	prlocf("block ");
+	b_util::prd3(block);
+
 	findClosestKernel<<<grid,block, smemSize>>>(d_indx,centroids.asDmatrix(), x.asDmatrix());
 	cherr(cudaDeviceSynchronize());
 #ifndef __CUDA_ARCH__
@@ -153,13 +166,10 @@ template  __host__ CUDART_DEVICE void Kmeans<double>::findClosest(IndexArray& in
 template  __host__ CUDART_DEVICE void Kmeans<ulong>::findClosest(IndexArray& indices, const CuMatrix<ulong>& means, const CuMatrix<ulong>& x);
 
 
-
-
-
 // 1 thread per column
 template <typename T> __global__ void calcMeansColThreadKernel(DMatrix<T> nCentroids, const uint* indices, const uint* counts, const DMatrix<T> x) {
 	T* s_centroids = SharedMemory<T>(); // dim centroids.m * centroids.n
-	uint col = threadIdx.x + blockIdx.x * blockDim.x;
+	int col = threadIdx.x + blockIdx.x * blockDim.x;
 	T* centRow;
 	T* xRow;
 	for(int i = 0; i < x.m; i++) {
@@ -187,7 +197,7 @@ template <typename T> __global__ void calcMeansColThreadKernel(DMatrix<T> nCentr
 }
 
 
-template<int K>__global__ void countIndices(uint* counts, const uint* indices, uint n) {
+template<int K>__global__ void countIndices(uint* counts, const uint* indices, int n) {
 	uint tid = threadIdx.x + blockIdx.x * blockDim.x;
 	if(tid < n) {
 		atomicAdd(counts + indices[tid],1);

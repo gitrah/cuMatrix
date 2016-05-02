@@ -5,9 +5,7 @@
  *      Author: reid
  */
 
-#ifndef ANOMALY_DETECTION_H_
-#define ANOMALY_DETECTION_H_
-
+#pragma once
 #include "CuMatrix.h"
 
 template <typename T> struct f1score {
@@ -25,10 +23,10 @@ template <typename T> class AnomalyDetection {
 public:
 
 	static void fitGaussians(CuMatrix<T>& mean, CuMatrix<T>& variance, const CuMatrix<T>& x);
-	static pair<T,T> selectThreshold(const CuMatrix<T>& yValidation, const CuMatrix<T>& probabilityDensityValidation);
-	static pair<T,T> selectThresholdOmp(const CuMatrix<T>& yValidation, const CuMatrix<T>& probabilityDensityValidation);
-	static T probabilityDensityFunction( const T* x, const T* mus, const T* sigmas, uint n);
-	static T p( const T* x, const T* mus, const T* sigmas, uint n);
+	static pair<T,T> selectThreshold(const CuMatrix<T>& yValidation, const CuMatrix<T>& probabilityDensityValidation, int steps= 1000);
+	static pair<T,T> selectThresholdOmp(const CuMatrix<T>& yValidation, const CuMatrix<T>& probabilityDensityValidation, int steps= 1000);
+	static T probabilityDensityFunction( const T* x, const T* mus, const T* sigmas, int n);
+	static T p( const T* x, const T* mus, const T* sigmas, int n);
 	static void multivariateProbDensity( CuMatrix<T>& ret, const CuMatrix<T>& x, const CuMatrix<T>&  means, const CuMatrix<T>&  sqrdSigmas);
 	static CuMatrix<T>  multivariateProbDensity( const CuMatrix<T>& x, const CuMatrix<T>&  means, const CuMatrix<T>&  sqrdSigmas);
 	static void multivariateProbDensity2( CuMatrix<T>& ret, const CuMatrix<T>& x, const CuMatrix<T>&  means, const CuMatrix<T>&  sqrdSigmas);
@@ -41,4 +39,3 @@ public:
 template <typename T> __global__ void selectThresholdKernel(T* bestEpsilon, T* bestF1, DMatrix<T> yValidation, DMatrix<T> probabilityDensityValidation, T pdvMin, T pdvMax);
 #endif
 
-#endif /* ANOMALY_DETECTION_H_ */

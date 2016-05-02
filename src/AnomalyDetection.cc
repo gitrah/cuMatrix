@@ -10,7 +10,9 @@
 //  val twoPi = 2 * math.Pi
 #include <math.h>
 #include <utility>
+#ifdef CuMatrix_UseOmp
 #include <omp.h>
+#endif
 const double oneOverSqrt2Pi =  1. / sqrt(2. * Pi);
 const double twoPi= 2 * Pi;
 
@@ -20,50 +22,60 @@ template void AnomalyDetection<float>::fitGaussians( CuMatrix<float>& means, CuM
 template void AnomalyDetection<double>::fitGaussians( CuMatrix<double>& means, CuMatrix<double>& sqrdSigmas, const CuMatrix<double>& x);
 template <typename T> void AnomalyDetection<T>::fitGaussians( CuMatrix<T>& means, CuMatrix<T>& sqrdSigmas, const CuMatrix<T>& x) {
 	if(means.n != x.n) {
-		if( means.d_elements) {
+		if( means.tiler.hasDmemQ()) {
 			outln("means matrix is wrong sized ");
 			dthrow( matricesOfIncompatibleShape());
 		}else {
 			means.n = means.p = x.n;
 			means.m = 1;
 			means.updateSize();
-			means.allocDevice();
+			means.tiler.reset(means);
+			means.tiler.allocTiles();
+			means.getMgr().addTiles(&means.tiler);
 		}
 	}
+	cherr(cudaPeekAtLastError());
 	if(sqrdSigmas.m != x.n) {
-		if( sqrdSigmas.d_elements) {
+		if( sqrdSigmas.tiler.hasDmemQ()) {
 			outln("sqrdSigmas matrix is wrong sized ");
 			dthrow(matricesOfIncompatibleShape());
 		}else {
 			sqrdSigmas.m =  x.n;
 			sqrdSigmas.n = sqrdSigmas.p = 1;
 			sqrdSigmas.updateSize();
-			sqrdSigmas.allocDevice();
+			sqrdSigmas.tiler.reset(sqrdSigmas);
+			sqrdSigmas.tiler.allocTiles();
+			sqrdSigmas.getMgr().addTiles(&sqrdSigmas.tiler);
 		}
 	}
 	if(checkDebug(debugAnomDet))outln("ad.fitGaussians " << sqrdSigmas.toShortString());
+	cherr(cudaPeekAtLastError());
 	x.fitGaussians(sqrdSigmas, means);
+	cherr(cudaPeekAtLastError());
 }
 
-template  pair<ulong,ulong>  AnomalyDetection<ulong>::selectThreshold( const CuMatrix<ulong>& yValidation, const CuMatrix<ulong>& probabilityDensityValidation);
-template  pair<float,float>  AnomalyDetection<float>::selectThreshold( const CuMatrix<float>& yValidation, const CuMatrix<float>& probabilityDensityValidation);
-template  pair<double,double>  AnomalyDetection<double>::selectThreshold( const CuMatrix<double>& yValidation, const CuMatrix<double>& probabilityDensityValidation);
-template <typename T> pair<T,T>  AnomalyDetection<T>::selectThreshold(const CuMatrix<T>& yValidation, const CuMatrix<T>& probabilityDensityValidation) {
+template  pair<ulong,ulong>  AnomalyDetection<ulong>::selectThreshold( const CuMatrix<ulong>& yValidation, const CuMatrix<ulong>& probabilityDensityValidation, int);
+template  pair<float,float>  AnomalyDetection<float>::selectThreshold( const CuMatrix<float>& yValidation, const CuMatrix<float>& probabilityDensityValidation, int);
+template  pair<double,double>  AnomalyDetection<double>::selectThreshold( const CuMatrix<double>& yValidation, const CuMatrix<double>& probabilityDensityValidation, int);
+template <typename T> pair<T,T>  AnomalyDetection<T>::selectThreshold(const CuMatrix<T>& yValidation, const CuMatrix<T>& probabilityDensityValidation, int steps) {
+	prlocf("enter\n");
 	T bestEpsilon = 0, bestF1 = 0, f1 = 0;
 	uint truePos = yValidation.sum();
 	if(checkDebug(debugAnomDet))outln("yValidation truePos " << truePos);
 	if(checkDebug(debugAnomDet))outln("yValidation " << yValidation.toShortString());
 	if(checkDebug(debugAnomDet))outln("probabilityDensityValidation " << probabilityDensityValidation.toShortString());
-	uint falsePos = 0, falseNeg = 0;
+	uint falsePos = 0, falseNeg = 0,trueNeg = 0;
 	T precision, recall;
 	pair<T,T> prBounds = probabilityDensityValidation.bounds();
 	if(checkDebug(debugAnomDet))outln("prBounds " << pp(prBounds));
-	T stepSize = (prBounds.second - prBounds.first)/1000.0;
+	T stepSize = (prBounds.second - prBounds.first)/ (1.0 * steps);
 	for(T epsilon = prBounds.first + stepSize; epsilon <= prBounds.second; epsilon += stepSize) {
 		CuMatrix<T> cvPredictions = probabilityDensityValidation < epsilon;
 		truePos = (  (cvPredictions == 1.0) && (yValidation == 1)).sum();
 		falsePos = (  (cvPredictions == 1.0) && (yValidation == 0)).sum();
 		falseNeg = (  (cvPredictions == 0.0) && (yValidation == 1)).sum();
+		trueNeg = (  (cvPredictions == 0.0) && (yValidation == 0)).sum();
+		if(checkDebug(debugAnomDet | debugVerbose))outln("total " << (truePos+falsePos+falseNeg+trueNeg));
 		precision = 1.0 * truePos / (truePos + falsePos);
 		recall = 1.0 * truePos / (truePos + falseNeg);
 		f1 = 2 * precision * recall / (precision + recall );
@@ -78,12 +90,15 @@ template <typename T> pair<T,T>  AnomalyDetection<T>::selectThreshold(const CuMa
 	return pair<T,T>(bestEpsilon, bestF1);
 }
 
-template  pair<ulong,ulong>  AnomalyDetection<ulong>::selectThresholdOmp( const CuMatrix<ulong>& yValidation, const CuMatrix<ulong>& probabilityDensityValidation);
-template  pair<float,float>  AnomalyDetection<float>::selectThresholdOmp( const CuMatrix<float>& yValidation, const CuMatrix<float>& probabilityDensityValidation);
-template  pair<double,double>  AnomalyDetection<double>::selectThresholdOmp( const CuMatrix<double>& yValidation, const CuMatrix<double>& probabilityDensityValidation);
-template <typename T> pair<T,T>  AnomalyDetection<T>::selectThresholdOmp(const CuMatrix<T>& yValidation, const CuMatrix<T>& probabilityDensityValidation) {
+template  pair<ulong,ulong>  AnomalyDetection<ulong>::selectThresholdOmp( const CuMatrix<ulong>& yValidation, const CuMatrix<ulong>& probabilityDensityValidation, int);
+template  pair<float,float>  AnomalyDetection<float>::selectThresholdOmp( const CuMatrix<float>& yValidation, const CuMatrix<float>& probabilityDensityValidation, int);
+template  pair<double,double>  AnomalyDetection<double>::selectThresholdOmp( const CuMatrix<double>& yValidation, const CuMatrix<double>& probabilityDensityValidation, int);
+template <typename T> pair<T,T>  AnomalyDetection<T>::selectThresholdOmp(const CuMatrix<T>& yValidation, const CuMatrix<T>& probabilityDensityValidation, int steps) {
     int num_gpus = 0;   // number of CUDA GPUs
-    T bestEpsilon = 0, bestF1 = 0, f1 = 0;
+
+    T bestEpsilon = util<T>::maxValue();
+    T bestF1 = util<T>::minValue();
+    T f1 = 0;
 	uint truePos = yValidation.sum();
 	checkCudaErrors(cudaGetDeviceCount(&num_gpus));
 	if(checkDebug(debugAnomDet))outln("yValidation truePos " << truePos);
@@ -93,25 +108,27 @@ template <typename T> pair<T,T>  AnomalyDetection<T>::selectThresholdOmp(const C
 	T precision, recall;
 	pair<T,T> prBounds = probabilityDensityValidation.bounds();
     outln("prBounds " << pp(prBounds));
-	T stepSize = (prBounds.second - prBounds.first)/1000.0;
-	outln("stepSize " << stepSize);
+	T stepSize = (prBounds.second - prBounds.first)/ (1.0 * steps);
+	outln("stepSize  " << stepSize);
+
     uint step = 0;
     uint tid;
     T epsilon = prBounds.first;
     uint nthreads=0;
     int dev = ExecCaps::currDev();
-#pragma omp parallel private(tid, epsilon, step, nthreads)
+#ifdef CuMatrix_UseOmp
+#pragma omp parallel private(tid, epsilon, step, nthreads) num_threads(4)
     {
-		tid = omp_get_thread_num();
+		tid = omp_get_thread_num() + 1;
 		nthreads = omp_get_num_threads();
 		if(checkDebug(debugAnomDet))printf("tid %d of %d\n", tid, nthreads);
 		epsilon = prBounds.first + tid * stepSize;
 		if(ExecCaps::currDev() != dev) {
 			flprintf("thread %d lost current device %d, restoring...\n", tid,dev);
-			checkCudaError(cudaSetDevice(dev));
+			ExecCaps_setDevice(dev);
 		}
 		while(epsilon <= prBounds.second) {
-			if(checkDebug(debugAnomDet))printf("thread %d step %d from epsilon %f\n", tid, step, epsilon);
+			if(checkDebug(debugAnomDet))printf("thread %d step %d from epsilon %f\n", tid, step, (double)epsilon);
 			CuMatrix<T> cvPredictions = probabilityDensityValidation < epsilon;
 			truePos = (  (cvPredictions == 1.0) && (yValidation == 1)).sum();
 			falsePos = (  (cvPredictions == 1.0) && (yValidation == 0)).sum();
@@ -122,15 +139,23 @@ template <typename T> pair<T,T>  AnomalyDetection<T>::selectThresholdOmp(const C
 			if(checkDebug(debugAnomDet | debugVerbose))outln("thread " << tid << " for eps " << epsilon );
 			if(checkDebug(debugAnomDet| debugVerbose))outln("\tgot truePos "<< truePos << ", falsePos " << falsePos << ", falseNeg " << falseNeg);
 			if(checkDebug(debugAnomDet| debugVerbose))outln("\tgot precision "<< precision << ", recall " << recall << ", f1 " << f1);
-			if(f1 > bestF1) {
-				bestF1 = f1;
-				bestEpsilon = epsilon;
+			{
+				if(f1 >= bestF1) {
+					if(f1 > bestF1) flprintf("found new bestF1 %g\n",(double)bestF1);
+
+					bestF1 = f1;
+					if(epsilon < bestEpsilon ) {
+						bestEpsilon = epsilon;
+						flprintf("found new bestEpsilon %g\n",(double)bestEpsilon);
+					}
+				}
 			}
 			step++;
 			epsilon = prBounds.first + (step * nthreads + tid ) * stepSize;
 		}
     }
-	return pair<T,T>(bestEpsilon, bestF1);
+#endif
+    return pair<T,T>(bestEpsilon, bestF1);
 }
 
 /*
@@ -150,12 +175,12 @@ template <typename T> CuMatrix<T> AnomalyDetection<T>::multivariateGaussian(cons
   *         j=1   √(2Piσ^2)           2σ^2
   */
 
-template ulong AnomalyDetection<ulong>::probabilityDensityFunction( const ulong* x, const ulong* mus, const ulong* sigmas, uint n);
-template float AnomalyDetection<float>::probabilityDensityFunction( const float* x, const float* mus, const float* sigmas, uint n);
-template double AnomalyDetection<double>::probabilityDensityFunction( const double* x, const double* mus, const double* sigmas, uint n);
-template <typename T> T AnomalyDetection<T>::probabilityDensityFunction( const T* x, const T* mus, const T* sigmas, uint n) {
+template ulong AnomalyDetection<ulong>::probabilityDensityFunction( const ulong* x, const ulong* mus, const ulong* sigmas, int n);
+template float AnomalyDetection<float>::probabilityDensityFunction( const float* x, const float* mus, const float* sigmas, int n);
+template double AnomalyDetection<double>::probabilityDensityFunction( const double* x, const double* mus, const double* sigmas, int n);
+template <typename T> T AnomalyDetection<T>::probabilityDensityFunction( const T* x, const T* mus, const T* sigmas, int n) {
   T pc = static_cast<T>( 1);
-  unsigned int i = 0;
+  int i = 0;
   T dist = 0;
   T sigma = 0;
   while (i < n) {
@@ -167,7 +192,7 @@ template <typename T> T AnomalyDetection<T>::probabilityDensityFunction( const T
   return (pc);
 }
 
-template <typename T> T AnomalyDetection<T>::p( const T* x, const T* mus, const T* sigmas, uint n) {
+template <typename T> T AnomalyDetection<T>::p( const T* x, const T* mus, const T* sigmas, int n) {
 	return probabilityDensityFunction(x, mus, sigmas,n);
 }
 
@@ -186,7 +211,7 @@ template <typename T> void AnomalyDetection<T>::multivariateProbDensity( CuMatri
   if(checkDebug(debugAnomDet))
 	  outln("sigmas " << sigmas);
 
-  uint n = means.n;
+  int n = means.n;
   CuMatrix<T> xMinusMu = x.subMeans(means);
   if(checkDebug(debugAnomDet))outln("xMinusMu " << xMinusMu.syncBuffers());
 
@@ -240,7 +265,7 @@ template <typename T> void AnomalyDetection<T>::multivariateProbDensity2( CuMatr
 	if (checkDebug(debugAnomDet))
 		outln("sigmas " << sigmas);
 
-	uint n = means.n;
+	int n = means.n;
 	CuMatrix<T> xMinusMu = x.subMeans(means);
 	if (checkDebug(debugAnomDet))
 		outln("xMinusMu " << xMinusMu.syncBuffers());
@@ -301,8 +326,8 @@ template <typename T> CuMatrix<T>  AnomalyDetection<T>::multivariateProbDensity2
 
 
 template <typename T> CuMatrix<T> AnomalyDetection<T>::sigma(CuMatrix<T> x, T* mus){
-  uint m = x.m;
-  uint n = x.n;
+  int m = x.m;
+  int n = x.n;
   CuMatrix<T> sigma = CuMatrix<T>::zeros(n, n);
   uint i = 0;
   CuMatrix<T> mat =  CuMatrix<T>::zeros(n, 1);

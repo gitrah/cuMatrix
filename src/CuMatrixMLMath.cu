@@ -22,7 +22,7 @@
  */
 template<typename T> __global__ void multivariateGaussianFeaturesKernel(
 		DMatrix<T> d_pdens, const DMatrix<T> d_x, const DMatrix<T> d_sigmaSquared, const DMatrix<T> d_mu) {
-	uint col = blockIdx.x * blockDim.x + threadIdx.x; // index into column
+	int col = blockIdx.x * blockDim.x + threadIdx.x; // index into column
 	uint rowStart = blockIdx.y * blockDim.x + threadIdx.y; //
 	uint rowsRemaining = MIN(d_x.m - rowStart, blockDim.x);
 	uint xRowOff,pdensRowOff;
@@ -47,9 +47,7 @@ template<typename T>  void CuMatrix<T>::multivariateGaussianFeatures( DMatrix<T>
 	outln("multivariateGaussianFeatures on d_x " << util<T>::pdm(d_x) );
 	outln("multivariateGaussianFeatures with grid " << b_util::pd3(grid) << " block " << b_util::pd3(block));
 	//outln("rows " << d_x.m);
-	if(checkDebug(syncHappy))cherr(cudaPeekAtLastError());
 	multivariateGaussianFeaturesKernel<<<grid,block,0>>>(d_pden, d_x, d_sqrdSigmas, d_mu);
-	if(checkDebug(syncHappy))cherr(cudaDeviceSynchronize());
 }
 
 
@@ -59,8 +57,8 @@ template<typename T>  void CuMatrix<T>::multivariateGaussianFeatures( DMatrix<T>
  */
 template<typename T> __global__ void mvGaussianVectorFromFeaturesKernel(
 		DMatrix<T> d_pvec, const DMatrix<T> d_pdens) {
-	uint col = blockIdx.x * blockDim.x + threadIdx.x; // index into column
-	uint row = blockIdx.y * blockDim.y + threadIdx.y; //
+	int col = blockIdx.x * blockDim.x + threadIdx.x; // index into column
+	int row = blockIdx.y * blockDim.y + threadIdx.y; //
 	uint tileIdx = threadIdx.x + threadIdx.y * blockDim.x;
 	// load smem
 	T* tile = SharedMemory<T>();
@@ -96,9 +94,7 @@ template<typename T>  void CuMatrix<T>::mvGaussianVectorFromFeatures( DMatrix<T>
 	dim3 grid(1, DIV_UP(d_pdens.m,block.y));
 	outln("mvGaussianVectorFromFeatures with grid " << b_util::pd3(grid) << " block " << b_util::pd3(block) << ", smem " << smem);
 	//outln("rows " << d_x.m);
-	if(checkDebug(syncHappy))cherr(cudaPeekAtLastError());
 	mvGaussianVectorFromFeaturesKernel<<<grid,block,smem>>>(d_pvec, d_pdens);
-	if(checkDebug(syncHappy))cherr(cudaDeviceSynchronize());
 }
 
 /*
@@ -110,8 +106,8 @@ template<typename T>  void CuMatrix<T>::mvGaussianVectorFromFeatures( DMatrix<T>
 
 template<typename T> __global__ void multivariateGaussianVectorKernel(
 		DMatrix<T> d_pvec, const DMatrix<T> d_x, const DMatrix<T> d_sigmaSquared, const DMatrix<T> d_mu) {
-	uint col = threadIdx.x; // index into column
-	uint row = blockIdx.y * blockDim.y + threadIdx.y; //
+	int col = threadIdx.x; // index into column
+	int row = blockIdx.y * blockDim.y + threadIdx.y; //
 	uint xRowOff;
 	uint tileIdx = threadIdx.x + threadIdx.y * blockDim.x;
 	T x_n, sigmaSquared_n, mu_n;
@@ -146,9 +142,9 @@ template<typename T>  void CuMatrix<T>::multivariateGaussianVector(  DMatrix<T>&
 
 
     cherr(cudaFuncGetAttributes(&funcAttrib, multivariateGaussianVectorKernel<T>));
-    printf("unmangled %s numRegs=%d\n", typeid( multivariateGaussianVectorKernel<T>).name(),funcAttrib.numRegs);
+ /*   printf("unmangled %s numRegs=%d\n", typeid( multivariateGaussianVectorKernel<T>).name(),funcAttrib.numRegs);
     printf("%s numRegs=%d\n", b_util::unmangl(typeid( multivariateGaussianVectorKernel<T>).name()).c_str(),funcAttrib.numRegs);
-
+*/
     do {
 		uint blockY = MIN( caps->thrdPerBlock/blockX, MIN(d_x.m, caps->maxTsPerBlock<T>()/blockX));
 		blockY = MIN(blockY, startRegisterHeadroomFactor * caps->regsPerBlock / (blockX * funcAttrib.numRegs));
@@ -178,13 +174,11 @@ template<typename T>  void CuMatrix<T>::multivariateGaussianVector(  DMatrix<T>&
 		outln("multivariateGaussianVector on d_x " << util<T>::pdm(d_x));
 		outln("multivariateGaussianVector with grid " << b_util::pd3(grid) << " of blocks " << b_util::pd3(block) << " with smem " << smem);
 		//outln("rows " << d_x.m);
-		if(checkDebug(syncHappy))cherr(cudaPeekAtLastError());
 		multivariateGaussianVectorKernel<<<grid,block,smem>>>(d_pvec, d_x, d_sqrdSigmas,d_mu);
 		err = cudaGetLastError();
 		startRegisterHeadroomFactor *= .99;
 		outln("err " << err << ", startFactor " << startRegisterHeadroomFactor);
     } while(err == cudaErrorLaunchOutOfResources);
-	//if(checkDebug(syncHappy))cherr(cudaDeviceSynchronize());
 }
 
 #include "CuMatrixInster.cu"

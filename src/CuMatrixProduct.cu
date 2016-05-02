@@ -55,8 +55,6 @@ template<typename T> __global__ void matrixProductBandwidthKernel(DMatrix<T> C,
 		const DMatrix<T> A, const DMatrix<T> B, int steps) {
 	// Shared memory used to store Asub and Bsub respectively
 	// Block row and column
-	int blockRow = blockIdx.y;
-	int blockCol = blockIdx.x;
 // Each thread block computes one sub-matrix Csub of C
 	//DMatrix<T> Csub = GetSubMatrix(C, blockRow, blockCol, blockDim);
 // Each thread computes one element of Csub
@@ -221,6 +219,7 @@ template<typename T> __global__ void matrixProductKernel2(DMatrix<T> C,
 		SetElement(Csub, row, col, Cvalue);
 }
 
+
 template<typename T> __global__ void matrixProductKernel3(DMatrix<T> C,
 		const DMatrix<T> A, const DMatrix<T> B, int steps) {
 	// Shared memory used to store Asub and Bsub respectively
@@ -271,6 +270,63 @@ template<typename T> __global__ void matrixProductKernel3(DMatrix<T> C,
 		}
 }
 
+template<typename T> __global__ void matrixProductKernel4(DMatrix<T> C,
+		const DMatrix<T> A, const DMatrix<T> B, int steps) {
+	// Shared memory used to store Asub and Bsub respectively
+	T* As = SharedMemory<T>();
+	T* Bs = As + blockDim.y * blockDim.x; // rows x cols, sized to traverse A and B in equal steps
+	// Block row and column
+	const int blockRow = blockIdx.y;
+	const int blockCol = blockIdx.x;
+	// Each thread block computes one sub-matrix Csub of C, one element of Csub per thread
+	// take steps of blockDim.x cols across row of A and steps of blockDim.y rows across col of B for each pair of strips that
+	// sum-of-products reduce to get each Cvalue
+	DMatrix<T> Csub = GetSubMatrix(C, blockRow, blockCol, blockDim);
+	T Cvalue = 0;
+	// Thread row and column within Csub (and shared mem matrices)
+	const int row = threadIdx.y;
+	const int col = threadIdx.x;
+	// locate Asub and Bsub at step 0 in their respective matrices
+	DMatrix<T> Asub(&A.elements[A.p * blockDim.y * blockRow], MIN(blockDim.y, A.m - blockRow * blockDim.y),0,A.p);
+	DMatrix<T> Bsub(&B.elements[blockDim.x * blockCol], 0, MIN(blockDim.x, B.n - blockCol * blockDim.x), B.p);
+	const int bStepDelta = B.p * blockDim.y;
+	// index into smem copies of Asub and Bsub; each same per thread
+	const int asOff = row * blockDim.y;
+	const int smemIdx = asOff + col;
+	const int aOff = row * A.p + col;
+	const int bOff = row * B.p + col;
+	int asubN = A.n;
+	int bsubM = B.m;
+		for (int m = 0; m < steps; ++m) {
+			// Get sub-matrices Asub and Bsub, checking boundaries
+			Asub.n = MIN(blockDim.x, asubN );
+			Bsub.m = MIN(blockDim.y, bsubM);
+			// populate smem copies
+			As[smemIdx] =  (row < Asub.m && col < Asub.n)? Asub.elements[aOff] : 0;
+			//As[smemIdx] = Asub.elements[aOff];
+			Bs[smemIdx] =  (row < Bsub.m && col < Bsub.n)? Bsub.elements[bOff] : 0;
+			//Bs[smemIdx] =  Bsub.elements[bOff];
+			__syncthreads();
+			// accum step's worth of Cvalue
+			int  bsOff = col;
+			for (int e = 0; e < blockDim.x; ++e) {
+				Cvalue += As[asOff + e] * Bs[bsOff];
+				 bsOff += blockDim.y;
+			}
+
+			__syncthreads();
+			// move Asub and Bsub a block step
+			Asub.elements += blockDim.x;
+			Bsub.elements += bStepDelta;
+			asubN -= blockDim.x;
+			bsubM -= blockDim.y;
+		}
+		// Write Csub to device memory
+		// Each thread writes one element
+		if(col < Csub.n && row < Csub.m) {
+			SetElement(Csub, row, col, Cvalue);
+		}
+}
 
 template<typename T> cudaError_t CuMatrix<T>::matrixProductL2(DMatrix<T>& d_res,
 		const DMatrix<T>& d_A, const DMatrix<T>& d_B, dim3* block) {
@@ -283,8 +339,6 @@ template<typename T> cudaError_t CuMatrix<T>::matrixProductL2(DMatrix<T>& d_res,
 	if(d_res.n != d_B.n) {
 		dthrow(columnDimsDisagree());
 	}
-	if (syncHappy)
-		checkCudaError(cudaDeviceSynchronize());
 	if (debugMatProd && block)
 		outln("blockSize " << b_util::pd3(*block));
 	// block dim (bases?) should be warp-divisible
@@ -308,7 +362,7 @@ template<typename T> cudaError_t CuMatrix<T>::matrixProductL2(DMatrix<T>& d_res,
 	if (debugMatProd)
 		outln( "launching matPrdKrnl resultGrid "<< b_util::pd3(resultGrid) << ", block " << b_util::pd3(*block) << ", smem " << smem);
 	matrixProductKernel2<<<resultGrid, *block, smem>>>(d_res, d_A, d_B , stepsPerResultBlock);
-	cudaError_t ret = syncHappy ? cudaDeviceSynchronize() : cudaSuccess;
+	cudaError_t ret =  cudaDeviceSynchronize();
 	checkCudaError(ret);
 	return ret;
 }
@@ -323,8 +377,6 @@ template<typename T> cudaError_t CuMatrix<T>::matrixProductL3(DMatrix<T>& d_res,
 	if(d_res.n != d_B.n) {
 		dthrow(columnDimsDisagree());
 	}
-	if (syncHappy)
-		checkCudaError(cudaDeviceSynchronize());
 	if (checkDebug(debugMatProd) && block)
 		outln("blockSize " << b_util::pd3(*block));
 	// block dim (bases?) should be warp-divisible
@@ -347,9 +399,12 @@ template<typename T> cudaError_t CuMatrix<T>::matrixProductL3(DMatrix<T>& d_res,
 	}
 	if (debugMatProd)
 		outln( "launching matPrdKrnl resultGrid "<< b_util::pd3(resultGrid) << ", block " << b_util::pd3(*block) << ", smem " << smem);
-	matrixProductKernel3<<<resultGrid, *block, smem>>>(d_res, d_A, d_B , stepsPerResultBlock);
+
+	matrixProductKernel4<<<resultGrid, *block, smem>>>(d_res, d_A, d_B , stepsPerResultBlock);
+	// for the side effect of genearting the
+	if(1==3) matrixProductKernel3<<<resultGrid, *block, smem>>>(d_res, d_A, d_B , stepsPerResultBlock);
 	if(1 == 2) matrixProductBandwidthKernel<<<resultGrid, *block, smem>>>(d_res, d_A, d_B , stepsPerResultBlock);
-	cudaError_t ret = syncHappy ? cudaDeviceSynchronize() : cudaSuccess;
+	cudaError_t ret =  cudaDeviceSynchronize();
 	checkCudaError(ret);
 	return ret;
 }
@@ -505,8 +560,6 @@ template<typename T> cudaError_t CuMatrix<T>::matrixProductTxdbL(DMatrix<T>& d_r
 	if(d_res.n != d_B.m) {
 		dthrow(columnDimsDisagree());
 	}
-	if (syncHappy)
-		checkCudaError(cudaDeviceSynchronize());
 	if (debugMatProd && block)
 		outln("blockSize " << b_util::pd3(*block));
 	// block dim (bases?) should be warp-divisible
@@ -534,7 +587,7 @@ template<typename T> cudaError_t CuMatrix<T>::matrixProductTxdbL(DMatrix<T>& d_r
 		outln("launching matPrdKrnl resultGrid "<< b_util::pd3(resultGrid) << ", block " << b_util::pd3(*block) << ", smem " << smem);
 	matrixProductKernelTxdB<<<resultGrid, *block, smem>>>(d_res, d_A, d_B , steps);
 
-	cudaError_t ret = syncHappy ? cudaDeviceSynchronize() : cudaSuccess;
+	cudaError_t ret = cudaDeviceSynchronize();
 	checkCudaError(ret);
 	return ret;
 }
@@ -547,8 +600,6 @@ template<typename T> cudaError_t CuMatrix<T>::matrixProductReduxL(DMatrix<T>& d_
 	if(notImpld)
 		dthrow(notImplemented());
 
-	if (syncHappy)
-		checkCudaError(cudaDeviceSynchronize());
 	if (debugMatProd && block)
 		outln("blockSize " << b_util::pd3(*block));
 	// block dim (bases?) should be warp-divisible
@@ -615,7 +666,7 @@ template<typename T> cudaError_t CuMatrix<T>::matrixProductReduxL(DMatrix<T>& d_
 	if(a == 3) matrixProductKernelTxdB2<<<dimGrid, *block, smem>>>(d_res, d_A, d_B , steps);
 //	if(a == 3) matrixProductReductionTxdBKernel<<<dimGrid, *block, smem>>>(d_res, d_A, d_B , steps);
 
-	cudaError_t ret = syncHappy ? cudaDeviceSynchronize() : cudaSuccess;
+	cudaError_t ret =  cudaDeviceSynchronize() ;
 	checkCudaError(ret);
 	return ret;
 }

@@ -12,7 +12,8 @@
 #include "Drawable.h"
 #include "Steppable.h"
 
-using namespace std;
+using std::string;
+
 template<typename T> class Text : public Drawable<T> , public Steppable<T> {
 	char* text;
 	T scaleU;

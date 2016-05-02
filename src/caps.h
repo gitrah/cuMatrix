@@ -5,15 +5,19 @@
  *      Author: reid
  */
 
-#ifndef CAPS_H_
-#define CAPS_H_
+#pragma once
+
 #include <cuda_runtime_api.h>
 #include <string>
 #include "util.h"
 
+// needs to be more cfgbl? cmdline arg? prop file?
+// more mutable?  glovar?
+
 #define MAX_GPUS 	10
+#define  DEFAULT_GMEM_HEADROOM_FACTOR  (0.25f)
 enum DataTypes {
-	dtFloat, dtDouble, dtUlong, dtUint, dtInt, dtLast
+	dtFloat, dtDouble, dtLong,dtUlong, dtInt, dtUint, dtLast
 };
 
 template <typename T> int getTypeEnum();
@@ -21,6 +25,10 @@ template <typename T> const char* getTypeName();
 #define MAX_TYPES 	10
 
 #define FirstThread  if(threadIdx.x == 0 && blockIdx.x == 0 && threadIdx.y == 0 && blockIdx.y == 0 && threadIdx.z == 0 && blockIdx.z == 0)
+
+#define ExecCaps_setDevice( val) ExecCaps::setDevice(__FILE__, __func__, __LINE__, val)
+#define ExecCaps_visitDevice( val) ExecCaps::visitDevice(__FILE__, __func__, __LINE__, val)
+#define ExecCaps_restoreDevice( val) ExecCaps::restoreDevice(__FILE__, __func__, __LINE__, val)
 extern int MaxThreads;
 extern __device__ int d_MaxThreads;
 extern int MaxBlocks;
@@ -74,27 +82,44 @@ struct ExecCaps {
 #endif
 		}
 		__host__ __device__ ~ExecCaps();
+		__host__ __device__ void printMaxDims(const char* msg=0);
+		__host__ __device__ bool okGrid(const dim3& grid) { return maxGrid.x >= grid.x && maxGrid.y >= grid.y && maxGrid.z >= grid.z;}
+		__host__ __device__ bool okBlock(const dim3& block) { return maxBlock.x >= block.x && maxBlock.y >= block.y && maxBlock.z >= block.z;}
+		__host__ __device__ size_t maxReasonable(float headroom = DEFAULT_GMEM_HEADROOM_FACTOR) { return deviceProp.totalGlobalMem * headroom;}
 
 		template <typename T> __host__ __device__ uint maxTsPerBlock() {
 			return memSharedPerBlock/sizeof(T);
 		}
 		static void getExecCaps(ExecCaps& execCaps, int dev = 0);
 
-		static int currDev();
-		static cudaError_t setDevice(int dev);
-		static __host__ void findDevCaps();
+		static __host__ __device__ int currDev();
+		static __host__ __device__ int setDevice( const char* file, const char* func, int line, int dev); 	   //
+		static __host__ __device__ int visitDevice( const char* file, const char* func, int line, int dev);   // all return original device
+		static __host__ __device__ int restoreDevice( const char* file, const char* func, int line, int dev);//
+
+		static cudaError_t addDevice(int dev);
+		static __host__ void initDevCaps();
 		static __host__ void freeDevCaps();
-		static __host__ __device__ cudaError_t currCaps(ExecCaps** caps, int dev = 0);
-		static __host__ __device__ ExecCaps* currCaps(int dev = 0);
+		static __host__ __device__ cudaError_t currCaps(ExecCaps** caps, int dev = currDev());
+		static __host__ __device__ ExecCaps* currCaps(int dev = currDev());
 		static __host__ __device__ int maxThreads();
 		static __host__ __device__ int maxBlocks();
 
+		static __host__ void allGpuMem(size_t* free, size_t* total);
+		// the smallest largest reasonable buffer (eg 10% of globmem of card with smallest mem).
+		static __host__ __device__ size_t minMaxReasonable(int gpuMask, float headroom = DEFAULT_GMEM_HEADROOM_FACTOR);
 	//	static __host__ void initStreamRefs();
 	//	static __host__ void addStream(const ExecCaps& execCaps);
 	//	static __host__ void releaseStream(ExecCaps& execCaps);
 		//static ulong streams[MAX_GPUS];
 		//static int refCount[MAX_GPUS];
-
+private:
+		static int deviceCounter;
+public:
+		static int deviceCount;
+		static int nextDevice() {
+			return deviceCounter++ % deviceCount;
+		}
 };
 
 template <typename T> inline __host__ __device__ uint maxH(const ExecCaps& ecaps, uint specW, bool usingSmem = false) {
@@ -108,14 +133,13 @@ template <typename T> inline __host__ __device__ uint maxH(const ExecCaps& ecaps
 		}
 }
 
- __host__ __device__ void getReductionExecContext(uint &blocks, uint &threads, ulong nP,
+ __host__ __device__ void getReductionExecContext(int &blocks, int &threads, long nP,
 		int maxBlocks = ExecCaps::maxBlocks(), int maxThreads = ExecCaps::maxThreads());
 
 __global__ void createCapsPPtr(int devCount);
 __global__ void addCaps(int dev, ExecCaps caps);
 
 //extern map<int, ExecCaps*> g_devCaps;
-extern int g_devCount;
 //extern __constant__ int gd_devCount;
 
 extern ExecCaps** g_devCaps;
@@ -130,10 +154,3 @@ struct KernelCaps {
 
 		static KernelCaps forArray(ExecCaps & caps, dim3& array);
 };
-
-
-//////////////////////////////////
-
-
-
-#endif /* CAPS_H_ */

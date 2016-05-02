@@ -4,8 +4,7 @@
  *  Created on: Oct 10, 2013
  *      Author: reid
  */
-#ifndef CUDEFS_H_
-#define CUDEFS_H_
+#pragma once
 
 #include <curand_kernel.h>
 #include <cuda_runtime_api.h>
@@ -22,6 +21,12 @@
     #define MAYBE_UNUSED
 #else
     #define MAYBE_UNUSED
+#endif
+
+#ifdef __CUDA_ARCH__
+	#ifndef nullptr
+		#define nullptr NULL
+	#endif
 #endif
 
 #define null NULL
@@ -78,7 +83,6 @@ template<typename T, int StateDim> __global__ void shuffle(T* res, const T* a, u
 #endif
 #define Pi 3.141592653589793
 #define OneOverSqrt2Pi 2.5066282746310002
-
 #ifndef PRINT_BINARY_BUFF_LEN
 	#define PRINT_BINARY_BUFF_LEN  32
 #endif
@@ -86,4 +90,3 @@ template<typename T, int StateDim> __global__ void shuffle(T* res, const T* a, u
 __host__ __device__ void bprintBinary(char buff_33char[33], uint v);
 
 
-#endif /* CUDEFS_H_ */

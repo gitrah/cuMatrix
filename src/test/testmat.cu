@@ -77,9 +77,10 @@ __global__ void freePpCaps() {
 #endif
 }
 
-template int testRecCuMatAddition<float>::operator()(int argc, char const ** args) const;
-template int testRecCuMatAddition<double>::operator()(int argc, char const ** args) const;
-template <typename T> int testRecCuMatAddition<T>::operator()(int argc, const char** args) const {
+template int testRecCuMatAddition<float>::operator()(int argc, const char **argv) const;
+template int testRecCuMatAddition<double>::operator()(int argc, const char **argv) const;
+template int testRecCuMatAddition<ulong>::operator()(int argc, const char **argv) const;
+template <typename T> int testRecCuMatAddition<T>::operator()(int argc, const char **argv) const {
 
 	const char* b1= "hell";
 	const char* b2 = "ouch";
@@ -122,9 +123,10 @@ template <typename T> int testRecCuMatAddition<T>::operator()(int argc, const ch
 	return 0;
 }
 
-template int testCdpSum<float>::operator()(int argc, char const ** args) const;
-template int testCdpSum<double>::operator()(int argc, char const ** args) const;
-template <typename T> int testCdpSum<T>::operator()(int argc, const char** args) const {
+template int testCdpSum<float>::operator()(int argc, const char **argv) const;
+template int testCdpSum<double>::operator()(int argc, const char **argv) const;
+template int testCdpSum<ulong>::operator()(int argc, const char **argv) const;
+template <typename T> int testCdpSum<T>::operator()(int argc, const char **argv) const {
 	CuMatrix<T> m = CuMatrix<T>::ones(5000,1000);
 	T sum = m.sum();
 	outln("m.sum " << sum);
@@ -139,7 +141,7 @@ template <typename T> int testCdpSum<T>::operator()(int argc, const char** args)
 
 	assert(sum2 == sum);
 
-	int count = b_util::getCount(argc,args,500);
+	int count = b_util::getCount(argc,argv,500);
 
 	return 0;
 }
@@ -175,7 +177,9 @@ float slepstr() {
 template<typename T> float sigmoidstr(DMatrix<T>& trg1, DMatrix<T>& trg2, const DMatrix<T>& src1, const DMatrix<T>& src2) {
 	cudaStream_t stream[2];
 	for(int i = 0; i < 2; i++) {
+		outln("creating stream " << i);
 		checkCudaErrors(cudaStreamCreate(&stream[i]));
+		outln("created stream " << i);
 	}
 	CuTimer watch;
 
@@ -189,8 +193,8 @@ template<typename T> float sigmoidstr(DMatrix<T>& trg1, DMatrix<T>& trg2, const 
 */
     watch.start();
 
-    unaryOpL(trg1, src1, sigmoidUnaryOp<T>(), stream[0]);
-    unaryOpL(trg2, src2, sigmoidUnaryOp<T>(), stream[1]);
+    unaryOpL(trg1, src1, Functory<T, sigmoidUnaryOp>::pinch(), stream[0]);
+    unaryOpL(trg2, src2, Functory<T, sigmoidUnaryOp>::pinch(), stream[1]);
 
 /*
     checkCudaErrors(cudaEventRecord(stop_event, 0));
@@ -218,15 +222,16 @@ template<typename T> float sigmoiddbl(DMatrix<T>& trg1, DMatrix<T>& trg2, const 
 	CuTimer watch;
 
     watch.start();
-    unaryOpL(trg1, src1, sigmoidUnaryOp<T>());
-    unaryOpL(trg2, src2, sigmoidUnaryOp<T>());
+    unaryOpL(trg1, src1, Functory<T, sigmoidUnaryOp>::pinch());
+    unaryOpL(trg2, src2, Functory<T, sigmoidUnaryOp>::pinch());
     return watch.stop();
 }
 
-template int testStrmOrNot<float>::operator()(int argc, char const ** args) const;
-template int testStrmOrNot<double>::operator()(int argc, char const ** args) const;
-template <typename T> int testStrmOrNot<T>::operator()(int argc, const char** args) const {
-	int count = b_util::getCount(argc,args,500);
+template int testStrmOrNot<float>::operator()(int argc, const char **argv) const;
+template int testStrmOrNot<double>::operator()(int argc, const char **argv) const;
+template int testStrmOrNot<ulong>::operator()(int argc, const char **argv) const;
+template <typename T> int testStrmOrNot<T>::operator()(int argc, const char **argv) const {
+	int count = b_util::getCount(argc,argv,500);
 	checkCudaError(cudaGetLastError());
     CuTimer timer;
     float exeTime,exeTime2;
@@ -281,12 +286,21 @@ template <typename T> int testStrmOrNot<T>::operator()(int argc, const char** ar
 	return 0;
 }
 
-template int testBounds<float>::operator()(int argc, char const ** args) const;
-template int testBounds<double>::operator()(int argc, char const ** args) const;
-template <typename T> int testBounds<T>::operator()(int argc, const char** args) const {
-	int count = b_util::getCount(argc,args,10);
+template int testBounds<float>::operator()(int argc, const char **argv) const;
+template int testBounds<double>::operator()(int argc, const char **argv) const;
+template int testBounds<ulong>::operator()(int argc, const char **argv) const;
+template <typename T> int testBounds<T>::operator()(int argc, const char **argv) const {
+	int count = b_util::getCount(argc,argv,3);
 	checkCudaError(cudaGetLastError());
 	CuMatrix<T> seq = -1 * CuMatrix<T>::sequence(-5, 5000, 5000);
+
+	pair<T,T> bnds = seq.bounds();
+	outln("bnds " << bnds.first << ", " << bnds.second);
+
+	T bmin,bmax;
+	seq.bounds(&bmin,&bmax);
+	outln("bmin " << bmin << ", bmax " << bmax);
+
 	CuMatrix<T> tiny = -1 * CuMatrix<T>::sequence(-5, 32, 32);
 	outln("seq " << seq.syncBuffers());
 	outln("tiny " << tiny.syncBuffers());
@@ -297,34 +311,38 @@ template <typename T> int testBounds<T>::operator()(int argc, const char** args)
     CuTimer timer;
     float boundsTime,sequentialMinMaxTime;
 
-	uint nP = seq.m * seq.n;
+	long nP = seq.m * seq.n;
 	uint tinyP= tiny.m * tiny.n;
 	outln("tinyP " << tinyP);
 	outln("nP " << nP);
 
-	uint threads;
-	uint blocks;
-	uint tthreads;
-	uint tblocks;
+	int threads;
+	int blocks;
+	int tthreads;
+	int tblocks;
 	getReductionExecContext(blocks, threads, nP);
 	getReductionExecContext(tblocks, tthreads, tinyP);
 	outln("testBounds reduce blocks " << blocks);
 	outln("testBounds reduce threads " << threads);
 	outln("testBounds reduce tblocks " << tblocks);
 	outln("testBounds reduce tthreads " << tthreads);
-	CuMatrix<T> minBuffer(blocks, 1, true, true);
+	CuMatrix<T> minBuffer = CuMatrix<T>::zeros(blocks, 1);
 	minBuffer.syncBuffers();
-	CuMatrix<T> maxBuffer(blocks, 1, true, true);
+	outln("minBuffer " << minBuffer);
+	CuMatrix<T> maxBuffer = CuMatrix<T>::zeros(blocks, 1);
 	maxBuffer.syncBuffers();
 
+
 	DMatrix<T> d_minBuffer;
-	minBuffer.asDmatrix(d_minBuffer, false);
+	minBuffer.tile0(d_minBuffer, false);
 	DMatrix<T> d_maxBuffer;
-	maxBuffer.asDmatrix(d_maxBuffer, false);
+	maxBuffer.tile0(d_maxBuffer, false);
+
+	outln("synced minBuffer/maxBufferf");
 	DMatrix<T> d_seq;
 	DMatrix<T> d_tiny;
-	seq.asDmatrix(d_seq, false);
-	tiny.asDmatrix(d_tiny, false);
+	seq.tile0(d_seq, false);
+	tiny.tile0(d_tiny, false);
 	maxBinaryOp<T> maxOp = Functory<T,maxBinaryOp>::pinch();
 	minBinaryOp<T> minOp = Functory<T,minBinaryOp>::pinch();
     timer.start();
@@ -375,11 +393,16 @@ template<typename T> T hostSum(const T* in, uint len){
 	return totl;
 }
 
-template int testLastError<float>::operator()(int argc, char const ** args) const;
-template int testLastError<double>::operator()(int argc, char const ** args) const;
-template <typename T> int testLastError<T>::operator()(int argc, const char** args) const {
+template int testLastError<float>::operator()(int argc, const char **argv) const;
+template int testLastError<double>::operator()(int argc, const char **argv) const;
+template int testLastError<ulong>::operator()(int argc, const char **argv) const;
+template <typename T> int testLastError<T>::operator()(int argc, const char **argv) const {
 	setCurrGpuDebugFlags( debugSpoofSetLastError,true,false);
 	testSetLastErrorKernel<<<1,1>>>(columnOutOfBoundsEx);
+	checkCudaErrors(cudaDeviceSynchronize());
+	outln("lastEx " << lastEx);
+	outln("getLastError() " << getLastError() << ", columnOutOfBoundsEx " << columnOutOfBoundsEx);
+	outln("getLastError()& columnOutOfBoundsEx " << (getLastError() & columnOutOfBoundsEx ));
 	assert(columnOutOfBoundsEx == getLastError());
 	return 0;
 }
@@ -405,9 +428,9 @@ __global__ void parent_launch(int *data) {
 void host_launch(int *data) {
 }
 
-template int testCdpSync1<float>::operator()(int argc, char const ** args) const;
-template int testCdpSync1<double>::operator()(int argc, char const ** args) const;
-template <typename T> int testCdpSync1<T>::operator()(int argc, const char** args) const {
+template int testCdpSync1<float>::operator()(int argc, const char **argv) const;
+template int testCdpSync1<double>::operator()(int argc, const char **argv) const;
+template <typename T> int testCdpSync1<T>::operator()(int argc, const char **argv) const {
 	int *data, *h_data;
 	int count = 256;
 	int size = count * sizeof(int);
@@ -420,34 +443,37 @@ template <typename T> int testCdpSync1<T>::operator()(int argc, const char** arg
 	return 0;
 }
 
-template int testCdpRedux<float>::operator()(int argc, char const ** args) const;
-template int testCdpRedux<double>::operator()(int argc, char const ** args) const;
-template <typename T> int testCdpRedux<T>::operator()(int argc, const char** args) const {
+template int testCdpRedux<float>::operator()(int argc, const char **argv) const;
+template int testCdpRedux<double>::operator()(int argc, const char **argv) const;
+template int testCdpRedux<ulong>::operator()(int argc, const char **argv) const;
+template <typename T> int testCdpRedux<T>::operator()(int argc, const char **argv) const {
 	CuMatrix<T> big1s=CuMatrix<T>::ones(5000,8000);
-	ulong nP = big1s.m * big1s.n;
+	long nP = big1s.m * big1s.n;
 	T *res, *hRes;
 	cudaMalloc(&res,  sizeof(T));
 	cudaMallocHost(&hRes,  sizeof(T));
 	plusBinaryOp<T> plusOp = Functory<T,plusBinaryOp>::pinch();
-	int count = b_util::getCount(argc,args,10);
+	int count = b_util::getCount(argc,argv,10);
 	CuTimer timer;
 
 	float exeTime, dexeTime;
 	timer.start();
 	T sum;
-	uint threads, blocks;
+	int threads, blocks;
 	getReductionExecContext(blocks,threads,nP);
 	outln("testCdpRedux nP " << nP << ", blocks " << blocks << ", threads " << threads);
 	CuMatrix<T>buffer = CuMatrix<T>::reductionBuffer(blocks);
-	DMatrix<T> buff = buffer.asDmatrix();
-	DMatrix<T>src = big1s.asDmatrix();
+	DMatrix<T> buff;
+	buffer.tile0(buff,false);
+	DMatrix<T>src;
+	big1s.tile0(src);
 	for(int i = 0; i < count; i++) {
 		reduceLauncher(&sum, buff, nP, src, plusOp, (T)0,1,0);
 	}
 	exeTime = timer.stop();
 	outln("sum " << sum);
 	timer.start();
-	//(T* result, DMatrix<T> buff, ulong nP, const DMatrix<T> src, BinaryOp op, T start, int count)
+	//(T* result, DMatrix<T> buff, long nP, const DMatrix<T> src, BinaryOp op, T start, int count)
 #ifdef CuMatrix_Enable_Cdp
 	reduceLauncherCount<<<1,1>>>(res, buff, nP, src, plusOp,(T)0, count);
 #else

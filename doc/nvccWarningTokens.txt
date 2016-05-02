@@ -1,0 +1,1788 @@
+$quote "
+$set ec_
+last_line_incomplete	last line of file ends without a newline
+last_line_backslash	last line of file ends with a backslash
+include_recursion	#include file %sq includes itself
+out_of_memory	out of memory
+source_file_could_not_be_opened	could not open source file %sq
+comment_unclosed_at_eof	comment unclosed at end of file
+bad_token	unrecognized token
+unclosed_string	missing closing quote
+nested_comment	nested comment is not allowed
+bad_use_of_sharp	\"#\" not expected here
+bad_pp_directive_keyword	unrecognized preprocessing directive
+end_of_flush	parsing restarts here after previous syntax error
+exp_file_name	expected a file name
+extra_text_in_pp_directive	extra text after expected end of preprocessing directive
+tag_15	ec_removed_15
+illegal_source_file_name	%sq is not a valid source file name
+exp_rbracket	expected a \"]\"
+exp_rparen	expected a \")\"
+extra_chars_on_number	extra text after expected end of number
+undefined_identifier	identifier %sq is undefined
+useless_type_qualifiers	type qualifiers are meaningless in this declaration
+bad_hex_digit	invalid hexadecimal number
+integer_too_large	integer constant is too large
+bad_octal_digit	invalid octal digit
+zero_length_string	quoted string should contain at least one character
+too_many_characters	too many characters in character constant
+bad_character_value	character value is out of range
+expr_not_constant	expression must have a constant value
+exp_primary_expr	expected an expression
+bad_float_value	floating constant is out of range
+expr_not_integral	expression must have integral type
+expr_not_arithmetic	expression must have arithmetic type
+exp_line_number	expected a line number
+bad_line_number	invalid line number
+error_directive	#error directive: %s
+missing_pp_if	the #if for this directive is missing
+missing_endif	the #endif for this directive is missing
+pp_else_already_appeared	directive is not allowed -- an #else has already appeared
+divide_by_zero	division by zero
+exp_identifier	expected an identifier
+expr_not_scalar	expression must have arithmetic or pointer type
+incompatible_operands	operand types are incompatible (%t1 and %t2)
+tag_43	ec_removed_43
+expr_not_pointer	expression must have pointer type
+cannot_undef_predef_macro	#undef may not be used on this predefined name
+cannot_redef_predef_macro	this predefined name may not be redefined
+bad_macro_redef	incompatible redefinition of macro %nod
+tag_48	ec_removed_48
+duplicate_macro_param_name	duplicate macro parameter name
+paste_cannot_be_first	\"##\" may not be first in a macro definition
+paste_cannot_be_last	\"##\" may not be last in a macro definition
+exp_macro_param	expected a macro parameter name
+exp_colon	expected a \":\"
+too_few_macro_args	too few arguments in macro invocation
+too_many_macro_args	too many arguments in macro invocation
+sizeof_function	operand of sizeof may not be a function
+bad_constant_operator	this operator is not allowed in a constant expression
+bad_pp_operator	this operator is not allowed in a preprocessing expression
+bad_constant_function_call	function call is not allowed in a constant expression
+bad_integral_operator	this operator is not allowed in an integral constant expression
+integer_overflow	integer operation result is out of range
+negative_shift_count	shift count is negative
+shift_count_too_large	shift count is too large
+useless_decl	declaration does not declare anything
+exp_semicolon	expected a \";\"
+enum_value_out_of_int_range	enumeration value is out of \"int\" range
+exp_rbrace	expected a \"}\"
+integer_sign_change	integer conversion resulted in a change of sign
+integer_truncated	integer conversion resulted in truncation
+incomplete_type_not_allowed	incomplete type is not allowed
+sizeof_bit_field	operand of sizeof may not be a bit field
+tag_72	ec_removed_72
+tag_73	ec_removed_73
+tag_74	ec_removed_74
+bad_indirection_operand	operand of \"*\" must be a pointer
+empty_macro_argument	argument to macro is empty
+missing_decl_specifiers	this declaration has no storage class or type specifier
+initializer_in_param	a parameter declaration may not have an initializer
+exp_type_specifier	expected a type specifier
+storage_class_not_allowed	a storage class may not be specified here
+mult_storage_classes	more than one storage class may not be specified
+storage_class_not_first	storage class is not first
+dupl_type_qualifier	type qualifier specified more than once
+bad_combination_of_type_specifiers	invalid combination of type specifiers
+bad_param_storage_class	invalid storage class for a parameter
+bad_function_storage_class	invalid storage class for a function
+type_specifier_not_allowed	a type specifier may not be used here
+array_of_function	array of functions is not allowed
+array_of_void	array of void is not allowed
+function_returning_function	function returning function is not allowed
+function_returning_array	function returning array is not allowed
+param_id_list_needs_function_def	identifier-list parameters may only be used in a function definition
+function_type_must_come_from_declarator	function type may not come from a typedef
+array_size_must_be_positive	the size of an array must be greater than zero
+array_size_too_large	array is too large
+empty_translation_unit	a translation unit must contain at least one declaration
+bad_function_return_type	a function may not return a value of this type
+bad_array_element_type	an array may not have elements of this type
+decl_should_be_of_param	a declaration here must declare a parameter
+dupl_param_name	duplicate parameter name
+id_already_declared	%sq has already been declared in the current scope
+nonstd_forward_decl_enum	forward declaration of enum type is nonstandard
+class_too_large	class is too large
+struct_too_large	struct or union is too large
+bad_bit_field_size	invalid size for bit field
+bad_bit_field_type	invalid type for a bit field
+zero_length_bit_field_must_be_unnamed	zero-length bit field must be unnamed
+signed_one_bit_field	implicitly-signed bit field of length 1
+expr_not_ptr_to_function	expression must have (pointer-to-) function type
+exp_definition_of_tag	expected either a definition or a tag name
+code_is_unreachable	statement is unreachable
+exp_while	expected \"while\"
+tag_113	ec_removed_113
+never_defined	%n was referenced but not defined
+continue_must_be_in_loop	a continue statement may only be used within a loop
+break_must_be_in_loop_or_switch	a break statement may only be used within a loop or switch
+no_value_returned_in_non_void_function	non-void %n should return a value
+value_returned_in_void_function	a void function may not return a value
+cast_to_bad_type	cast to type %t is not allowed
+bad_return_value_type	return value type does not match the function type
+case_label_must_be_in_switch	a case label may only be used within a switch
+default_label_must_be_in_switch	a default label may only be used within a switch
+case_label_appears_more_than_once	case label value has already appeared in this switch
+default_label_appears_more_than_once	default label has already appeared in this switch
+exp_lparen	expected a \"(\"
+expr_not_an_lvalue	expression must be an lvalue
+exp_statement	expected a statement
+loop_not_reachable	loop is not reachable from preceding code
+block_scope_function_must_be_extern	a block-scope function may only have extern storage class
+exp_lbrace	expected a \"{\"
+expr_not_ptr_to_class	expression must have pointer-to-class type
+expr_not_ptr_to_struct_or_union	expression must have pointer-to-struct-or-union type
+exp_member_name	expected a member name
+exp_field_name	expected a field name
+not_a_member	%n has no member %sq
+not_a_field	%n has no field %sq
+expr_not_a_modifiable_lvalue	expression must be a modifiable lvalue
+address_of_register_variable	taking the address of a register variable is not allowed
+address_of_bit_field	taking the address of a bit field is not allowed
+too_many_arguments	too many arguments in function call
+all_proto_params_must_be_named	unnamed prototyped parameters not allowed when body is present
+expr_not_pointer_to_object	expression must have pointer-to-object type
+program_too_large	program too large or complicated to compile
+bad_initializer_type	a value of type %t1 cannot be used to initialize an entity of type %t2
+cannot_initialize	%n may not be initialized
+too_many_initializer_values	too many initializer values
+not_compatible_with_previous_decl	declaration is incompatible with %nfd
+already_initialized	%n has already been initialized
+bad_file_scope_storage_class	a global-scope declaration may not have this storage class
+type_cannot_be_param_name	a type name may not be redeclared as a parameter
+typedef_cannot_be_param_name	a typedef name may not be redeclared as a parameter
+non_zero_int_conv_to_pointer	conversion of nonzero integer to pointer
+expr_not_class	expression must have class type
+expr_not_struct_or_union	expression must have struct or union type
+old_fashioned_assignment_operator	old-fashioned assignment operator
+old_fashioned_initializer	old-fashioned initializer
+expr_not_integral_constant	expression must be an integral constant expression
+expr_not_an_lvalue_or_function_designator	expression must be an lvalue or a function designator
+decl_incompatible_with_previous_use	declaration is incompatible with previous %nod
+external_name_clash	name conflicts with previously used external name %sq
+unrecognized_pragma	unrecognized #pragma
+tag_162	ec_removed_162
+cannot_open_temp_file	could not open temporary file %sq
+temp_file_dir_name_too_long	name of directory for temporary files is too long (%sq)
+too_few_arguments	too few arguments in function call
+bad_float_constant	invalid floating constant
+incompatible_param	argument of type %t1 is incompatible with parameter of type %t2
+function_type_not_allowed	a function type is not allowed here
+exp_declaration	expected a declaration
+pointer_outside_base_object	pointer points outside of underlying object
+bad_cast	invalid type conversion: %t1 to %t2
+linkage_conflict	external/internal linkage conflict with previous declaration
+float_to_integer_conversion	floating-point value does not fit in required integral type
+expr_has_no_effect	expression has no effect
+subscript_out_of_range	subscript out of range
+tag_176	ec_removed_176
+declared_but_not_referenced	%n was declared but never referenced
+pcc_address_of_array	\"&\" applied to an array has no effect
+mod_by_zero	right operand of \"%%\" is zero
+old_style_incompatible_param	argument is incompatible with formal parameter
+printf_arg_mismatch	argument is incompatible with corresponding format string conversion
+empty_include_search_path	could not open source file %sq (no directories in search list)
+cast_not_integral	type of cast must be integral
+cast_not_scalar	type of cast must be arithmetic or pointer
+initialization_not_reachable	dynamic initialization in unreachable code
+unsigned_compare_with_zero	pointless comparison of unsigned integer with zero
+assign_where_compare_meant	use of \"=\" where \"==\" may have been intended
+mixed_enum_type	enumerated type mixed with another type
+file_write_error	error while writing %s file
+bad_il_file	invalid intermediate language file
+cast_to_qualified_type	type qualifier is meaningless on cast type
+unrecognized_char_escape	unrecognized character escape sequence
+undefined_preproc_id	zero used for undefined preprocessing identifier
+exp_asm_string	expected an asm string
+asm_func_must_be_prototyped	an asm function must be prototyped
+bad_asm_func_ellipsis	an asm function may not have an ellipsis
+tag_197	ec_removed_197
+asm_func_has_storage_class	an asm function may not have a storage class
+tag_199	ec_removed_199
+tag_200	ec_removed_200
+tag_201	ec_removed_201
+asm_specifier_conflicts_with_prev	invalid combination of asm control specifiers
+extra_text_on_asm_control_line	extra text after expected end of asm control line
+tag_204	ec_removed_204
+asm_name_already_defined	this asm name is already defined
+tag_206	ec_removed_206
+tag_207	ec_removed_207
+exp_asm_type	expected an asm type specification
+tag_209	ec_removed_209
+tag_210	ec_removed_210
+tag_211	ec_removed_211
+tag_212	ec_removed_212
+tag_213	ec_removed_213
+tag_214	ec_removed_214
+tag_215	ec_removed_215
+tag_216	ec_removed_216
+tag_217	ec_removed_217
+tag_218	ec_removed_218
+no_asm_func_parm_decl	old-style parameter declarations prohibited on asm functions
+ignore_asm_func_ellipsis	an ellipsis associated with an asm macro is ignored
+exp_asm_storage_specifier	expected an asm storage mode specifier
+exp_asm_param	expected an asm formal parameter
+untyped_param_reference	asm macro parameter not specified on storage mode line
+left_brace_in_asm_function	left brace unexpected in asm macro
+right_brace_in_asm_function	right brace unexpected in asm macro
+asm_parm_must_be_basic	asm macro parameter must have basic or pointer type
+asm_bad_storage_specifier	Invalid asm macro storage specifier: %sq
+inline_unmatched_end	pragma has no corresponding begin
+inline_begin_mismatch	pragma does not match the corresponding begin at line %s
+inline_mod_name_mismatch	name does not match the corresponding begin at line %s
+exp_assign_op	expected a \"=\"
+paren_mismatch	parentheses do not match
+bad_comment_type	unknown comment record type
+no_16_bit_convention	16-bit calling conventions are not supported
+bad_call_convention	invalid calling convention
+exp_string	expected a string
+bad_alignment_constraint	invalid alignment constraint
+pack_bad_code	use of the pack feature can cause mis-aligned accesses and result in inefficient code
+floating_underflow	floating point underflow
+nonstd_varargs	omission of ellipsis not a standard feature
+cl_cannot_open_argument_file	cannot open argument file 
+cl_unrecognized_extension	unrecognized extension option 
+cl_asm_file_must_be_specified	asm output file name must be specified if input is 
+cl_invalid_assertion	invalid assertion: 
+cl_invalid_asm_output_file	invalid asm output file 
+cl_cannot_open_asm_output_file	cannot open asm output file 
+asm_bad_type_operand	invalid operand for assembly type operator
+asm_too_many_replacements	too many C symbol replacements in an assembly language instruction
+bad_asm_constant	invalid constant in assembly language instruction
+exp_on_off	\"on\" or \"off\" expected
+no_null_string	invalid use of null string; pragma ignored
+exp_identifier_or_string	expected an identifier or a string
+init_seg_defined	initialization segment already defined
+bad_init_seg_kind	invalid initialization segment kind
+alloc_text_defined	text segment already specified
+exp_function_name	expected a function name
+exp_struct_ref	expected a structure reference
+exp_class_tag_name	expected a class type tag name
+no_rtti_support	run-time support for RTTI is disabled
+not_this_asm	%s not supported in this environment
+bad_dll_linkage	inconsistent dll linkage
+file_delete_error	error while deleting file %sq
+integer_to_float_conversion	integral value does not fit in required floating-point type
+float_to_float_conversion	floating-point value does not fit in required floating-point type
+bad_float_operation_result	floating-point operation result is out of range
+implicit_func_decl	function declared implicitly
+too_few_printf_args	the format string requires additional arguments
+too_many_printf_args	the format string ends before this argument
+bad_printf_format_string	invalid format string conversion
+macro_recursion	macro recursion
+nonstd_extra_comma	trailing comma is nonstandard
+enum_bit_field_too_small	bit field cannot contain all values of the enumerated type
+nonstd_bit_field_type	nonstandard type for a bit field
+decl_in_prototype_scope	declaration is not visible outside of function
+decl_of_void_ignored	old-fashioned typedef of \"void\" ignored
+old_fashioned_field_selection	left operand is not a struct or union containing this field
+old_fashioned_ptr_field_selection	pointer does not point to struct or union containing this field
+var_retained_incomp_type	variable %sq was declared with a never-completed type
+boolean_controlling_expr_is_constant	controlling expression is constant
+switch_selector_expr_is_constant	selector expression is constant
+bad_param_specifier	invalid specifier on a parameter
+bad_specifier_outside_class_decl	invalid specifier outside a class declaration
+dupl_decl_specifier	duplicate specifier in declaration
+base_class_not_allowed_for_union	a union is not allowed to have a base class
+access_already_specified	multiple access control specifiers are not allowed
+missing_class_definition	class or struct definition is missing
+name_not_member_of_class_or_base_classes	qualified name is not a member of class %t or its base classes
+member_ref_requires_object	a nonstatic member reference must be relative to a specific object
+nonstatic_member_def_not_allowed	a nonstatic data member may not be defined outside its class
+already_defined	%n has already been defined
+pointer_to_reference	pointer to reference is not allowed
+reference_to_reference	reference to reference is not allowed
+reference_to_void	reference to void is not allowed
+array_of_reference	array of reference is not allowed
+missing_initializer_on_reference	reference %n requires an initializer
+exp_comma	expected a \",\"
+type_identifier_not_allowed	type name is not allowed
+type_definition_not_allowed	type definition is not allowed
+bad_type_name_redeclaration	invalid redeclaration of type name %nod
+missing_initializer_on_const	const %n requires an initializer
+this_used_incorrectly	\"this\" may only be used inside a nonstatic member function
+constant_value_not_known	constant value is not known
+missing_type_specifier	explicit type is missing (\"int\" assumed)
+missing_access_specifier	access control not specified (%sq by default)
+not_a_class_or_struct_name	not a class or struct name
+dupl_base_class_name	duplicate base class name
+bad_base_class	invalid base class
+no_access_to_name	%n is inaccessible
+ambiguous_name	%no is ambiguous
+old_style_parameter_list	old-style parameter list (anachronism)
+declaration_after_statements	declaration may not appear after executable statement in block
+inaccessible_base_class	conversion to inaccessible base class %t is not allowed
+tag_313	ec_removed_313
+tag_314	ec_removed_314
+tag_315	ec_removed_315
+tag_316	ec_removed_316
+improperly_terminated_macro_call	improperly terminated macro invocation
+tag_318	ec_removed_318
+id_must_be_class_or_namespace_name	name followed by \"::\" must be a class or namespace name
+bad_friend_decl	invalid friend declaration
+value_returned_in_constructor	a constructor or destructor may not return a value
+bad_destructor_decl	invalid destructor declaration
+class_and_member_name_conflict	declaration of a member with the same name as its class
+global_qualifier_not_allowed	global-scope qualifier (leading \"::\") is not allowed
+name_not_found_in_file_scope	the global scope has no %sq
+qualified_name_not_allowed	qualified name is not allowed
+null_reference	NULL reference is not allowed
+brace_initialization_not_allowed	initialization with \"{...}\" is not allowed for object of type %t
+ambiguous_base_class	base class %t is ambiguous
+ambiguous_derived_class	derived class %t1 contains more than one instance of class %t2
+derived_class_from_virtual_base	cannot convert pointer to base class %t2 to pointer to derived class %t1 -- base class is virtual
+no_matching_constructor	no instance of constructor %no matches the argument list
+ambiguous_copy_constructor	copy constructor for class %t is ambiguous
+no_default_constructor	no default constructor exists for class %t
+not_a_field_or_base_class	%sq is not a nonstatic data member or base class of class %t
+indirect_nonvirtual_base_class_not_allowed	indirect nonvirtual base class is not allowed
+bad_union_field	invalid union member -- class %t has a disallowed member function
+tag_338	ec_removed_338
+bad_rvalue_array	invalid use of non-lvalue array
+exp_operator	expected an operator
+inherited_member_not_allowed	inherited member is not allowed
+indeterminate_overloaded_function	cannot determine which instance of %n is intended
+bound_function_must_be_called	a pointer to a bound function may only be used to call the function
+duplicate_typedef	typedef name has already been declared (with same type)
+function_redefinition	%n has already been defined
+tag_346	ec_removed_346
+no_matching_function	no instance of %n matches the argument list
+type_def_not_allowed_in_func_type_decl	type definition is not allowed in function return type declaration
+default_arg_not_at_end	default argument not at end of parameter list
+default_arg_already_defined	redefinition of default argument
+ambiguous_overloaded_function	more than one instance of %n matches the argument list:
+ambiguous_constructor	more than one instance of constructor %no matches the argument list:
+bad_default_arg_type	default argument of type %t1 is incompatible with parameter of type %t2
+return_type_cannot_distinguish_functions	cannot overload functions distinguished by return type alone
+no_user_defined_conversion	no suitable user-defined conversion from %t1 to %t2 exists
+function_qualifier_not_allowed	type qualifier is not allowed on this function
+virtual_static_not_allowed	only nonstatic member functions may be virtual
+unqual_function_with_qual_object	the object has cv-qualifiers that are not compatible with the member function
+too_many_virtual_functions	program too large to compile (too many virtual functions)
+bad_return_type_on_virtual_function_override	return type is not identical to nor covariant with return type %t of overridden virtual function %n
+ambiguous_virtual_function_override	override of virtual %n is ambiguous
+pure_specifier_on_nonvirtual_function	pure specifier (\"= 0\") allowed only on virtual functions
+bad_pure_specifier	badly-formed pure specifier (only \"= 0\" is allowed)
+bad_data_member_initialization	data member initializer is not allowed
+abstract_class_object_not_allowed	object of abstract class type %t is not allowed:
+function_returning_abstract_class	function returning abstract class %t is not allowed:
+duplicate_friend_decl	duplicate friend declaration
+inline_and_nonfunction	inline specifier allowed on function declarations only
+inline_not_allowed	\"inline\" is not allowed
+bad_storage_class_with_inline	invalid storage class for an inline function
+bad_member_storage_class	invalid storage class for a class member
+local_class_function_def_missing	local class member %n requires a definition
+inaccessible_special_function	%nf is inaccessible
+tag_374	ec_removed_374
+missing_const_copy_constructor	class %t has no copy constructor to copy a const object
+definition_of_implicitly_declared_function	defining an implicitly declared member function is not allowed
+no_suitable_copy_constructor	class %t has no suitable copy constructor
+linkage_specifier_not_allowed	linkage specification is not allowed
+bad_linkage_specifier	unknown external linkage specification
+incompatible_linkage_specifier	linkage specification is incompatible with previous %nod
+overloaded_function_linkage	more than one instance of overloaded function %no has \"C\" linkage
+ambiguous_default_constructor	class %t has more than one default constructor
+temp_used_for_ref_init	value copied to temporary, reference to temporary used
+nonmember_operator_not_allowed	\"operator%s\" must be a member function
+static_member_operator_not_allowed	operator may not be a static member function
+too_many_args_for_conversion	no arguments allowed on user-defined conversion
+too_many_args_for_operator	too many parameters for this operator function
+too_few_args_for_operator	too few parameters for this operator function
+no_params_with_class_type	nonmember operator requires a parameter with class type
+default_arg_expr_not_allowed	default argument is not allowed
+ambiguous_user_defined_conversion	more than one user-defined conversion from %t1 to %t2 applies:
+no_matching_operator_function	no operator %sq matches these operands
+ambiguous_operator_function	more than one operator %sq matches these operands:
+bad_arg_type_for_operator_new	first parameter of allocation function must be of type \"size_t\"
+bad_return_type_for_op_new	allocation function requires \"void *\" return type
+bad_return_type_for_op_delete	deallocation function requires \"void\" return type
+bad_first_arg_type_for_operator_delete	first parameter of deallocation function must be of type \"void *\"
+tag_398	ec_removed_398
+type_must_be_object_type	type must be an object type
+base_class_already_initialized	base class %t has already been initialized
+base_class_init_anachronism	base class name required -- %t assumed (anachronism)
+member_already_initialized	%n has already been initialized
+missing_base_class_or_member_name	name of member or base class is missing
+assignment_to_this	assignment to \"this\" (anachronism)
+overload_anachronism	\"overload\" keyword used (anachronism)
+anon_union_member_access	invalid anonymous union -- nonpublic member is not allowed
+anon_union_member_function	invalid anonymous union -- member function is not allowed
+anon_union_storage_class	anonymous union at global or namespace scope must be declared static
+missing_initializer_on_fields	%nf provides no initializer for:
+cannot_initialize_fields	implicitly generated constructor for class %t cannot initialize:
+no_ctor_but_const_or_ref_member	%n defines no constructor to initialize the following:
+var_with_uninitialized_member	%n has an uninitialized const or reference member
+var_with_uninitialized_field	%n has an uninitialized const field
+missing_const_assignment_operator	class %t has no assignment operator to copy a const object
+no_suitable_assignment_operator	class %t has no suitable assignment operator
+ambiguous_assignment_operator	ambiguous assignment operator for class %t
+tag_417	ec_removed_417
+missing_typedef_name	declaration requires a typedef name
+tag_419	ec_removed_419
+virtual_not_allowed	\"virtual\" is not allowed
+static_not_allowed	\"static\" is not allowed
+bound_function_cast_anachronism	cast of bound function to normal function pointer (anachronism)
+expr_not_ptr_to_member	expression must have pointer-to-member type
+extra_semicolon	extra \";\" ignored
+nonstd_const_member	nonstandard member constant declaration (standard form is a static const integral member)
+tag_426	ec_removed_426
+no_matching_new_function	no instance of overloaded %no matches the argument list
+tag_428	ec_removed_428
+no_match_for_addr_of_overloaded_function	no instance of %n matches the required type
+delete_count_anachronism	delete array size expression used (anachronism)
+tag_431	ec_removed_431
+cast_to_abstract_class	a cast to abstract class %t is not allowed:
+bad_use_of_main	function \"main\" may not be called or have its address taken
+initializer_not_allowed_on_array_new	a new-initializer may not be specified for an array
+member_function_redecl_outside_class	member function %no may not be redeclared outside its class
+ptr_to_incomplete_class_type_not_allowed	pointer to incomplete class type is not allowed
+ref_to_nested_function_var	reference to local variable of enclosing function is not allowed
+single_arg_postfix_incr_decr_anachronism	single-argument function used for postfix %sq (anachronism)
+tag_439	ec_removed_439
+bad_default_assignment	implicitly generated assignment operator cannot copy:
+nonstd_array_cast	cast to array type is nonstandard (treated as cast to %t)
+class_with_op_new_but_no_op_delete	%n has an operator new%s() but no default operator delete%s()
+class_with_op_delete_but_no_op_new	%n has a default operator delete%s() but no operator new%s()
+base_class_with_nonvirtual_dtor	destructor for base class %t is not virtual
+tag_445	ec_removed_445
+member_function_redeclaration	%np has already been declared
+inline_main	function \"main\" may not be declared inline
+class_and_member_function_name_conflict	member function with the same name as its class must be a constructor
+nested_class_anachronism	using nested %n (anachronism)
+too_many_params_for_destructor	a destructor may not have parameters
+bad_constructor_param	copy constructor for class %t may not have a parameter of type %t
+incomplete_function_return_type	%n returns incomplete type %t
+protected_access_problem	protected %n is not accessible through a %t pointer or object
+param_not_allowed	a parameter is not allowed
+asm_decl_not_allowed	an \"asm\" declaration is not allowed here
+no_conversion_function	no suitable conversion function from %t1 to %t2 exists
+delete_of_incomplete_class	delete of pointer to incomplete class
+no_constructor_for_conversion	no suitable constructor exists to convert from %t1 to %t2
+ambiguous_constructor_for_conversion	more than one constructor applies to convert from %t1 to %t2:
+ambiguous_conversion_function	more than one conversion function from %t1 to %t2 applies:
+ambiguous_conversion_to_builtin	more than one conversion function from %t to a built-in type applies:
+tag_462	const %n
+tag_463	reference %n
+tag_464	%npT
+tag_465	built-in operator %sq
+tag_466	%no (ambiguous by inheritance)
+addr_of_constructor_or_destructor	a constructor or destructor may not have its address taken
+dollar_used_in_identifier	dollar sign (\"$\") used in identifier
+nonconst_ref_init_anachronism	temporary used for initial value of reference to non-const (anachronism)
+qualifier_in_member_declaration	qualified name is not allowed in member declaration
+mixed_enum_type_anachronism	enumerated type mixed with another type (anachronism)
+new_array_size_must_be_nonnegative	the size of an array in \"new\" must be non-negative
+return_ref_init_requires_temp	returning reference to local temporary
+tag_474	ec_removed_474
+enum_not_allowed	\"enum\" declaration is not allowed
+qualifier_dropped_in_ref_init	qualifiers dropped in binding reference of type %t1 to initializer of type %t2
+bad_nonconst_ref_init	a reference of type %t1 (not const-qualified) cannot be initialized with a value of type %t2
+delete_of_function_pointer	a pointer to function may not be deleted
+bad_conversion_function_decl	conversion function must be a nonstatic member function
+bad_template_declaration_scope	template declaration is not allowed here
+exp_lt	expected a \"<\"
+exp_gt	expected a \">\"
+missing_template_param	template parameter declaration is missing
+missing_template_arg_list	argument list for %nf is missing
+too_few_template_args	too few arguments for %nf
+too_many_template_args	too many arguments for %nf
+tag_487	ec_removed_487
+not_used_in_template_function_params	%n1 is not used in declaring the parameter types of %n2
+cfront_multiple_nested_types	two nested types have the same name: %no1 and %nod2 (cfront compatibility)
+cfront_global_defined_after_nested_type	global %no1 was declared after nested %nod2 (cfront compatibility)
+tag_491	ec_removed_491
+ambiguous_ptr_to_overloaded_function	more than one instance of %n matches the required type
+nonstd_long_long	the type \"long long\" is nonstandard
+nonstd_friend_decl	omission of %sq is nonstandard
+return_type_on_conversion_function	return type may not be specified on a conversion function
+tag_496	detected during:
+tag_497	instantiation of %nt %p
+tag_498	implicit generation of %nt %p
+runaway_recursive_instantiation	excessive recursion at instantiation of %n
+bad_template_declaration	%sq is not a function or static data member
+bad_nontype_template_arg	argument of type %t1 is incompatible with template parameter of type %t2
+init_needing_temp_not_allowed	initialization requiring a temporary or conversion is not allowed
+decl_hides_function_parameter	declaration of %sq hides function parameter
+nonconst_ref_init_from_rvalue	initial value of reference to non-const must be an lvalue
+tag_505	implicit definition of %nt %p
+template_not_allowed	\"template\" is not allowed
+not_a_class_template	%t is not a class template
+tag_508	ec_removed_508
+function_template_named_main	\"main\" is not a valid name for a function template
+union_nonunion_mismatch	invalid reference to %n (union/nonunion mismatch)
+local_type_in_template_arg	a template argument may not reference a local type
+tag_kind_incompatible_with_declaration	tag kind of %s is incompatible with declaration of %nfd
+name_not_tag_in_file_scope	the global scope has no tag named %sq
+not_a_tag_member	%n has no tag member named %sq
+ptr_to_member_typedef	member function typedef (allowed for cfront compatibility)
+bad_use_of_member_function_typedef	%n may be used only in pointer-to-member declaration
+tag_517	ec_removed_517
+nonexternal_entity_in_template_arg	a template argument may not reference a non-external entity
+id_must_be_class_or_type_name	name followed by \"::~\" must be a class name or a type name
+destructor_name_mismatch	destructor name does not match name of class %t
+destructor_type_mismatch	type used as destructor name does not match type %t
+called_function_redeclared_inline	%n redeclared \"inline\" after being called
+tag_523	ec_removed_523
+bad_storage_class_on_template_decl	invalid storage class for a template declaration
+no_access_to_type_cfront_mode	%n is an inaccessible type (allowed for compatibility)
+tag_526	ec_removed_526
+invalid_instantiation_argument	invalid explicit instantiation declaration
+not_instantiatable_entity	%nf is not an entity that can be instantiated
+compiler_generated_function_cannot_be_instantiated	compiler generated %n cannot be explicitly instantiated
+inline_function_cannot_be_instantiated	inline %n cannot be explicitly instantiated
+tag_531	ec_removed_531
+instantiation_requested_no_definition_supplied	%n cannot be instantiated -- no template definition was supplied
+instantiation_requested_and_specialized	%n cannot be instantiated -- it has been explicitly specialized
+tag_534	ec_removed_534
+tag_535	ec_removed_535
+no_match_for_type_of_overloaded_function	no instance of %n matches the specified type
+nonstd_void_param_list	declaring a void parameter list with a typedef is nonstandard
+cfront_name_lookup_bug	global %n1 used instead of %n2 (cfront compatibility)
+redeclaration_of_template_param_name	template parameter %sq may not be redeclared in this scope
+decl_hides_template_parameter	declaration of %sq hides template parameter
+must_be_prototype_instantiation	template argument list must match the parameter list
+tag_542	ec_removed_542
+bad_extra_arg_for_postfix_operator	extra parameter of postfix \"operator%s\" must be of type \"int\"
+function_type_required	an operator name must be declared as a function
+operator_name_not_allowed	operator name is not allowed
+bad_scope_for_specialization	%n cannot be specialized in the current scope
+nonstd_member_function_address	nonstandard form for taking the address of a member function
+too_few_template_params	too few template parameters -- does not match previous declaration
+too_many_template_params	too many template parameters -- does not match previous declaration
+template_operator_delete	function template for operator delete(void *) is not allowed
+class_template_same_name_as_templ_param	class template and template parameter may not have the same name
+tag_552	ec_removed_552
+unnamed_type_in_template_arg	a template argument may not reference an unnamed type
+enum_type_not_allowed	enumerated type is not allowed
+qualified_reference_type	type qualifier on a reference type is not allowed
+incompatible_assignment_operands	a value of type %t1 cannot be assigned to an entity of type %t2
+unsigned_compare_with_negative	pointless comparison of unsigned integer with a negative constant
+converting_to_incomplete_class	cannot convert to incomplete class %t
+missing_initializer_on_unnamed_const	const object requires an initializer
+unnamed_object_with_uninitialized_field	object has an uninitialized const or reference member
+nonstd_pp_directive	nonstandard preprocessing directive
+unexpected_template_arg_list	%n may not have a template argument list
+missing_initializer_list	initialization with \"{...}\" expected for aggregate object
+incompatible_ptr_to_member_selection_operands	pointer-to-member selection class types are incompatible (%t1 and %t2)
+self_friendship	pointless friend declaration
+period_used_as_qualifier	\".\" used in place of \"::\" to form a qualified name
+const_function_anachronism	non-const function called for const object (anachronism)
+dependent_stmt_is_declaration	a dependent statement may not be a declaration
+void_param_not_allowed	a parameter may not have void type
+tag_570	instantiation of %na %p
+tag_571	processing of template argument list for %na %p
+bad_templ_arg_expr_operator	this operator is not allowed in a template argument expression
+missing_handler	try block requires at least one handler
+missing_exception_declaration	handler requires an exception declaration
+masked_by_default_handler	handler is masked by default handler
+masked_by_handler	handler is potentially masked by previous handler for type %t
+local_type_used_in_exception	use of a local type to specify an exception
+redundant_exception_specification_type	redundant type in exception specification
+incompatible_exception_specification	exception specification is incompatible with that of previous %nd%s=':'
+tag_580	previously specified: no exceptions will be thrown
+tag_581	previously omitted: %t
+tag_582	previously specified but omitted here: %t
+no_exception_support	C++ exception handler found but GX option not present
+omitted_exception_specification	omission of exception specification is incompatible with previous %nd
+cannot_create_instantiation_request_file	could not create instantiation request file %sq
+non_arith_operation_in_templ_arg	non-arithmetic operation not allowed in nontype template argument
+local_type_in_nonlocal_var	use of a local type to declare a nonlocal variable
+local_type_in_function	use of a local type to declare a function
+branch_past_initialization	transfer of control bypasses initialization of:
+tag_590	%nd
+branch_into_handler	transfer of control into an exception handler
+used_before_set	%n is used before its value is set
+set_but_not_used	%n was set but never used
+bad_scope_for_definition	%n cannot be defined in the current scope
+exception_specification_not_allowed	exception specification is not allowed
+template_and_instance_linkage_conflict	external/internal linkage conflict for %nfd
+conversion_function_not_usable	%nf will not be called for implicit or explicit conversions
+tag_kind_incompatible_with_template_parameter	tag kind of %s is incompatible with template parameter of type %t
+template_operator_new	function template for operator new(size_t) is not allowed
+tag_600	ec_removed_600
+bad_member_type_in_ptr_to_member	pointer to member of type %t is not allowed
+ellipsis_on_operator_function	ellipsis is not allowed in operator function parameter list
+unimplemented_keyword	%no is reserved for future use as a keyword
+cl_invalid_macro_definition	invalid macro definition: 
+cl_invalid_macro_undefinition	invalid macro undefinition: 
+cl_invalid_preprocessor_output_file	invalid preprocessor output file 
+cl_cannot_open_preprocessor_output_file	cannot open preprocessor output file 
+cl_il_file_must_be_specified	IL file name must be specified if input is 
+cl_invalid_il_output_file	invalid IL output file 
+cl_cannot_open_il_output_file	cannot open IL output file 
+cl_invalid_C_output_file	invalid C output file 
+cl_cannot_open_C_output_file	cannot open C output file 
+cl_error_in_debug_option_argument	error in debug option argument
+cl_invalid_option	invalid option: 
+cl_back_end_requires_il_file	back end requires name of IL file
+cl_could_not_open_il_file	could not open IL file 
+cl_invalid_number	invalid number: 
+cl_incorrect_host_id	incorrect host CPU id
+cl_invalid_instantiation_mode	invalid instantiation mode: 
+tag_620	ec_removed_620
+cl_invalid_error_limit	invalid error limit: 
+cl_invalid_raw_listing_output_file	invalid raw-listing output file 
+cl_cannot_open_raw_listing_output_file	cannot open raw-listing output file 
+cl_invalid_xref_output_file	invalid cross-reference output file 
+cl_cannot_open_xref_output_file	cannot open cross-reference output file 
+cl_invalid_error_output_file	invalid error output file 
+cl_cannot_open_error_output_file	cannot open error output file 
+cl_vtbl_option_only_in_cplusplus	virtual function tables can only be suppressed when compiling C++
+cl_anachronism_option_only_in_cplusplus	anachronism option can be used only when compiling C++
+cl_instantiation_option_only_in_cplusplus	instantiation mode option can be used only when compiling C++
+cl_auto_instantiation_option_only_in_cplusplus	automatic instantiation mode can be used only when compiling C++
+cl_implicit_inclusion_option_only_in_cplusplus	implicit template inclusion mode can be used only when compiling C++
+cl_exceptions_option_only_in_cplusplus	exception handling option can be used only when compiling C++
+cl_strict_ansi_incompatible_with_pcc	strict ANSI mode is incompatible with K&R mode
+cl_strict_ansi_incompatible_with_cfront	strict ANSI mode is incompatible with cfront mode
+cl_missing_source_file_name	missing source file name
+cl_output_file_incompatible_with_multiple_inputs	output files may not be specified when compiling several input files
+cl_too_many_arguments	too many arguments on command line
+cl_no_output_file_needed	an output file was specified, but none is needed
+cl_il_display_requires_il_file_name	IL display requires name of IL file
+void_template_parameter	a template parameter may not have void type
+too_many_unused_instantiations	excessive recursive instantiation of %n due to instantiate-all mode
+cl_strict_ansi_incompatible_with_anachronisms	strict ANSI mode is incompatible with allowing anachronisms
+void_throw	a throw expression may not have void type
+cl_tim_local_conflicts_with_auto_instantiation	local instantiation mode is incompatible with automatic instantiation
+abstract_class_param_type	parameter of abstract class type %t is not allowed:
+array_of_abstract_class	array of abstract class %t is not allowed:
+float_template_parameter	floating-point template parameter is nonstandard
+pragma_must_precede_declaration	this pragma must immediately precede a declaration
+pragma_must_precede_statement	this pragma must immediately precede a statement
+pragma_must_precede_decl_or_stmt	this pragma must immediately precede a declaration or statement
+pragma_may_not_be_used_here	this kind of pragma may not be used here
+tag_653	ec_removed_653
+partial_override	overloaded virtual function %no1 is only partially overridden in %n2
+specialization_of_called_inline_template_function	specific definition of inline template function must precede its first use
+cl_invalid_error_tag	invalid error tag in diagnostic control option: 
+cl_invalid_error_number	invalid error number in diagnostic control option: 
+param_type_ptr_to_array_of_unknown_bound	parameter type involves pointer to array of unknown bound
+param_type_ref_array_of_unknown_bound	parameter type involves reference to array of unknown bound
+ptr_to_member_cast_to_ptr_to_function	pointer-to-member-function cast to pointer to function
+no_named_fields	struct or union declares no named members
+nonstd_unnamed_field	nonstandard unnamed field
+nonstd_unnamed_member	nonstandard unnamed member
+tag_664	ec_removed_664
+cl_invalid_pch_output_file	invalid precompiled header output file 
+cl_cannot_open_pch_output_file	cannot open precompiled header output file 
+not_a_type_name	%sq is not a type name
+cl_cannot_open_pch_input_file	cannot open precompiled header input file 
+invalid_pch_file	precompiled header file %sq is either invalid or not generated by this version of the compiler
+pch_curr_directory_changed	precompiled header file %sq was not generated in this directory
+pch_header_files_have_changed	header files used to generate precompiled header file %sq have changed
+pch_cmd_line_option_mismatch	the command line options do not match those used when precompiled header file %sq was created
+pch_file_prefix_mismatch	the initial sequence of preprocessing directives is not compatible with those of precompiled header file %sq
+unable_to_get_mapped_memory	unable to obtain mapped memory
+using_pch	\"%s\": using precompiled header file \"%s\"
+creating_pch	\"%s\": creating precompiled header file \"%s\"
+memory_mismatch	memory usage conflict with precompiled header file %sq
+cl_invalid_pch_size	invalid PCH memory size 
+cl_pch_must_be_first	PCH options must appear first in the command line
+out_of_memory_during_pch_allocation	insufficient memory for PCH memory allocation
+cl_pch_incompatible_with_multiple_inputs	precompiled header files may not be used when compiling several input files
+not_enough_preallocated_memory_fail	insufficient preallocated memory for generation of precompiled header file (use option /Qpch_mem%s)
+program_entity_too_large_for_pch	very large entity in program prevents generation of precompiled header file
+cannot_chdir	%sq is not a valid directory
+cannot_build_temp_file_name	cannot build temporary file name
+restrict_not_allowed	\"restrict\" is not allowed
+restrict_pointer_to_function	a pointer or reference to function type may not be qualified by \"restrict\"
+bad_declspec_modifier	%sq is an unrecognized __declspec attribute
+calling_convention_not_allowed	a calling convention modifier may not be specified here
+conflicting_calling_conventions	conflicting calling convention modifiers
+cl_strict_ansi_incompatible_with_microsoft	strict ANSI mode is incompatible with Microsoft mode
+cl_cfront_incompatible_with_microsoft	cfront mode is incompatible with Microsoft mode
+calling_convention_ignored	calling convention specified here is ignored
+calling_convention_may_not_precede_nested_declarator	a calling convention may not be followed by a nested declarator
+calling_convention_ignored_for_type	calling convention is ignored for this type
+tag_696	ec_removed_696
+decl_modifiers_incompatible_with_previous_decl	declaration modifiers are incompatible with previous declaration
+decl_modifiers_invalid_for_this_decl	the modifier %sq is not allowed on this declaration
+branch_into_try_block	transfer of control into a try block
+incompatible_inline_specifier_on_specific_decl	inline specification is incompatible with previous %nod
+template_missing_closing_brace	closing brace of template definition not found
+cl_wchar_t_option_only_in_cplusplus	wchar_t keyword option can be used only when compiling C++
+bad_pack_alignment	invalid alignment value
+exp_int_constant	expected an integer constant
+call_of_pure_virtual	call of pure virtual function
+bad_ident_string	invalid source file identifier string
+template_friend_definition_not_allowed	a class template cannot be defined in a friend declaration
+asm_not_allowed	\"asm\" is not allowed
+bad_asm_function_def	\"asm\" must be used with a function definition
+nonstd_asm_function	\"asm\" function is nonstandard
+nonstd_ellipsis_only_param	ellipsis with no explicit parameters is nonstandard
+nonstd_address_of_ellipsis	\"&...\" is nonstandard
+bad_address_of_ellipsis	invalid use of \"&...\"
+tag_714	ec_removed_714
+const_volatile_ref_init_anachronism	temporary used for initial value of reference to const volatile (anachronism)
+bad_const_volatile_ref_init	a reference of type %t1 cannot be initialized with a value of type %t2
+const_volatile_ref_init_from_rvalue	initial value of reference to const volatile must be an lvalue
+cl_SVR4_C_option_only_in_ansi_C	SVR4 C compatibility option can be used only when compiling ANSI C
+using_out_of_scope_declaration	using out-of-scope declaration of %nd
+cl_strict_ansi_incompatible_with_SVR4	strict ANSI mode is incompatible with SVR4 C mode
+cannot_inline_call	call of %nd cannot be inlined
+cannot_inline	%n cannot be inlined
+cl_invalid_pch_directory	invalid PCH directory: 
+exp_except_or_finally	expected __except or __finally
+leave_must_be_in_try	a __leave statement may only be used within a __try
+tag_726	detected during instantiation of %nt %p
+tag_727	detected during implicit generation of %nt %p
+tag_728	detected during instantiation of %na %p
+tag_729	detected during processing of template argument list for %na %p
+tag_730	detected during implicit definition of %nt %p
+not_found_on_pack_alignment_stack	%sq not found on pack alignment stack
+empty_pack_alignment_stack	empty pack alignment stack
+cl_rtti_option_only_in_cplusplus	RTTI option can be used only when compiling C++
+inaccessible_elided_cctor	%nf, required for copy that was eliminated, is inaccessible
+uncallable_elided_cctor	%nf, required for copy that was eliminated, is not callable because reference parameter cannot be bound to rvalue
+typeid_needs_typeinfo	<typeinfo> must be included before typeid is used
+cannot_cast_away_const	%s cannot cast away const or other type qualifiers
+bad_dynamic_cast_type	the type in a dynamic_cast must be a pointer or reference to a complete class type, or void *
+bad_ptr_dynamic_cast_operand	the operand of a pointer dynamic_cast must be a pointer to a complete class type
+bad_ref_dynamic_cast_operand	the operand of a reference dynamic_cast must be an lvalue of a complete class type
+dynamic_cast_operand_must_be_polymorphic	the operand of a runtime dynamic_cast must have a polymorphic class type
+cl_bool_option_only_in_cplusplus	bool option can be used only when compiling C++
+tag_743	ec_removed_743
+array_type_not_allowed	an array type is not allowed here
+exp_assign	expected an \"=\"
+exp_declarator_in_condition_decl	expected a declarator in condition declaration
+redeclaration_of_condition_decl_name	%sq, declared in condition, may not be redeclared in this scope
+default_template_arg_not_allowed	default template arguments are not allowed for function templates
+exp_comma_or_gt	expected a \",\" or \">\"
+missing_template_param_list	expected a template parameter list
+incr_of_bool_deprecated	incrementing a bool value is deprecated
+bool_type_not_allowed	bool type is not allowed
+base_class_offset_too_large	offset of base class %no1 within class %no2 is too large
+expr_not_bool	expression must have bool type (or be convertible to bool)
+cl_array_new_and_delete_option_only_in_cplusplus	array new and delete option can be used only when compiling C++
+based_requires_variable_name	%n is not a variable name
+based_not_allowed_here	__based modifier is not allowed here
+based_not_followed_by_star	__based does not precede a pointer operator, __based ignored
+based_var_must_be_ptr	variable in __based modifier must have pointer type
+bad_const_cast_type	the type in a const_cast must be a pointer, reference, or pointer to member to an object type
+bad_const_cast	a const_cast can only adjust type qualifiers; it cannot change the underlying type
+mutable_not_allowed	mutable is not allowed
+cannot_change_access	redeclaration of %n is not allowed to alter its access
+nonstd_printf_format_string	nonstandard format string conversion
+probable_inadvertent_lbracket_digraph	use of alternative token \"<:\" appears to be unintended
+probable_inadvertent_sharp_digraph	use of alternative token \"%%:\" appears to be unintended
+namespace_def_not_allowed	namespace definition is not allowed
+missing_namespace_name	name must be a namespace name
+namespace_alias_def_not_allowed	namespace alias definition is not allowed
+namespace_qualified_name_required	namespace-qualified name is required
+namespace_name_not_allowed	a namespace name is not allowed
+bad_combination_of_dll_attributes	invalid combination of DLL attributes
+sym_not_a_class_template	%n is not a class template
+array_of_incomplete_type	array with incomplete element type is nonstandard
+allocation_operator_in_namespace	allocation operator may not be declared in a namespace
+deallocation_operator_in_namespace	deallocation operator may not be declared in a namespace
+conflicts_with_using_decl	%np1 conflicts with using-declaration of %np2
+using_decl_conflicts_with_prev_decl	using-declaration of %np1 conflicts with %npd2
+cl_namespaces_option_only_in_cplusplus	namespaces option can be used only when compiling C++
+useless_using_declaration	using-declaration ignored -- it refers to the current namespace
+class_qualified_name_required	a class-qualified name is required
+tag_782	argument types are: (%s)
+tag_783	operand types are: %s
+tag_784	ec_removed_784
+not_an_actual_member	%n has no actual member %sq
+tag_786	ec_removed_786
+mem_attrib_incompatible	incompatible memory attributes specified
+mem_attrib_ignored	memory attribute ignored
+mem_attrib_may_not_precede_nested_declarator	memory attribute may not be followed by a nested declarator
+dupl_mem_attrib	memory attribute specified more than once
+dupl_calling_convention	calling convention specified more than once
+type_qualifier_not_allowed	a type qualifier is not allowed
+template_instance_already_used	%npd1 was used before its template was declared
+static_nonstatic_with_same_param_types	static and nonstatic member functions with same parameter types cannot be overloaded
+no_prior_declaration	no prior declaration of %np
+template_id_not_allowed	a template-id is not allowed
+class_qualified_name_not_allowed	a class-qualified name is not allowed
+bad_scope_for_redeclaration	%n may not be redeclared in the current scope
+qualifier_in_namespace_member_decl	qualified name is not allowed in namespace member declaration
+sym_not_a_type_name	%n is not a type name
+explicit_instantiation_not_in_namespace_scope	explicit instantiation is not allowed in the current scope
+bad_scope_for_explicit_instantiation	%n cannot be explicitly instantiated in the current scope
+multiple_explicit_instantiations	%n explicitly instantiated more than once
+typename_not_in_template	typename may only be used within a template
+cl_special_subscript_cost_option_only_in_cplusplus	special_subscript_cost option can be used only when compiling C++
+cl_typename_option_only_in_cplusplus	typename option can be used only when compiling C++
+cl_implicit_typename_option_only_in_cplusplus	implicit typename option can be used only when compiling C++
+nonstd_character_at_start_of_macro_def	nonstandard character at start of object-like macro definition
+exception_spec_override_incompat	exception specification for virtual %n1 is incompatible with that of overridden %n2
+pointer_conversion_loses_bits	conversion from %t1 to %t2 may lose significant bits
+generated_exception_spec_override_incompat	exception specification for implicitly declared virtual %n1 is incompatible with that of overridden %n2
+implicit_call_of_ambiguous_name	%no1, implicitly called from %np2, is ambiguous
+cl_explicit_option_only_in_cplusplus	option \"explicit\" can be used only when compiling C++
+explicit_not_allowed	\"explicit\" is not allowed
+conflicts_with_predeclared_type_info	declaration conflicts with %sq (reserved class name)
+array_member_initialization	only \"()\" is allowed as initializer for array %n
+virtual_function_template	\"virtual\" is not allowed in a function template declaration
+anon_union_class_member_template	invalid anonymous union -- class member template is not allowed
+template_depth_mismatch	template nesting depth does not match the previous declaration of %n
+multiple_template_decls_not_allowed	this declaration cannot have multiple \"template <...>\" clauses
+cl_old_for_init_option_only_in_cplusplus	option to control the for-init scope can be used only when compiling C++
+redeclaration_of_for_init_decl_name	%sq, declared in for-loop initialization, may not be redeclared in this scope
+hidden_by_old_for_init	reference is to %nd1 -- under old for-init scoping rules it would have been %nd2
+cl_for_init_diff_warning_option_only_in_cplusplus	option to control warnings on for-init differences can be used only when compiling C++
+unnamed_class_virtual_function_def_missing	definition of virtual %n is required here
+svr4_token_pasting_comment	empty comment interpreted as token-pasting operator \"##\"
+storage_class_in_friend_decl	a storage class is not allowed in a friend declaration
+templ_param_list_not_allowed	template parameter list for %no is not allowed in this declaration
+bad_member_template_sym	%n is not a valid member class or function template
+bad_member_template_decl	not a valid member class or function template declaration
+specialization_follows_param_list	a template declaration containing a template parameter list may not be followed by an explicit specialization declaration
+specialization_of_referenced_template	explicit specialization of %n1 must precede the first use of %n2
+explicit_specialization_not_in_namespace_scope	explicit specialization is not allowed in the current scope
+partial_specialization_not_allowed	partial specialization of %n is not allowed
+entity_cannot_be_specialized	%nf is not an entity that can be explicitly specialized
+specialization_of_referenced_entity	explicit specialization of %n must precede its first use
+template_param_in_elab_type	template parameter %sq may not be used in an elaborated type specifier
+old_specialization_not_allowed	specializing %n requires \"template<>\" syntax
+tag_839	ec_removed_839
+tag_840	ec_removed_840
+cl_old_specializations_option_only_in_cplusplus	option \"old_specializations\" can be used only when compiling C++
+nonstd_old_specialization	specializing %n without \"template<>\" syntax is nonstandard
+bad_linkage_for_decl	this declaration may not have extern \"C\" linkage
+not_a_template_name	%sq is not a class or function template name in the current scope
+nonstd_default_arg_on_function_template_redecl	specifying a default argument when redeclaring an unreferenced function template is nonstandard
+default_arg_on_function_template_not_allowed	specifying a default argument when redeclaring an already referenced function template is not allowed
+pm_derived_class_from_virtual_base	cannot convert pointer to member of base class %t2 to pointer to member of derived class %t1 -- base class is virtual
+bad_exception_specification_for_specialization	exception specification is incompatible with that of %nd%s=':'
+omitted_exception_specification_on_specialization	omission of exception specification is incompatible with %nd
+unexpected_end_of_default_arg	unexpected end of default argument expression
+default_init_of_reference	default-initialization of reference is not allowed
+uninitialized_field_with_const_member	uninitialized %n has a const member
+uninitialized_base_class_with_const_member	uninitialized base class %t has a const member
+missing_default_constructor_on_const	const %n requires an initializer -- class %t has no explicitly declared default constructor
+missing_default_constructor_on_unnamed_const	const object requires an initializer -- class %t has no explicitly declared default constructor
+cl_impl_extern_c_conv_option_only_in_cplusplus	option \"implicit_extern_c_type_conversion\" can be used only when compiling C++
+cl_strict_ansi_incompatible_with_long_preserving	strict ANSI mode is incompatible with long preserving rules
+useless_type_qualifier_on_return_type	type qualifier on return type is meaningless
+type_qualifier_on_void_return_type	in a function definition a type qualifier on a \"void\" return type is not allowed
+static_data_member_not_allowed	static data member declaration is not allowed in this class
+invalid_declaration	template instantiation resulted in an invalid function declaration
+ellipsis_not_allowed	\"...\" is not allowed
+cl_extern_inline_option_only_in_cplusplus	option \"extern_inline\" can be used only when compiling C++
+extern_inline_never_defined	extern inline %n was referenced but not defined
+invalid_destructor_name	invalid destructor name for type %t
+tag_866	ec_removed_866
+ambiguous_destructor	destructor reference is ambiguous -- both %n1 and %n2 could be used
+virtual_inline_never_defined	virtual inline %n was never defined
+unreferenced_function_param	%n was never referenced
+union_already_initialized	only one member of a union may be specified in a constructor initializer list
+no_array_new_and_delete_support	support for \"new[]\" and \"delete[]\" is disabled
+double_for_long_double	\"double\" used for \"long double\" in generated C code
+no_corresponding_delete	%n has no corresponding operator delete%s (to be called if an exception is thrown during initialization of an allocated object)
+useless_placement_delete	support for placement delete is disabled
+no_appropriate_delete	no appropriate operator delete is visible
+ptr_or_ref_to_incomplete_type	pointer or reference to incomplete type is not allowed
+bad_partial_specialization	invalid partial specialization -- %n is already fully specialized
+incompatible_exception_specs	incompatible exception specifications
+returning_ref_to_local_variable	returning reference to local variable
+nonstd_implicit_int	omission of explicit type is nonstandard (\"int\" assumed)
+ambiguous_partial_spec	more than one partial specialization matches the template argument list of %n
+tag_882	%no
+partial_spec_is_primary_template	a template argument list is not allowed in a declaration of a primary template
+default_not_allowed_on_partial_spec	partial specializations may not have default template arguments
+not_used_in_partial_spec_arg_list	%n1 is not used in template argument list of %n2
+tag_886	ec_removed_886
+partial_spec_arg_depends_on_templ_param	the template argument list of the partial specialization includes a nontype argument whose type depends on a template parameter
+partial_spec_after_instantiation	this partial specialization would have been used to instantiate %n
+partial_spec_after_instantiation_ambiguous	this partial specialization would have been made the instantiation of %n ambiguous
+expr_not_integral_or_enum	expression must have integral or enum type
+expr_not_arithmetic_or_enum	expression must have arithmetic or enum type
+expr_not_arithmetic_or_enum_or_pointer	expression must have arithmetic, enum, or pointer type
+cast_not_integral_or_enum	type of cast must be integral or enum
+cast_not_arithmetic_or_enum_or_pointer	type of cast must be arithmetic, enum, or pointer
+expr_not_object_pointer	expression must be a pointer to a complete object type
+tag_896	ec_removed_896
+partial_spec_nontype_expr	a partial specialization nontype argument must be the name of a nontype parameter or a constant
+different_return_type_on_virtual_function_override	return type is not identical to return type %t of overridden virtual function %n
+cl_guiding_decls_option_only_in_cplusplus	option \"guiding_decls\" can be used only when compiling C++
+member_partial_spec_not_in_namespace	a partial specialization of a class template must be declared in the namespace of which it is a member
+pure_virtual_function	%n is a pure virtual function
+no_overrider_for_pure_virtual_function	pure virtual %n has no overrider
+decl_modifiers_ignored	__declspec attributes ignored
+invalid_char	invalid character in input line
+incomplete_return_type	function returns incomplete type %t
+local_pragma_pack	effect of this \"#pragma pack\" directive is local to %n
+not_a_template	%s is not a template
+friend_partial_specialization	a friend declaration may not declare a partial specialization
+exception_specification_ignored	exception specification ignored
+unexpected_type_for_size_t	declaration of \"size_t\" does not match the expected type %t
+exp_gt_not_shift_right	space required between adjacent \">\" delimiters of nested template argument lists (\">>\" is the right shift operator)
+bad_multibyte_char_locale	could not set locale %sq to allow processing of multibyte characters
+bad_multibyte_char	invalid multibyte character sequence
+bad_type_from_instantiation	template instantiation resulted in unexpected function type of %t1 (the meaning of a name may have changed since the template declaration -- the type of the template is %t2)
+ambiguous_guiding_decl	ambiguous guiding declaration -- more than one function template %no matches type %t
+non_integral_operation_in_templ_arg	non-integral operation not allowed in nontype template argument
+cl_embedded_cplusplus_option_only_in_cplusplus	option \"embedded_c++\" can be used only when compiling C++
+templates_in_embedded_cplusplus	Embedded C++ does not support templates
+exceptions_in_embedded_cplusplus	Embedded C++ does not support exception handling
+namespaces_in_embedded_cplusplus	Embedded C++ does not support namespaces
+rtti_in_embedded_cplusplus	Embedded C++ does not support run-time type information
+new_cast_in_embedded_cplusplus	Embedded C++ does not support the new cast syntax
+using_decl_in_embedded_cplusplus	Embedded C++ does not support using-declarations
+mutable_in_embedded_cplusplus	Embedded C++ does not support \"mutable\"
+multiple_inheritance_in_embedded_cplusplus	Embedded C++ does not support multiple or virtual inheritance
+cl_invalid_microsoft_version	invalid Microsoft version number: 
+inheritance_kind_already_set	pointer-to-member representation %sq has already been set for %n
+bad_constructor_type	%t1 cannot be used to designate constructor for %t2
+bad_suffix	invalid suffix on integral constant
+uuidof_requires_uuid_class_type	operand of __uuidof must have a class or enum type for which __declspec(uuid(\"...\")) has been specified
+bad_uuid_string	invalid GUID string in __declspec(uuid(\"...\"))
+cl_vla_option_only_in_C	option \"vla\" can be used only when compiling C
+vla_with_unspecified_bound_not_allowed	variable length array with unspecified bound is not allowed
+explicit_template_args_not_allowed	an explicit template argument list is not allowed on this declaration
+variably_modified_type_not_allowed	an entity with linkage cannot have a type involving a variable length array
+vla_is_not_auto	a variable length array cannot have static storage duration
+sym_not_a_template	%n is not a template
+tag_938	variable length array dimension (declared %p)
+expected_template_arg	expected a template argument
+tag_940	ec_removed_940
+no_params_with_class_or_enum_type	nonmember operator requires a parameter with class or enum type
+cl_enum_overloading_option_only_in_cplusplus	option \"enum_overloading\" can be used only when compiling C++
+tag_943	ec_removed_943
+destructor_qualifier_type_mismatch	qualifier of destructor name %t1 does not match type %t2
+type_qualifier_ignored	type qualifier ignored
+cl_nonstandard_qualifier_deduction_option_only_in_cplusplus	option \"nonstd_qualifier_deduction\" can be used only when compiling C++
+tag_947	ec_removed_947
+bad_declspec_property	incorrect property specification; correct form is __declspec(property(get=name1,put=name2))
+dupl_get_or_put	property has already been specified
+declspec_property_not_allowed	__declspec(property) is not allowed on this declaration
+no_get_property	member is declared with __declspec(property), but no \"get\" function was specified
+get_property_function_missing	the __declspec(property) \"get\" function %sq is missing
+no_put_property	member is declared with __declspec(property), but no \"put\" function was specified
+put_property_function_missing	the __declspec(property) \"put\" function %sq is missing
+dual_lookup_ambiguous_name	ambiguous class member reference -- %nd1 used in preference to %nd2
+bad_allocate_segname	missing or invalid segment name in __declspec(allocate(\"...\"))
+declspec_allocate_not_allowed	__declspec(allocate) is not allowed on this declaration
+dupl_allocate_segname	a segment name has already been specified
+undeclared_segment_name	segment name must be declared in a pragma
+illegal_segment_pragma_redeclaration	illegal segment pragma redeclaration
+cl_invalid_import_wrapper_output_file	invalid import wrapper output file 
+cl_cannot_open_import_wrapper_output_file	cannot open import wrapper output file 
+no_emms_before_return	no EMMS instruction before return
+no_emms_before_call	no EMMS instruction before call
+no_emms_before_float_op	no EMMS instruction before floating-point operation
+mmx_float_mix	mixing floating-point and MMX(TM) instructions may hurt performance
+pointer_conversion_size_mismatch	conversion from %t1 to %t2; sizes do not match
+pm_virtual_base_from_derived_class	cannot convert pointer to member of derived class %t1 to pointer to member of base class %t2 -- base class is virtual
+cl_invalid_instantiation_directory	invalid directory for instantiation files: 
+cl_one_instantiation_per_object_option_only_in_cplusplus	option \"one_instantiation_per_object\" can be used only when compiling C++
+invalid_output_file	invalid output file: %sq
+cannot_open_output_file	cannot open output file: %sq
+cl_ii_file_name_incompatible_with_multiple_inputs	an instantiation information file name may not be specified when compiling several input files
+cl_one_instantiation_per_object_incompatible_with_multiple_inputs	option \"one_instantiation_per_object\" may not be used when compiling several input files
+cl_ambiguous_option	more than one command line option matches the abbreviation \"--%s\":
+tag_976	--%s
+cv_qualified_function_type	type qualifiers on function types are ignored
+cannot_open_definition_list_file	cannot open definition list file: %sq
+cl_late_tiebreaker_option_only_in_cplusplus	late/early tiebreaker option can be used only when compiling C++
+intrinsic_argument_count	wrong number of actual arguments to intrinsic function %sq
+order_of_evaluation_unspecified	operands are evaluated in unspecified order
+bad_mmx_type_declaration	erroneous type declaration; check that your compiler and header files match
+bad_cpu_name	not a valid CPU name
+too_many_segments	too many segments in object file
+name_truncated	identifier %sq was truncated in debug information
+declaration_changes_in_ANSI_C	declaration introduces new type in standard C
+modifying_typedef	typedef may not be modified in standard C
+always_true_compare	comparison always evaluates to true
+always_false_compare	comparison always evaluates to false
+nonportable_path	#include of %sq may be non-portable
+slash_comments_are_nonstandard	//-style comments are nonstandard
+nonstd_macro_recursion	macro recursion is nonstandard
+macro_replacement_in_string	macro replacement within a string literal or character constant
+pragma_qualifier_conflict	invalid combination of pragma qualifiers
+unknown_pragma_qualifier	unknown pragma qualifier
+intrinsic_argument_out_of_range	value of immediate argument to intrinsic is out of range
+no_emms_in_function	function uses MMX(TM) instructions, but contains no EMMS instruction
+ebx_in_stack_align	reference to EBX in a function requiring stack alignment
+bad_va_start	incorrect use of va_start
+bad_va_arg	incorrect use of va_arg
+bad_va_end	incorrect use of va_end
+cl_pending_instantiations_option_only_in_cplusplus	pending instantiations option can be used only when compiling C++
+cl_invalid_import_directory	invalid directory for #import files: 
+cl_import_only_in_microsoft	an import directory can be specified only in Microsoft mode
+ref_not_allowed_in_union	a member with reference type is not allowed in a union
+typedef_not_allowed	\"typedef\" may not be specified here
+redecl_changes_access	redeclaration of %n alters its access
+qualified_name_required	a class or namespace qualified name is required
+implicit_int_on_main	return type \"int\" omitted in declaration of function \"main\"
+invalid_inheritance_kind_for_class	pointer-to-member representation %sq is too restrictive for %n
+implicit_return_from_non_void_function	missing return statement at end of non-void %n
+duplicate_using_decl	duplicate using-declaration of %no ignored
+unsigned_enum_bit_field_with_signed_enumerator	enum bit-fields are always unsigned, but enum %t includes negative enumerator
+cl_class_name_injection_option_only_in_cplusplus	option \"class_name_injection\" can be used only when compiling C++
+cl_arg_dependent_lookup_option_only_in_cplusplus	option \"arg_dep_lookup\" can be used only when compiling C++
+cl_friend_injection_option_only_in_cplusplus	option \"friend_injection\" can be used only when compiling C++
+invalid_name_after_template	name following \"template\" must be a member template
+tag_1018	ec_removed_1018
+conflicting_section_attributes	conflicting section attributes
+ignore_attributes_standard_section	attributes for standard section %sq ignored
+unexpected_section	Unexpected section %sq
+empty_pointer_size_stack	#pragma pointer_size(pop...) : more pops than pushes
+no_matching_id_on_pointer_size_stack	#pragma pointer_size(pop,...) : did not find previously pushed identifier %sq
+bad_pointer_size	expected pragma pointer_size parameter to be '32' or '64'
+unary_zero_extend	zero extending result of unary operation
+pragma_not_global_scope	pragma %s should be at global scope
+mixed_ceh_and_seh	__try in function containing objects with destructors
+unknown_warning_specifier	unknown warning specifier
+warning_level_out_of_range	warning level out of range, expected value between 1 and 4
+expected_warning_number	expected a warning number
+pop_without_push	pop without corresponding push
+omp_directive	syntax error in omp directive
+omp_unsupported_directive	unsupported omp directive
+omp_unimplemented_directive	unimplemented omp directive
+omp_clause	syntax error in %s clause
+omp_unsupported_clause	unsupported omp clause
+omp_unimplemented_clause	unimplemented omp clause
+omp_clause_symbol	invalid entity for this variable list in %s clause
+omp_incompatible_clause	%s clause is incompatible with directive
+omp_two_if	directive cannot contain more than one if clause
+omp_two_schedule	directive cannot contain more than one schedule clause
+omp_two_nowait	directive cannot contain more than one nowait clause
+omp_two_default	directive cannot contain more than one default clause
+omp_no_cpp	unsupported C++ object in data access clause
+omp_bad_for_init	OpenMP for-init does not conform
+omp_bad_for_test	OpenMP for-test does not conform
+omp_bad_for_incr	OpenMP for-incr does not conform
+omp_nested_critical_same_name	nested critical directives with same name
+omp_two_ordered	directive cannot contain more than one ordered clause
+omp_expecting_for	omp for directive requires a proceeding for statement
+negative_chunk_size	negative chunk size not allowed
+misplaced_qualifier	qualifier should be after \"*\"
+omp_break_in_region	break cannot be used to exit %s region
+omp_illegal_return	illegal return in %s construct
+omp_illegal_branch	illegal branch into omp construct
+master_in_for	master directive is not allowed in extent of for, sections, single, and taskq directives
+for_in_master	for, sections, single, or taskq directive is not allowed in extent of critical, master, and ordered directives
+barrier_in_master	barrier directive is not allowed in extent of for, sections, single, taskq, critical, master, and ordered directives
+omp_barrier_contain_in_nonblock	the smallest statement containing a barrier or flush must be a block or compound statement
+omp_case_sensitive	Open MP directives are case sensitive
+omp_directive_nonblock	directive bound to nonblock
+omp_illegal_nesting_in_parallel	for, sections, single, and taskq directives cannot be nested if bound to the same parallel directive
+omp_illegal_copyin	copyin variable must be threadprivate
+omp_atomic_bad_op	Illegal operation in atomic expression
+omp_atomic_bad_expr	Atomic is bound to an illegal construct
+omp_illegal_default_none_var	Illegal reference to variable under default none
+omp_bad_for_init_signed	Open MP for-init variable should be signed integer type
+tag_1068	ec_removed_1068
+omp_threadprivate_var_illegal_access_clause	threadprivate variable cannot appear in private, firstprivate, lastprivate, captureprivate, shared, or reduction clauses
+omp_const_reduction_var	reduction variable cannot be const-qualified
+float_not_supported	Floating-point types are not supported by EFI target
+not_enough_preallocated_memory_recompile	insufficient preallocated memory for generation of precompiled header file: producing %s and recompiling
+could_not_create_pchs	error creating pchs file
+omp_threadprivate_scope	threadprivate directive must be at file or namespace scope or have static storage
+omp_bad_threadprivate_var	threadprivate variable should not be incomplete or reference type
+local_class_friend_requires_prior_decl	nonstandard local-class friend declaration -- no prior declaration in the enclosing scope
+nonstd_default_arg	specifying a default argument on this declaration is nonstandard
+cl_nonstd_using_decl_option_only_in_cplusplus	option \"nonstd_using_decl\" can be used only when compiling C++
+bad_return_type_on_main	return type of function \"main\" must be \"int\"
+template_parameter_has_class_type	a nontype template parameter may not have class type
+default_arg_on_member_decl	a default template argument cannot be specified on the declaration of a member of a class template outside of its class
+return_from_ctor_function_try_block_handler	a return statement is not allowed in a handler of a function try block of a constructor
+no_ordinary_and_extended_designators	ordinary and extended designators cannot be combined in an initializer designation
+no_negative_designator_range	the second subscript must not be smaller than the first
+cl_designators_option_only_in_C	option \"designators\" can be used only when compiling C
+cl_extended_designators_option_only_in_C	option \"extended_designators\" can be used only when compiling C
+extra_bits_ignored	declared size for bit field is larger than the size of the bit field type; truncated to %s bits
+constructor_type_mismatch	type used as constructor name does not match type %t
+type_with_no_linkage_in_var_with_linkage	use of a type with no linkage to declare a variable with linkage
+type_with_no_linkage_in_function	use of a type with no linkage to declare a function
+return_type_on_constructor	return type may not be specified on a constructor
+return_type_on_destructor	return type may not be specified on a destructor
+malformed_universal_character	incorrectly formed universal character name
+invalid_UCN	universal character name specifies an invalid character
+UCN_names_basic_char	a universal character name cannot designate a character in the basic character set
+invalid_identifier_UCN	this universal character is not allowed in an identifier
+VA_ARGS_not_allowed	the identifier __VA_ARGS__ can only appear in the replacement lists of variadic macros
+friend_qualification_ignored	the qualifier on this friend declaration is ignored
+no_range_designator_with_dynamic_init	array range designators cannot be applied to dynamic initializers
+property_name_not_allowed	property name cannot appear here
+inline_qualifier_ignored	\"inline\" used as a function qualifier is ignored
+cl_compound_literals_option_only_in_C	option \"compound_literals\" can be used only when compiling C
+vla_not_allowed	a variable-length array type is not allowed
+bad_integral_compound_literal	a compound literal is not allowed in an integral constant expression
+bad_compound_literal_type	a compound literal of type %t is not allowed
+friend_template_in_local_class	a template friend declaration cannot be declared in a local class
+ambiguous_question_operator	ambiguous \"?\" operation: second operand of type %t1 can be converted to third operand type %t2, and vice versa
+bad_call_of_class_object	call of an object of a class type without appropriate operator() or conversion functions to pointer-to-function type
+tag_1109	surrogate function from conversion %np
+ambiguous_class_call	there is more than one way an object of type %t can be called for the argument list:
+similar_typedef	typedef name has already been declared (with similar type)
+no_internal_linkage_for_new_or_delete	operator new and operator delete cannot be given internal linkage
+no_mutable_allowed_on_anonymous_union	storage class \"mutable\" is not allowed for anonymous unions
+bad_pch_file	invalid precompiled header file
+abstract_class_catch_type	abstract class type %t is not allowed as catch type:
+bad_qualified_function_type	a qualified function type cannot be used to declare a nonmember function or a static member function
+bad_qualified_function_type_parameter	a qualified function type cannot be used to declare a parameter
+ptr_or_ref_to_qualified_function_type	cannot create a pointer or reference to qualified function type
+nonstd_braces	extra braces are nonstandard
+bad_cmd_line_macro	invalid macro definition: 
+nonstandard_ptr_minus_ptr	subtraction of pointer types %t1 and %t2 is nonstandard
+empty_template_param_list	an empty template parameter list is not allowed in a template template parameter declaration
+exp_class	expected \"class\"
+struct_not_allowed	the \"class\" keyword must be used when declaring a template template parameter
+virtual_function_decl_hidden	%np2 is hidden by %no1 -- virtual function override intended?
+no_qualified_friend_definition	a qualified name is not allowed for a friend declaration that is a function definition
+not_compatible_with_templ_templ_param	%n1 is not compatible with %n2
+storage_class_requires_function_or_variable	a storage class may not be specified here
+member_using_must_be_visible_in_direct_base	class member designated by a using-declaration must be visible in a direct base class
+tag_1130	ec_removed_1130
+cl_sun_incompatible_with_cfront	Sun mode is incompatible with cfront mode
+cl_strict_ansi_incompatible_with_sun	strict ANSI mode is incompatible with Sun mode
+cl_sun_mode_only_in_cplusplus	Sun mode is only allowed when compiling C++
+template_template_param_same_name_as_templ_param	a template template parameter cannot have the same name as one of its template parameters
+recursive_def_arg_instantiation	recursive instantiation of default argument
+tag_1136	ec_removed_1136
+bad_template_name	%n is not an entity that can be defined
+destructor_name_must_be_qualified	destructor name must be qualified
+no_typename_in_friend_class_decl	friend class name may not be introduced with \"typename\"
+no_ctor_or_dtor_using_declaration	a using-declaration may not name a constructor or destructor
+friend_is_nonreal_template	a qualified friend template declaration must refer to a specific previously declared template
+bad_class_template_decl	invalid specifier in class template declaration
+simple_incompatible_param	argument is incompatible with formal parameter
+cl_dep_name_option_only_in_cplusplus	option \"dep_name\" can be used only when compiling C++
+op_arrow_loop	loop in sequence of \"operator->\" functions starting at class %t1
+not_a_member_class	%n has no member class %sq
+name_not_class_in_file_scope	the global scope has no class named %sq
+recursive_inst_of_templ_default_arg	recursive instantiation of template default argument
+no_access_or_using_decl_in_union	access declarations and using-declarations cannot appear in unions
+not_class_member	%no is not a class member
+nonstd_const_member_decl_not_allowed	nonstandard member constant declaration is not allowed
+cl_ignore_std_option_only_in_cplusplus	option \"ignore_std\" can be used only when compiling C++
+cl_parse_nonclass_templates_option_only_in_cplusplus	option \"parse_templates\" can be used only when compiling C++
+cl_dep_name_requires_parse_nonclass_templates	option \"dep_name\" cannot be used with \"no_parse_templates\"
+omp_section_in_sections	section directive must be in lexical extent of sections directive
+omp_need_section	sections directive requires at least one enclosed section directive
+omp_const_private_var	private variable cannot be const-qualified
+omp_pointer_reduction_var	reduction variable cannot be pointer or reference type
+omp_ordered_no_ordered	ordered directive with no binding ordered clause
+omp_bad_private_var	private variable must not be incomplete or reference type
+omp_illegal_branch_out	illegal branch out of omp construct
+omp_bad_reduction_op	reduction variable is incompatible with reduction operator
+ixp1200_type_restriction	micro-C does not support char, short, float and double types
+ixp1200_conflicting_memory_attributes	conflicting memory attributes
+ixp1200_bad_pointer	pointer to improperly sized or aligned item
+ixp1200_float_not_supported	floating point types are not supported
+ixp1200_pointer_to_func_not_supported	pointers to functions are not supported
+ixp1200_redundant_memory_qual	memory attributes are not meaningful on struct/union fields
+cl_incompatible_language_modes	language modes specified are incompatible
+invalid_nested_class_redecl	invalid redeclaration of nested class
+flexible_array_member_not_allowed	type containing an unknown-size array is not allowed
+static_variable_in_inline_function	a variable with static storage duration cannot be defined within an inline function
+bad_linkage_of_ref_within_inline_function	an entity with internal linkage cannot be referenced within an inline function with external linkage
+type_generic_function_mismatch	argument type %t does not match this type-generic function macro
+tag_1175	variable length array %nod
+friend_cannot_add_default_arguments	friend declaration cannot add default arguments to previous declaration
+cannot_be_declared_in_scope	%n cannot be declared in this scope
+id_can_only_appear_in_function	the reserved identifier %sq may only be used inside a function
+invalid_identifier_start_UCN	this universal character cannot begin an identifier
+exp_string_literal	expected a string literal
+unrecognized_stdc_pragma	unrecognized STDC pragma
+bad_stdc_pragma_arg	expected \"ON\", \"OFF\", or \"DEFAULT\"
+stdc_pragma_not_allowed_here	a STDC pragma may only appear between declarations in the global scope or before any statements or declarations in a block scope
+bad_va_copy	incorrect use of va_copy
+only_applies_to_float_types	%s can only be used with float, double, or long double types
+complex_type_not_allowed	complex type is not allowed
+invalid_designator_kind	invalid designator kind
+inexact_fp_conversion	floating-point value cannot be represented exactly
+bad_complex_operation_result	complex floating-point operation result is out of range
+real_imaginary_conversion	conversion between real and imaginary yields zero
+cannot_initialize_flexible_array_member	an initializer cannot be specified for a flexible array member
+imaginary_times_assign	imaginary *= imaginary sets the left-hand operand to zero
+undeclared_parameter	standard requires that %n be given a type by a subsequent declaration (\"int\" assumed)
+inline_never_defined	a definition is required for inline %n
+conversion_to_pointer_loses_bits	conversion from integer to smaller pointer
+missing_floating_point_type	a float, double or long double type must be included in the type specifier for a _Complex or _Imaginary type
+unsupported_declspec_modifier	%sq is an unsupported __declspec attribute
+omp_mismatch_iter_var	initialization, test, and iteration variable should be the same
+omp_cpp_operator_missing	object requires a %sq
+ipcp_arg_mismatch	a constant with incorrect type reaches this point
+disabling_function_packaging	too many functions; disabling COMDAT function packaging
+gnu_asm_bad_constraint_char	illegal character %s in asm operand constraint
+gnu_asm_bad_dgt_constraint1	digit constraint must specify an output operand
+gnu_asm_bad_dgt_constraint2	digit illegal in output operand constraint
+gnu_asm_bad_output_marker	illegal '=' or '+' in input operand
+gnu_asm_cant_match_constraint	cannot match asm operand constraint
+gnu_asm_max_ops_exceeded	maximum number of operands exceeded for asm instruction
+gnu_asm_no_output_marker	output operand constraint must begin with '=' or '+'
+gnu_asm_alternative_mismatch	number of alternatives in asm operand constraints must match
+gnu_asm_bad_subst_directive	bad substitution directive in asm instruction
+gnu_asm_op_doesnt_exist	substitution directive specifies non-existant operand in asm instruction
+gnu_asm_bad_a_directive	'a' modifier used on operand that cannot be printed as an address
+gnu_asm_bad_cn_directive	'c' or 'n' modifier used on operand that is not constant
+gnu_asm_bad_h_directive	'h' modifier used on operand that isn't stored in eax, ebx, ecx, or edx
+gnu_asm_bad_modifier	unrecognized modifier character %s in substitution directive
+gnu_asm_bad_register	unknown register name %s in asm statement
+gnu_asm_bad_fpout	floating point output constraint must specify a single register
+gnu_asm_bad_fpout2	floating point output operands must be grouped at top of stack
+gnu_asm_bad_fpin	floating point input operands must not leave empty spaces on the stack
+gnu_asm_bad_fpin2	popped floating point input operands must be grouped at top of stack
+gnu_asm_needs_ec	fp output operand must use early clobber constraint
+gnu_asm_not_allocable	can't allocate registers for asm instruction
+omp_two_num_threads	directive cannot contain more than one num_threads clause
+warning_directive	#warning directive: %s
+omp_shared_for_var	iteration variable should be private
+omp_bad_flush_var	flush variable must not have a reference type
+deprecated_symbol	symbol was declared as deprecated
+second_operand_omitted	two-operand conditional expressions are not supported in default arguments
+flexible_array_member_alias	type containing an unknown-size array may alias another element
+unsupported_feature	Unsupported feature: %s
+address_of_label	no label with address taken exists in current scope
+address_of_label_not_support	address of label not support in C++
+expr_not_complex	expression must have complex type
+tag_1234	ec_removed_1234
+unsupported_vla_type	unsupported underlying vla type (non-POD (Plain Old Data) class type)
+empty_case_range	empty case range
+ansi_case_range	case ranges are an extension to standard C/C++
+use_of_incomplete_type	declaration with incomplete element type is nonstandard
+no_previous_push_macro	no previous #pragma push_macro for %sq
+tag_1240	ec_removed_1240
+tag_1241	ec_removed_1241
+tag_1242	ec_removed_1242
+tag_1243	ec_removed_1243
+tag_1244	ec_removed_1244
+tag_1245	ec_removed_1245
+tag_1246	ec_removed_1246
+tag_1247	ec_removed_1247
+tag_1248	ec_removed_1248
+tag_1249	ec_removed_1249
+type_decl_in_anon_union	types cannot be declared in anonymous unions
+returning_ptr_to_local_variable	returning pointer to local variable
+returning_ptr_to_local_temp	returning pointer to local temporary
+cl_export_template_option_only_in_cplusplus	option \"export\" can be used only when compiling C++
+cl_export_template_requires_dep_name	option \"export\" cannot be used with \"no_dep_name\"
+cl_export_template_requires_no_implicit_include	option \"export\" cannot be used with \"implicit_include\"
+corresp_decl_incompatible	declaration of %n is incompatible with a declaration in another translation unit
+corresp_decl_at	the other declaration is %p
+tag_1258	detected during compilation of secondary translation unit %sq
+tag_1259	compilation of secondary translation unit %sq
+field_cannot_involve_vla_type	a field declaration cannot have a type involving a variable length array
+entity_differs_in_other_trans_unit	declaration of %n had a different meaning during compilation of %sq
+exp_template	expected \"template\"
+export_on_instantiation	\"export\" cannot be used on an explicit instantiation
+bad_decl_for_export	\"export\" cannot be used on this declaration
+exported_in_unnamed_namespace	a member of an unnamed namespace cannot be declared \"export\"
+export_after_definition	a template cannot be declared \"export\" after it has been defined
+labeled_declaration	a declaration cannot have a label
+no_export_support	support for exported templates is disabled
+cannot_open_exported_template_file	cannot open exported template file: %sq
+entity_defined_in_other_trans_unit	%n already defined during compilation of %sq
+entity_defined_twice	%n already defined in another translation unit
+based_var_cannot_be_local	a non-static local variable may not be used in a __based specification
+cl_list_make_dependencies_incompatible_with_multiple_trans_units	the option to list makefile dependencies may not be specified when compiling more than one translation unit
+tag_1274	ec_removed_1274
+cl_pp_output_incompatible_with_multiple_trans_units	the option to generate preprocessed output may not be specified when compiling more than one translation unit
+field_name_conflicts_with_class	a field with the same name as its class cannot be declared in a class with a user-declared constructor
+cl_implicit_include_incompatible_with_multiple_trans_units	\"implicit_include\" cannot be used when compiling more than one translation unit
+corrupted_export_template_file	exported template file %sq is corrupted
+exported_instantiation_and_specialized	%n cannot be instantiated -- it has been explicitly specialized in the translation unit containing the exported definition
+tag_1280	object type is: %s
+unqual_named_function_with_qual_object	the object has cv-qualifiers that are not compatible with the member %n
+no_matching_function_due_to_selector	no instance of %n matches the argument list and object (the object has cv-qualifiers that prevent a match)
+mode_incompatible_with_type	an attribute specifies a mode incompatible with %t
+no_type_of_specified_width	there is no type with the width specified
+bad_attribute_alignment	invalid alignment value specified by attribute
+attribute_does_not_apply_to_type	invalid attribute for %t
+attribute_does_not_apply	invalid attribute for %n
+attribute_does_not_apply_to_param	invalid attribute for parameter
+arguments_provided_for_attribute	attribute %sq does not take arguments
+tag_1290	ec_removed_1290
+exp_attribute_name	expected an attribute name
+unrecognized_attribute	attribute %sq ignored
+attribute_not_allowed	attributes may not appear here
+invalid_argument_to_attribute	invalid argument to attribute %sq
+packed_attribute_ignored_in_typedef	the \"packed\" attribute is ignored in a typedef
+assigned_goto_requires_void_ptr	in \"goto *expr\", expr must have type \"void *\"
+nonstd_assigned_goto	\"goto *expr\" is nonstandard
+nonstd_address_of_label	taking the address of a label is nonstandard
+cl_duplicate_file_name	file name specified more than once: 
+tag_1300	ec_removed_1300
+attribute_only_in_func_def	attribute %sq is only allowed in a function definition
+transparent_type_is_not_union	the \"transparent_union\" attribute only applies to unions, and %t is not a union
+transparent_attribute_ignored	the \"transparent_union\" attribute is ignored on incomplete types
+union_cannot_be_transparent_sym	%t cannot be transparent because %n does not have the same size as the union
+union_cannot_be_transparent	%t cannot be transparent because it has a field of type %t which is not the same size as the union
+transparent_variable	only parameters can be transparent
+attribute_does_not_apply_to_local_variable	the %sq attribute does not apply to local variables
+attributes_in_rout_defn	attributes are not permitted in a function definition
+local_labels_only_in_statement_expressions	declarations of local labels should only appear at the start of statement expressions
+invalid_case_range	the second constant in a case range must be larger than the first
+asm_name_in_rout_defn	an asm name is not permitted in a function definition
+asm_name_in_typedef	an asm name is ignored in a typedef
+bad_reg_name	unknown register name \"%s\"
+asm_modifier_ignored	modifier letter '%s' ignored in asm operand
+bad_asm_constraint_modifier	unknown asm constraint modifier '%s'
+bad_asm_constraint_letter	unknown asm constraint letter '%s'
+missing_constraint_letter	asm operand has no constraint letter
+asm_output_must_have_output_mod	an asm output operand must have one of the '=' or '+' modifiers
+asm_input_must_not_have_output_mod	an asm input operand may not have the '=' or '+' modifiers
+too_many_asm_operands	too many operands to asm statement (maximum is 30; '+' modifier adds an implicit operand)
+too_many_asm_colons	too many colons in asm statement
+register_used_twice	register \"%s\" used more than once
+register_used_and_clobbered	register \"%s\" is both used and clobbered
+register_clobbered_twice	register \"%s\" clobbered more than once
+fixed_register_used	register \"%s\" has a fixed purpose and may not be used in an asm statement
+fixed_register_clobbered	register \"%s\" has a fixed purpose and may not be clobbered in an asm statement
+empty_clobbers_list	an empty clobbers list must be omitted entirely
+exp_asm_operand	expected an asm operand
+exp_asm_clobber	expected a register to clobber
+format_rout_not_varargs	\"format\" attribute applied to %n which does not have variable arguments
+subst_arg_is_not_variable	first substitution argument is not the first variable argument
+fmt_arg_does_not_exist	format argument index is greater than number of parameters
+fmt_arg_is_not_string	format argument does not have string type
+template_not_in_template	the \"template\" keyword used for syntactic disambiguation may only be used within a template
+tag_1335	a debug option must be specified on the command-line for the db_opt pragma to be used
+tag_1336	ec_removed_1336
+attr_requires_func_type	attribute does not apply to non-function type %t
+nonobject_pointer_arithmetic	arithmetic on pointer to void or function type
+invalid_storage_class_in_for_init	storage class must be auto or register
+va_arg_would_have_been_promoted	%t1 would have been promoted to %t2 when passed through the ellipsis parameter; use the latter type instead
+not_a_base_class_member	%sq is not a base class member
+super_after_scope	__super cannot appear after \"::\"
+super_not_in_class	__super may only be used in a class scope
+unqualified_super	__super must be followed by \"::\"
+multiline_string	possible missing closing quote; scanning a multi-line string
+omp_task_in_taskq	task directive must be in lexical extent of taskq directive
+omp_taskq_nearest	taskq construct must be the nearest lexically enclosing construct for any task directive
+cl_invalid_dependency_file	invalid makefile dependency file 
+cl_cannot_open_dependency_file	cannot open makefile dependency file 
+cl_invalid_dependency_option	dependency option must also be specified
+context_lines_skipped	[ %s instantiation contexts not shown ]
+mangled_name_too_long	mangled name is too long
+ssp_two_stride	directive cannot contain more than one stride clause
+ssp_compute_in_thread	%s directive must be in lexical extent of thread directive
+ssp_illegal_default_none_var	Variable in ssp thread construct must appear in exactly one of shared, captureprivate, or sync clause
+ssp_directive_nonloop	directive bound to non-loop
+optimizer_limit_exceeded	optimization disabled due to excessive resource requirements; contact Intel Premier Support for assistance
+aliased_name_undeclared	declaration aliased to unknown entity %sq
+aliased_name_bad_kind	declaration does not match its alias %n
+alias_cannot_have_definition	entity declared as alias cannot have definition
+vla_size_ignored	variable-length array field type will be treated as zero-length array field type
+gcc_lvalue_cast_ignored	nonstandard cast on lvalue ignored
+cl_invalid_flag_name	unrecognized flag name 
+qualified_void_return_type	void return type cannot be qualified
+auto_ignored	the auto specifier is ignored here (invalid in standard C/C++)
+alignment_reduction_ignored	a reduction in alignment without the \"packed\" attribute is ignored
+corresp_member_template_is_different_kind	a member template corresponding to %no is declared as a template of a different kind in another translation unit
+excess_initializers_ignored	excess initializers are ignored
+va_start_requires_ellipsis_function	va_start should only appear in a function with an ellipsis parameter
+cl_short_enums_requires_gcc_mode	the \"short_enums\" option is only valid in GNU C mode
+bad_export_info_file	invalid export information file %sq1 at line number %s2
+ignoring_inline_definition_because_of_alias	inline function also declared as an alias; definition ignored
+omp_ordered_in_critical	ordered directive is not allowed in extent of critical region bound to same parallel
+nounroll_take_no_args	pragma nounroll does not take any arguments
+external_import_export	%s must have external linkage in order to be imported/exported
+omp_barrier_flush_context	The smallest statement containing a %sq pragma must be a block or compound statement
+omp_branch_out_of_construct	%sq1 branches to or from an OpenMP structured block are illegal
+omp_chunksize_variable_not_shared	Variable %no in OpenMP schedule clause should appear on shared list
+omp_copyin_only_on_threadprivate	copyin variable %no in OpenMP parallel pragma must appear earlier in threadprivate pragma
+omp_copyprivate_must_be_private	variable %no on COPYPRIVATE list must have private semantics in region
+omp_copyprivate_on_private_list	variable %no on COPYPRIVATE list cannot appear on a PRIVATE or FIRSTPRIVATE list also
+omp_index_must_be_shared_on_region	Index variable %no on OpenMP worksharing construct must be shared on the corresponding region pragma
+omp_index_var_only_private	index variable %no of for statement following an OpenMP for pragma must be private
+omp_reduction_var_shared	reduction variable %no must be shared on entry to this OpenMP pragma
+omp_threadprivate_only_on_copyin	%sq clause of OpenMP pragma cannot contain threadprivate variable %no
+omp_variable_on_data_construct	%no must be specified in a variable list at enclosing OpenMP parallel pragma
+omp_variable_on_one_list	%no1 can only appear on one data scope attribute clause in an OpenMP pragma (except firstprivate and lastprivate)
+omp_section_outside_sections	\"section\" OpenMP pragma must appear immediately inside a \"sections\" block
+omp_pfor_pragma_on_for	a for statement must follow an OpenMP for pragma
+omp_chunksize_le_zero	OpenMP chunksize must be greater than zero
+omp_illegal_directive_nesting	the OpenMP %sq1 pragma must not be enclosed by the %sq2 pragma
+omp_reprivatized_variable	variable %no in firstprivate or lastprivate clause of an OpenMP pragma must be shared in the enclosing context
+omp_ordered_not_in_ordered_for	\"ordered\" pragma must be enclosed by a %sq1 OpenMP block which is ordered
+omp_ordered_inside_task	\"ordered\" OpenMP pragma must be nested in \"task\"
+omp_task_inside_taskq	task OpenMP pragma must bind to a taskq pragma in the current function
+omp_sections_not_on_block	\"sections\" OpenMP pragma must be on a block
+omp_ordered_not_in_for	\"ordered\" pragma must be enclosed by a %s OpenMP block
+omp_stmt_in_sections_needs_section_pragma	any block but the first must have \"section\" OpenMP pragma
+omp_should_be_section_pragma	OpenMP pragma in \"sections\" should be \"section\", not %sq1
+omp_dvsm_main_argc_argv	NetGuide (DVSM) requires main to have at least two parameters (argc,argv)
+omp_for_index_signed_integer_type	Index variable %no for OpenMP for must be a signed integer type
+omp_pfor_increment_must_be_int	OpenMP for increment must be an int
+omp_pfor_index_is_reference	Index variable %no in OpenMP \"for\" cannot be a reference type
+omp_pfor_init_integer	Initial condition value of OpenMP for must be an int
+omp_pfor_needs_increment	An OpenMP \"for\" must have a loop-invariant increment of integer type
+omp_pfor_needs_initializer	the for statement following an OpenMP for pragma must have an initializer of the form <index> = <expr>
+omp_pfor_needs_terminator	the for statement following an OpenMP for pragma must have a conditional of the form <index> {<,<=,>=,>} <expr>
+omp_pfor_terminator_integer	Terminating condition value of OpenMP for must be an int
+omp_private_constructor	Variable must have an accessible, unambiguous default constructor
+omp_no_chunk_allowed	Chunk_size not allowed with schedule(runtime)
+omp_threadprivate_referenced	Threadprivate directive must lexically precede all references to any variables in its list
+gnu_asm_bad_register_type	variable type %t1 not suitable for a register
+gnu_asm_register_mismatch	register %s's type does not match variable type %t1
+statement_expression_in_function_only	statement expressions are only allowed in block scope
+tag_1415	from translation unit 
+asm_name_on_auto_variable	an asm name is ignored on a non-register automatic variable
+omp_var_not_allowed	%s variable cannot be specified in this clause
+undeclared_external_def	external definition with no prior declaration
+external_decl_in_primary_src	external declaration in primary source file
+for_init_hides_declaration	declaration in for-initializer hides a declaration in the surrounding scope
+for_init_hidden_declaration	the hidden declaration is %p
+path_file_not_found	%s not found; Intel(R) Threading Tools must be installed
+cannot_define_dllimport_static_data_member	a static data member declared \"dllimport\" may not be defined
+intrin_const_param	intrinsic parameter must be an immediate value
+omp_throw_in_region	throw cannot be used to exit %s region
+omp_nowait_conflict	copyprivate and nowait cannot be used together
+const_qualifier_asm_ignored	const qualifier on asm is ignored
+bad_dll_def	definition of dllimport data not allowed
+declaration_hides_for_init	variable declaration hides declaration in for-initializer
+typedef_in_elab_type	typedef %sq may not be used in an elaborated type specifier
+call_of_zero	call of zero constant ignored
+gnu_style_asm	cannot declare Gnu-style asm when -use_msasm is specified
+omp_questionable	OpenMP %s may not conform
+omp_invalid_default	default value must be one of {shared,none}
+unimplemented_stdc_pragma	unimplemented STDC pragma ignored
+nonstd_ignored_array_cast	nonstandard cast to array type ignored
+expected_integer_constant	argument must be an integer constant between 0 and %s
+omp_privatized_reduction_variable	variable %no in private, firstprivate, or lastprivate clause of an OpenMP pragma must not be a reduction variable in the enclosing context
+unrecognized_upc_pragma	unrecognized UPC pragma
+mismatched_shared_block_size	shared block size does not match one previously specified
+ambiguous_block_size_spec	bracketed expression is assumed to be a block size specification rather than an array dimension
+shared_block_size_must_be_positive	the block size of a shared array must be greater than zero
+multiple_block_sizes	multiple block sizes not allowed
+nonshared_strict_relaxed	strict or relaxed requires shared
+threads_constant_not_allowed	THREADS not allowed in this context
+shared_block_size_too_large	block size specified exceeds the maximum value of %s
+function_returning_shared	function returning shared is not allowed
+tag_1448	ec_removed_1448
+shared_nonthreads_dim	one dimension of an array of a shared type must be a multiple of THREADS when the number of threads is nonconstant
+shared_inside_struct	shared type inside a struct or union is not allowed
+shared_parameter	parameters may not have shared types
+threads_dimension_requires_definite_block_size	a dynamic THREADS dimension requires a definite block size
+bad_shared_storage_class	shared variables must be static or extern
+nonshared_blocksizeof	argument of upc_blocksizeof is a pointer to a shared type (not shared type itself)
+nested_upc_forall	affinity expression ignored in nested upc_forall
+exit_forall	branching into or out of a upc_forall loop is not allowed
+bad_affinity	affinity expression must have a shared type or point to a shared type
+shared_affinity_type	affinity has shared type (not pointer to shared)
+upc_shared_void_comparison	shared void* types can only be compared for equality
+cl_upc_requires_ansi_c_dialect	UPC mode is incompatible with C++ and K&R modes
+null_char_ignored	null (zero) character in input line ignored
+null_char_in_string	null (zero) character in string or character constant
+null_char_in_header_name	null (zero) character in header name
+prototype_lost	the prototype declaration of %nfd is ignored after this unprototyped redeclaration
+tag_1465	ec_removed_1465
+bad_linkage_for_redefine_extname	%npd must have external C linkage
+handler_redeclares_parameter	parameter %sq may not be redeclared in a catch clause of function try block
+specialization_out_of_namespace	the initial explicit specialization of %n must be declared in the namespace containing the template
+cc_clobber_ignored	\"cc\" clobber ignored
+invalid_token_after_template	\"template\" must be followed by an identifier
+mythread_constant_not_allowed	MYTHREAD not allowed in this context
+bad_upc_shared_pointer_layout_qualifier	layout qualifier cannot qualify pointer to shared
+bad_upc_shared_array_layout_qualifier	layout qualifier cannot qualify an incomplete array
+decl_hides_catch_parameter	declaration of %sq hides handler parameter
+invalid_pragma_operator	this pragma cannot be used in a _Pragma operator (a #pragma directive must be used)
+field_uses_tail_padding	field uses tail padding of a base class
+gnu_may_use_bit_padding	GNU C++ compilers may use bit field padding
+deprecated_entity	%nd was declared \"deprecated\"
+hidden_anonymous_union_field	this anonymous union/struct field is hidden by %nd
+field_with_asm_name_not_allowed	an asm name is not allowed on a nonstatic member declaration
+nonlocal_label_reference	labels can be referenced only in function definitions
+jump_out_of_finally	 %s : jump out of __finally block has undefined behaviour during termination handling
+branch_into_statement_expr	transfer of control into a statement expression is not allowed
+branch_out_of_statement_expr	transfer of control out of a statement expression is not allowed
+bad_statement_in_statement_expr	this statement is not allowed inside of a statement expression
+class_def_in_statement_expr	a non-POD (Plain Old Data) class definition is not allowed inside of a statement expression
+destr_in_statement_expr	destructible entities are not allowed inside of a statement expression
+dyn_local_static_in_statement_expr	a dynamically-initialized local static variable is not allowed inside of a statement expression
+vla_in_statement_expr	a variable-length array is not allowed inside of a statement expression
+statement_expr_in_default_arg	a statement expression is not allowed inside of a default argument
+hidden_by_old_for_init_ms	definition from the enclosing scope %nd1 :is used. definition from the for loop %nd2 is ignored
+show_value_of_pragma_conform	value of pragma conform(forScope, show) == %sq
+push_pop_pragma_conform	expected pragma parameter to be 'on' or 'off'
+pop_pragma_conform	#pragma conform(pop,...) : did not find previously pushed identifer %sq
+unexpected_identifier	unexpected token 'identifier'
+omp_bad_threadshared_var	threadshared variable should not be incomplete or reference type
+omp_threadshared_referenced	threadshared directive must lexically precede all references to any variables in its list
+unrecognized_format_function_type	unrecognized format function type %sq ignored
+base_uses_tail_padding	base class %no1 uses tail padding of base class %no2
+bad_variable_for_init_priority	the \"init_priority\" attribute can only be used for definitions of static data members and namespace scope variables of class types
+init_priority_reserved	requested initialization priority is reserved for internal use
+invalid_error_number	invalid error number
+invalid_error_tag	invalid error tag
+exp_error_argument	expected an error number or error tag
+size_affected_by_tail_padding	size of class is affected by tail padding
+unexpected_noprefetch_arguments	unexpected argument for noprefetch
+expected_positive_integer	expected positive integer
+cl_invalid_gnu_version	invalid GNU version number: 
+no_gnu_virtual_base_gap	GNU layout bug not emulated because it places virtual base %no1 outside %no2 object boundaries
+gnu_virtual_base_gap	virtual base %no1 placed outside %no2 object boundaries
+ptr_func_ptr_data_conv	nonstandard conversion between pointer to function and pointer to data
+interface_cannot_have_virtual_base	interface types cannot have virtual base classes
+interface_cannot_have_private_or_protected	interface types cannot specify \"private\" or \"protected\"
+interface_must_derive_from_interface	interface types can only derive from other interface types
+type_is_interface	%t is an interface type
+interface_cannot_have_typedef	interface types cannot have typedef members
+interface_cannot_have_ctor_or_dtor	interface types cannot have user-declared constructors or destructors
+interface_cannot_have_operator	interface types cannot have user-declared member operators
+interface_cannot_be_local	interface types cannot be declared in functions
+interface_cannot_be_template	cannot declare interface templates
+interface_cannot_have_data_member	interface types cannot have data members
+interface_cannot_have_friend	interface types cannot contain friend declarations
+interface_cannot_have_nested_class	interface types cannot have nested classes
+interface_cannot_be_nested_class	interface types cannot be nested class types
+interface_cannot_have_member_templates	interface types cannot have member templates
+interface_cannot_have_static_members	interface types cannot have static member functions
+invalid_microsoft_pragma_operator	this pragma cannot be used in a __pragma operator (a #pragma directive must be used)
+qualifier_must_be_base_class	qualifier must be base class of %t
+invalid_selective_overrider_declaration	declaration must correspond to a pure virtual member function in the indicated base class
+integer_overflow_class_internal	integer overflow in internal computation due to size or complexity of %t
+integer_overflow_internal	integer overflow in internal computation
+invalid_type_for_w64	__w64 can only be specified on int, long, and pointer types
+ilp64_will_narrow	potentially narrowing conversion when compiled in an environment where int, long, or pointer types are 64 bits wide
+value_of_pragma_pack_show	current value of pragma pack is %s
+pragma_pack_show_args_ignored	arguments for pragma pack(show) are ignored
+bad_alignment_specifier	invalid alignment specifier value
+exp_int_literal	expected an integer literal
+multiple_declspec_align	earlier __declspec(align(...)) ignored
+exp_ms_attr_enum_value	expected an argument value for the %sq attribute parameter
+invalid_ms_attr_enum_value	invalid argument value for the %sq attribute parameter
+exp_ms_attr_bool_value	expected a boolean value for the %sq attribute parameter
+positional_after_named	a positional argument cannot follow a named argument in an attribute
+invalid_ms_attr_name	attribute %sq1 has no parameter named %sq2
+exp_ms_attr_arg_list	expected an argument list for the %sq attribute
+exp_comma_or_rbracket	expected a \",\" or \"]\"
+duplicate_ms_attr_arg	attribute argument %sq has already been given a value
+cannot_assign_to_ms_attr	a value cannot be assigned to the %sq attribute
+ptr_incomplete_throw	a throw expression may not have pointer-to-incomplete type
+alignof_incomplete_type	alignment-of operator applied to incomplete type
+invalid_use_of_standalone_ms_attr	%sq may only be used as a standalone attribute
+invalid_use_of_ms_attr	%sq attribute cannot be used here
+unrecognized_ms_attr	unrecognized attribute %sq
+ms_attr_not_allowed	attributes are not allowed here
+invalid_ms_attr_uuid_value	invalid argument value for the %sq attribute parameter
+too_many_ms_attr_args	too many attribute arguments
+conv_from_inaccessible_base_class	conversion from inaccessible base class %t is not allowed
+cl_export_template_requires_distinct_templ_sigs	option \"export\" requires distinct template signatures
+declspec_align_reduction_ignored	reduction in alignment ignored
+infinities_not_supported	target floating-point format does not support infinities
+bad_storage_for_template_instantiation	storage class %s applied to explicit template instantiation for %n
+const_assigned_goto	expr in \"goto *expr\" is constant
+bad_strong_using_scope	a strong using-directive may only appear in a namespace scope
+taking_address_of_temporary	taking the address of a temporary
+x87_fp_instruction_not_supported	x87 fp instruction is not supported
+attribute_ignored_on_incomplete_class_decl	attributes are ignored on a class declaration that is not also a definition
+alloc_is_not_allowed_in_filter_or_finally	'_alloca' cannot be called from within a filter expression or __finally block
+alloc_is_not_allowed_in_catch_block	'_alloca' cannot be called from within a catch block
+seh_intrinsic_function	 %s : bad context for intrinsic function
+duplicate_typedef_in_class	class member typedef may not be redeclared
+only_one_form_exception_handling	Only one form of exception handling permitted per function
+enum_const_cast	const_cast to enum type is nonstandard
+floating_point_equality	floating-point equality and inequality comparisons are unreliable
+exception_handling_disabled	try block found but exception handling is disabled
+struct_class_union_not_supported_for_prefetch	struct, class, and union are not supported for prefetch or noprefetch
+bit_field_initial_address	bit field can not be statically initialized with an address
+gnu_asm_nested_dialect	invalid 'asm': nested assembly dialect alternatives
+gnu_asm_unterminated_dialect	invalid `asm': unterminated assembly dialect alternative
+global_reg_value_out_of_range	bad __global_reg value, expecting value between 1 and 8, but not 4 in thumb mode
+global_reg_type_not_allowed	__global_reg cannot be used with this type
+global_reg_scope_not_allowed	__global_reg not allowed in this scope
+global_reg_storage_class_not_allowed	__global_reg may not be used with this storage class
+global_reg_initialization_not_allowed	__global_reg may not be initialized
+global_reg_address_of_variable	taking the address of a global register variable is not allowed
+swi_value_out_of_range	bad __swi, __swi_indirect value
+swi_function_declaration_required	__swi and __swi_indirect are allowed for function declarations only
+value_in_regs_function_required	__value_in_regs can only be used in function definition or declaration
+value_in_regs_copyconst	__value_in_regs cannot be used with structure types having copy constructor
+value_in_regs_size_limit	__value_in_regs return type size may not be more than 16 bytes
+arm_packed_ignored	__packed is ignored
+arm_packed_inconsistent_type	type is inconsistent with __packed
+value_in_regs_ignored	__value_in_regs is ignored
+pch_through_header_not_found	%sq was specified with /Yc or /Yu; related #include not found
+pch_through_header_not_found_before_hdrstop	%sq was specified with /Yc or /Yu; related #include not found before #pragma hdrstop
+incomplete_class_return_type	function returns incomplete class type %t
+non_pod_passed_to_ellipsis	non-POD (Plain Old Data) class type passed through ellipsis
+clomp_list_auto_promoted	Made sharable: %n
+clomp_list_not_sharable	Not made sharable: %n
+clomp_check_reference	Check that argument associated with %n at each call site is sharable
+local_variable_hidden	declaration hides %nd
+integer_reg_name	using an integer to specify a register is not portable
+cdecl_varargs	__cdecl must be used with \"...\"
+thiscall_member_function	__thiscall can only be used on native member functions
+clrcall_ignored	__clrcall not supported
+clrcall_nonmanaged_code	__clrcall can only be called from managed code
+asm_syntax_error	inline assembler syntax error
+mmx_instruction_not_supported	MMX instructions are not supported on this platform
+dll_thread_conflict	a thread-local variable cannot be declared with \"dllimport\" or \"dllexport\"
+cannot_initialize_destructible_flexible_array	an initializer cannot be specified for a flexible array member whose elements have a nontrivial destructor
+cannot_initialize_indirect_flexible_array	an initializer cannot be specified for an indirect flexible array member
+cannot_open_message_catalog	Could not open message catalog %s in NLSPATH/LANG. Using internal messages.
+mixed_string_concatenation	narrow and wide string literals cannot be concatenated
+nonstd_qualifier_in_namespace_member_decl	nonstandard qualified name in namespace member declaration
+const_ignored	const qualifier ignored
+invalid_asm_qualifiers	invalid GNU asm qualifiers
+non_pod_va_arg	a non-POD (Plain Old Data) class type cannot be fetched by va_arg
+nonstd_fixed_point_suffix	the 'u' or 'U' suffix must appear before the 'l' or 'L' suffix in a fixed-point literal
+cl_fixed_point_option_only_in_C	option \"fixed_point\" can be used only when compiling C
+integer_may_not_fit_in_fixed_point_result	integer operand may cause fixed-point overflow
+bad_fixed_point_value	fixed-point constant is out of range
+inexact_fxp_conversion	fixed-point value cannot be represented exactly
+c99_constant_in_unsigned_long_long_range	constant is too large for long long; given unsigned long long type (nonstandard)
+bad_upc_shared_void_pointer_layout_qualifier	layout qualifier cannot qualify pointer to shared void
+duplicate_threads_dim	duplicate THREADS in multidimensional array type
+probable_guiding_friend	%nf declares a non-template function -- add <> to refer to a template instance
+operation_may_not_fit_in_fixed_point_result	operation may cause fixed-point overflow
+expr_not_integral_or_enum_or_fixed_point	expression must have integral, enum, or fixed-point type
+expr_not_integral_or_fixed_point	expression must have integral or fixed-point type
+noreturn_function_does_return	function declared with \"noreturn\" does return
+asm_name_conflict	asm name ignored because it conflicts with a previous declaration
+implicit_fixed_point_to_floating_point_conversion	fixed-point value implicitly converted to floating-point type
+no_classification_for_fixed_point_type	fixed-point types have no classification
+fixed_template_parameter	a template parameter may not have fixed-point type
+hex_fp_constant	hexadecimal floating-point constants are not allowed
+cl_named_address_spaces_option_only_in_C	option \"named_address_spaces\" can be used only when compiling C
+float_to_fixed_conversion	floating-point value does not fit in required fixed-point type
+inexact_fixed_conversion	value cannot be converted to fixed-point value exactly
+fixed_sign_change	fixed-point conversion resulted in a change of sign
+integer_to_fixed_conversion	integer value does not fit in required fixed-point type
+bad_fixed_operation_result	fixed-point operation result is out of range
+multiple_named_address_spaces	multiple named address spaces
+bad_storage_class_for_named_address_space_variable	variable with automatic storage duration cannot be stored in a named address space
+type_with_named_address_space_not_allowed	type cannot be qualified with named address space
+named_address_space_on_function_type	function type cannot be qualified with named address space
+field_type_cannot_be_qualified_with_named_address_space	field type cannot be qualified with named address space
+fixed_to_float_conversion	fixed-point value does not fit in required floating-point type
+fixed_to_integer_conversion	fixed-point value does not fit in required integer type
+fixed_to_fixed_conversion	value does not fit in required fixed-point type
+cl_named_registers_option_only_in_C	option \"named_registers\" can be used only when compiling C
+named_register_not_allowed	a named-register storage class is not allowed here
+register_storage_class_conflict	%nd redeclared with incompatible named-register storage class
+aliased_variable_cannot_have_register_storage_class	named-register storage class cannot be specified for aliased variable
+register_in_use	named-register storage specifier is already in use
+embedded_c_option_incompatible_with_individual_feature_options	option \"embedded_c\" cannot be combined with options to control individual Embedded C features
+cl_invalid_edg_base_directory	invalid EDG_BASE directory: 
+cannot_open_predef_macro_file	cannot open predefined macro file: %sq
+bad_predef_macro_line	invalid predefined macro entry at line %s: %s2
+bad_macro_mode_name	invalid macro mode name %sq
+bad_predef_macro_redef	incompatible redefinition of predefined macro %sq
+missing_named_register_storage_class	redeclaration of %nd is missing a named-register storage class
+register_too_small	named register is too small for the type of the variable
+no_named_register_for_array	arrays cannot be declared with named-register storage class
+cl_embedded_c_option_only_in_C	option \"embedded_c\" can be used only when compiling C
+bad_msfp_pragma_arg	expected \"on\" or \"off\"
+bad_float_control_pragma_arg	expected \"precise\", \"except\", \"push\", or \"pop\"
+exp_comma_or_rparen	expected a \",\" or \")\"
+bad_fc_push_pragma_arg	expected \"push\"
+must_turn_off_except	exception semantics must be turned off before turning off this float_control mode
+must_turn_off_fenv_access	fenv_access must be turned off before turning off this float_control mode
+must_be_precise	exception semantics cannot be enabled except in precise, source, double, and extended modes
+msfp_pragma_not_allowed_here	this pragma may only appear between declarations in the global scope or before any statements or declarations in a block scope
+cl_unsupported_fp_fast_arg	unsupported floating-point model \"fast\" argument: 
+invalid_pragma_expr	invalid expression in pragma will be ignored
+invalid_memref_locality	invalid locality, should be \"l1\", \"l2\", \"l3\", or \"mem\"
+invalid_memref_latency	invalid latency, should be \"l1_latency\", \"l2_latency\", \"l3_latency\", or \"mem_latency\"
+fenv_must_be_precise	fenv_access cannot be enabled except in precise, source, double, and extended modes
+cl_unsupported_arg_fp	unsupported argument to floating-point option: 
+illegal_float_control_pop	cannot restore a non-precise floating-point mode while fenv_access is enabled
+cl_cannot_enable_speculation	cannot enable speculation unless fenv_access and exception_semantics are disabled
+cl_fltacc_conflict	floating-point accuracy option conflicts with the floating-point mode specification
+cl_eval_method_conflicts	this option conflicts with the floating-point mode specification: 
+el_extended_not_supported	the \"extended\" floating-point model is not supported on this platform
+impl_narrowing_64_bit_int	implicit conversion of a 64-bit integral type to a smaller integral type (potential portability problem)
+expl_narrowing_64_bit_int	explicit conversion of a 64-bit integral type to a smaller integral type (potential portability problem)
+pointer_conversion_to_same_size_int	conversion from pointer to same-sized integral type (potential portability problem)
+base_class_export	base class %t is implicitly %sq1 but the following declaration(s) are explicitly declared %sq2; %sq2 ignored:
+size_of_variable	local variable exceeds maximum allowable size
+size_of_stack	total size of local stack frame exceeds maximum allowable size
+size_of_param	total size of parameter block exceeds maximum allowable size
+invalid_access_specifier	invalid use of access specifier is ignored
+optimization_level_out_of_range	optimization level must be between 0 and 3
+inapplicable_opt_level	optimization level applies only to function definitions
+white_space_inside_splice	white space between backslash and newline in line splice ignored
+except_not_allowed	__except may not appear in termination block
+bad_byte_order	byte order must be 'littleendian', 'bigendian', 'default', or 'default_header'
+byte_order_stack_empty	byte order stack is empty, pop ignored
+impl_pointer_conversion_byte_order_mismatch	implicit pointer conversion changes byte order
+pointer_conversion_byte_order_mismatch	pointer conversion changes byte order
+extern_prefix_stack_empty	extern prefix stack is empty, pop ignored
+invalid_extern_prefix	pragma parameter must be 'push', 'pop', or prefix string
+adjacent_bitf_with_diff_byte_order	adjacent bit fields have different byte order
+poisoned_identifier	cannot use poisoned identifier
+poisoning_defined_macro	poisoning an existing macro
+null_format_string	NULL format string
+zero_length_format_string	zero-length format string
+embedded_null_in_format_string	embedded null character in format string
+bad_attr_placement	byte order attributes are not supported here
+invalid_regexp	invalid regular expression: 
+bad_prolog_file	cannot open prolog file %sq
+bad_epilog_file	cannot open epilog file %sq
+reference_to_static	reference to statically allocated variable %no
+assignment_to_static	assignment to statically allocated variable %no
+address_of_static	address taken of statically allocated variable %no
+named_address_space_not_allowed	a named address space qualifier is not allowed here
+bad_initializer_for_array_with_unspecified_bound	an empty initializer is invalid for an array with unspecified bound
+out_of_class_initializer_ignored	%n has already been initialized; the out-of-class initializer will be ignored
+named_address_space_for_parameter	a parameter cannot be allocated in a named address space
+bad_float_or_fixed_suffix	invalid suffix on fixed-point or floating-point constant
+register_in_address_space	a register variable cannot be allocated in a named address space
+bad_stdc_fx_overflow_pragma_arg	expected \"SAT\" or \"DEFAULT\"
+no_corresponding_member_delete	%n has no corresponding member operator delete%s (to be called if an exception is thrown during initialization of an allocated object)
+function_returning_named_address_space	a function return type cannot be qualified with a named address space
+attribute_after_parenthesized_initializer	variable attributes appearing after a parenthesized initializer are ignored
+gcc_use_of_cast_as_lvalue	the result of this cast cannot be used as an lvalue
+unsigned_fixed_point_negation	negation of an unsigned fixed-point value
+operator_not_allowed	this operator is not allowed at this point; use parentheses
+nonconstant_flexible_array_member_init	flexible array member initializer must be constant
+register_name_on_nonregister	register names can only be used for register variables
+void_named_register	named-register variables cannot have void type
+declspec_invalid	__declspec modifiers not valid for this declaration
+parameter_with_link_scope_specifier	parameters cannot have link scope specifiers
+multiple_link_scope_specifiers	multiple link scope specifiers
+link_scope_requires_external_linkage	link scope specifiers can only appear on functions and variables with external linkage
+link_scope_relaxation	a redeclaration cannot weaken a link scope
+invalid_link_scope	link scope specifier not allowed on this declaration
+nonstd_qualifier_in_global_scope_decl	nonstandard qualified name in global scope declaration
+dll_interface_conflict_none_assumed	dllexport/dllimport conflict with %nod; dllimport/dllexport dropped
+dll_interface_ignored_on_class_template	dllexport and dllimport are ignored on class templates
+base_class_has_different_dll_interface	base class dllexport/dllimport specification differs from that of the derived class
+redeclaration_adds_dll_interface	redeclaration cannot add dllexport/dllimport to %nod
+dll_interface_conflict_dllexport_assumed	dllexport/dllimport conflict with %nod; dllexport assumed
+dllimport_defined	cannot define dllimport entity
+dll_interface_requires_external_linkage	dllexport/dllimport requires external linkage
+class_and_member_have_dll_interface	a member of a class declared with dllexport/dllimport cannot itself be declared with such a specifier
+field_without_dll_interface	field of class type without a DLL interface used in a class with a DLL interface
+class_and_inherited_member_instance_have_dll_interface	member %nd already has an explicit dllexport/dllimport specifier
+arm_packed_mismatch	__packed specifier does not match type definition
+asm_bad_symbol	illegal symbol for assembly operand
+pascal_string_too_long	pascal string exceeds 255 bytes
+unknown_options_alignment_value	unknown alignment specifier, expecting [reset|power|natural|mac68k|packed]
+unknown_options_kind	unknown options type, expecting align
+invalid_symbolic_asm_operand_name	invalid symbolic operand name %sq
+match_limit_for_symbolic_asm_operand	a symbolic match constraint must refer to one of the first ten operands
+positional_format_specifier_zero	positional format specifier cannot be zero
+cannot_use_thread_local_storage	only static and extern variables can use thread-local storage
+multiple_thread_local_storage_specifiers	multiple thread-local storage specifiers
+friend_specifier_ignored	friend specifier is not allowed in a class definition; friend specifier is ignored
+virtual_function_never_defined	virtual %n was not defined (and cannot be defined elsewhere because it is a member of an unnamed namespace)
+stray_carriage_return	carriage return character in source line outside of comment or character/string literal
+expr_not_fixed_point	expression must have fixed-point type
+ptr_conv_to_bool	pointer converted to bool
+ptr_to_member_conv_to_bool	pointer-to-member converted to bool
+storage_specifier_ignored	storage specifier ignored
+microsoft_parenthesized_member	parenthesized member declaration is nonstandard
+bad_nonstd_anonymous_union_field	invalid member for anonymous member class -- class %t has a disallowed member function
+nonstd_reinterpret_cast	nonstandard reinterpret_cast
+nonlocal_vla_not_allowed	a local class cannot reference a variable-length array type from an enclosing function
+vla_in_return_type	a variable-length array is not allowed in a function return type
+ptr_to_member_of_vla_type	variable-length array type is not allowed in pointer to member of type %t
+statement_expr_with_vla_type	the result of a statement expression cannot have a type involving a variable-length array
+unaligned_qualifier_dropped	conversion drops \"__unaligned\" qualifier
+clomp_sharable_fail	sharable propagation failed for routine %sq
+clomp_var_sharable	sharable pragma should be inserted by user '#pragma intel omp sharable(%s)'
+clomp_arg_sharable_fail	ensure that argument %s of function call is declared as sharable
+clomp_undef_sharable	global variable %sq not made sharable since it is not allocated space in any compilation unit
+clomp_temp_sharable	sharable directive should be inserted by user for expression used as an argument %s
+weak_aliases_not_supported	weak aliases not supported; pragma ignored
+strerror_without_msg	%s
+strerror_with_msg	%s1: %s2
+tag_1779	ec_removed_1779
+tag_1780	ec_removed_1780
+thread_local_storage_not_supported	thread-local storage is not supported in this environment
+pragma_once_obsolete	#pragma once is obsolete. Use #ifndef guard instead.
+name_must_be_prototype_instantiation	template argument list of %sq must match the parameter list
+use_of_deprecated_macro	the %sq macro is deprecated and will not be defined by the compiler in a future release
+feature_requires_cplusplus	%sq is only allowed in C++
+deprecated_entity_with_custom_message	%nd was declared \"deprecated (%sq) \"

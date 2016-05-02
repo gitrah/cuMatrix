@@ -1,14 +1,16 @@
 #include "../util.h"
 #include "tests.h"
 #include "../CMap.h"
+//#include "../ConcurrentMap.h"
+#ifdef CuMatrix_UseOmp
 #include <omp.h>
+#endif
 
-using namespace std;
 
-template int testCMap<float>::operator()(int argc, char const ** args) const;
-template int testCMap<double>::operator()(int argc, char const ** args) const;
-template int testCMap<ulong>::operator()(int argc, char const ** args) const;
-template <typename T> int testCMap<T>::operator()(int argc, char const ** args) const{
+template int testCMap<float>::operator()(int argc, const char **argv) const;
+template int testCMap<double>::operator()(int argc, const char **argv) const;
+template int testCMap<ulong>::operator()(int argc, const char **argv) const;
+template <typename T> int testCMap<T>::operator()(int argc, const char **argv) const{
 
 	CMap<T, char> cmap;
 	std::map<T,char> smap;
@@ -19,6 +21,7 @@ template <typename T> int testCMap<T>::operator()(int argc, char const ** args) 
 	outln("outside '#pragma omp parallel' block");
 
 
+#ifdef CuMatrix_UseOmp
 	outln("omp_in_parallel  " << tOrF(omp_in_parallel()));
 	outln("omp_get_num_procs " << omp_get_num_procs());
 	outln("omp_get_level (nesting level) " << omp_get_level());
@@ -45,6 +48,7 @@ template <typename T> int testCMap<T>::operator()(int argc, char const ** args) 
 			outln("omp_in_final " << omp_in_final());
 		}
 	}
+	outln("apres pragme omp_in_parallel  " << tOrF(omp_in_parallel()));
 
 	printMap<T, char>("cmap after pop ", cmap.the_map);
 	printMap<T, char>("smap after pop ", smap);
@@ -52,15 +56,16 @@ template <typename T> int testCMap<T>::operator()(int argc, char const ** args) 
 	{
 		tid = omp_get_thread_num();
 		cmap.erase(tid);
-		smap.erase(tid);
+		//smap.erase(tid);
 		if(tid == nthreads/2) {
-			printMap<T, char>("cmap during rip ", cmap.the_map);
+			tprintf("cmap during rip:\n");
+			cmap.safePrint();
 			printMap<T, char>("smap during rip ", smap);
 		}
 	}
 
 	printMap<T, char>("cmap after rip ", cmap.the_map);
 	printMap<T, char>("smap after rip ", smap);
-
+#endif
 	return 0;
 }

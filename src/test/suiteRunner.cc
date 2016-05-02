@@ -5,7 +5,6 @@
  *      Author: reid
  */
 
-#include "../Matrix.h"
 #include "../caps.h"
 #include <cstring>
 #include <ctime>
@@ -24,14 +23,7 @@ string const stackChoice = "stack";
 string const verboseChoice = "verb";
 string const syncChoice = "sync";
 string const txpChoice = "txp";
-string const syncHappyChoice = "shappy";
 
-int testCheckValid() {
-	Matrix<float> m = Matrix<float>::zeros(5, 5);
-	DMatrix<float> md;
-	m.asDmatrix(md, true);
-	return 0;
-}
 
 template <typename T> int runTest(int argc, char** argv) {
 	// CUDA events
@@ -43,7 +35,6 @@ template <typename T> int runTest(int argc, char** argv) {
 
     b_util::announceTime();
 
-	//testCheckValid();
 	getCmdLineArgumentString(argc, (const char **) argv, "dbg", &debugChoice);
 	getCmdLineArgumentString(argc, (const char **)argv, "dev", &device);
 	uint localDbgFlags = 0;
@@ -52,7 +43,7 @@ template <typename T> int runTest(int argc, char** argv) {
 		cout << "debug choices: ";
 		if (debug.find(allChoice) != string::npos) {
 			cout << " ALL";
-			//debugMem = debugLife = debugCopy = debugMatProd = debugCons = debugStack = debugVerbose = debugTxp= true;
+			//debugMem = debugCopy = debugMatProd = debugCons = debugRefcount = debugVerbose = debugTxp= true;
 		} else {
 			if (debug.find(memChoice) != string::npos) {
 				cout << " mem";
@@ -74,21 +65,18 @@ template <typename T> int runTest(int argc, char** argv) {
 				cout << " cons";
 				localDbgFlags |=debugCons;
 			}
-			if (debug.find(stackChoice) != string::npos) {
-				cout << " stack";
-				localDbgFlags |=debugStack;
+			if (debug.find(destrChoice) != string::npos) {
+				cout << " destr";
+				localDbgFlags |=debugDestr;
+			}
+
+			if (debug.find(refcountChoice) != string::npos) {
+				cout << " refcount";
+				localDbgFlags |=debugRefcount;
 			}
 			if (debug.find(stackChoice) != string::npos) {
 				cout << " verbose";
 				localDbgFlags |= debugVerbose;
-			}
-			if (debug.find(syncChoice) != string::npos) {
-				cout << " sync";
-				localDbgFlags |=debugSync;
-			}
-			if (debug.find(syncHappyChoice) != string::npos) {
-				cout << " s(ync)happy";
-				localDbgFlags |=syncHappy;
 			}
 			if (debug.find(txpChoice) != string::npos) {
 				cout << " txp";
@@ -107,7 +95,7 @@ template <typename T> int runTest(int argc, char** argv) {
 		}
 	}
 
-    checkCudaErrors(cudaSetDevice(idev));
+    ExecCaps_setDevice(ExecCaps_visitDevice);
     setAllGpuDebugFlags(localDbgFlags,false,false);
 	Matrix<T>::init(256, 64);
 	int devCount;

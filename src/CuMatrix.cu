@@ -18,18 +18,18 @@ __constant__ uint D_MaxColsDisplayed;
 cublasHandle_t g_handle;
 bool g_useCublas = false;
 
-template <typename T> __host__ void CuMatrix<T>::setMaxRowsDisplayed(uint rows) {
+template <typename T> __host__ void CuMatrix<T>::setMaxRowsDisplayed(int rows) {
 	MaxRowsDisplayed = rows;
 	//checkCudaError(cudaMemcpyToSymbol(D_MaxRowsDisplayed,  (void*) &CuMatrix<T>::MaxRowsDisplayed, sizeof(uint)));
 }
-template <typename T> __host__ void CuMatrix<T>::setMaxColsDisplayed(uint cols) {
+template <typename T> __host__ void CuMatrix<T>::setMaxColsDisplayed(int cols) {
 	MaxColsDisplayed = cols;
 	//checkCudaError(cudaMemcpyToSymbol(D_MaxColsDisplayed,  (void*) &CuMatrix<T>::MaxColsDisplayed, sizeof(uint)));
 }
 
 template <typename T> typename MatProd<T>::MatProdKptr CuMatrix<T>::g_matrix_product_kernel = null;
 
-template<typename T> int CuMatrix<T>::maxSlices(uint n) {
+template<typename T> int CuMatrix<T>::maxSlices(int n) {
 	return ExecCaps::currCaps()->memSharedPerBlock / (2. * n * sizeof(T));
 }
 
@@ -102,9 +102,6 @@ template<typename T> void CuMatrix<T>::varianceL( DMatrix<T>& d_Sigmas, const DM
 	dim3 grid(DIV_UP( d_X.n,block.x));
 	outln("varianceL(&,const&,const&) for " << util<T>::pdm(d_X) << " with mus " << util<T>::pdm(d_Mus) << " have exctx grid " << b_util::pd3(grid) << " or blk " <<  b_util::pd3(block));
 	varianceMusKernel<<<grid,block,0>>>(d_Sigmas,d_X,d_Mus);
-#ifndef __CUDA_ARCH__
-	if(checkDebug(syncHappy))checkCudaError(cudaDeviceSynchronize());
-#endif
 }
 
 template<typename T> void CuMatrix<T>::varianceAndMeanL(DMatrix<T>& d_Sigmas,  DMatrix<T>& d_Mus, const DMatrix<T>& d_X) {
@@ -112,9 +109,6 @@ template<typename T> void CuMatrix<T>::varianceAndMeanL(DMatrix<T>& d_Sigmas,  D
 	dim3 grid(DIV_UP(d_X.n,block.x));
 	outln("varianceL(&,&,const&) for " << util<T>::pdm(d_X) << " have exctx grid " << b_util::pd3(grid) << " or blk " <<  b_util::pd3(block));
 	varianceKernel<<<grid,block,0>>>(d_Sigmas, d_Mus, d_X);
-#ifndef __CUDA_ARCH__
-	if(checkDebug(syncHappy))checkCudaError(cudaDeviceSynchronize());
-#endif
 }
 
 /*
@@ -167,7 +161,7 @@ template<typename T> __global__ void featureAvgKernelLv(DMatrix<T> means, const 
 template<typename T> __global__ void featureAvgKernelTxd(DMatrix<T> means, const DMatrix<T> txdX) {
 	// 	T res = reduce(d_A, plusBinaryOp<T>(), 0 );
 	T* sdata = SharedMemory<T>();
-	uint row = blockIdx.x * blockDim.x + threadIdx.x; // index into column
+	int row = blockIdx.x * blockDim.x + threadIdx.x; // index into column
 	// have to zero sm first?
 	//T t = (row < txdX.m) ? txdX.elements[row] : 0;
 	printf("featureAvgKernelTxd txdX m %u* n %u\n", txdX.m, txdX.n);
@@ -176,9 +170,9 @@ template<typename T> __global__ void featureAvgKernelTxd(DMatrix<T> means, const
 	printf("featureAvgKernelTxd row %u drow.elements %p drow.elements[0] %f drow.elements[n-1] %f\n",row, drow.elements,drow.elements[0],drow.elements[drow.n-1]);
 	if(row==0)util<T>::printDm( drow,"featureAvgKernelTxd row 0 drow ");
 	if(row==1)util<T>::printDm( drow,"featureAvgKernelTxd row 1 drow ");
-	ulong nP = drow.n;
-	uint threads;
-	uint blocks;
+	long nP = drow.n;
+	int threads;
+	int blocks;
 	getReductionExecContext(blocks, threads, nP,128,512);
 	printf("featureAvgKernelTxd row %u blocks %u thread %u nP %lu\n",row, blocks, threads, nP);
 	//CuMatrix<T> res(blocks, 1, true, true);
@@ -211,12 +205,11 @@ template<typename T> __global__ void featureAvgKernelTxd(DMatrix<T> means, const
 	if(d_M.p != d_M.n) {
 		total =
 	} else {
-	 total = reduceLauncher(res.d_elements, d_M.elements, nP, op, start, stream);
+	 total = reduceLauncher(res.d_ elements, d_M.elements, nP, op, start, stream);
 	}
-	if(checkDebug(syncHappy))cherr(cudaDeviceSynchronize());
 	if(checkDebug(debugMem)) outln("done with res " << res.toShortString());
 
-	for (uint row = 1; row < x.m; row++) {
+	for (int row = 1; row < x.m; row++) {
 		if (i < x.n) {
 			t += x.elements[row * x.p + i];
 		}
@@ -272,21 +265,18 @@ template<typename T> __global__ void featureSumKernelDivLv(DMatrix<T> means, con
 
 
 template<typename T> __host__ CUDART_DEVICE void CuMatrix<T>::featureAvgKernelL(DMatrix<T>& d_means, const DMatrix<T>& d_x, bool localVar, cudaStream_t stream ) {
-	uint threads =  MAX(d_means.m, d_means.n);
+	int threads =  MAX(d_means.m, d_means.n);
 	dim3 dBlocks, dThreads;
 	uint smem = d_x.n * sizeof(T);
 	if (smem > ExecCaps::currCaps()->memSharedPerBlock) {
 		setLastError ( smemExceededEx);
 	}
-	b_util::execContext(threads, d_x.n, dBlocks, dThreads);
+	b_util::vectorExecContext(threads, d_x.n, dBlocks, dThreads);
 	if (localVar) {
 		featureAvgKernelLv<<<dBlocks, dThreads, 0, stream>>>(d_means, d_x);
 	} else {
 		featureAvgKernel<<<dBlocks, dThreads, smem, stream>>>(d_means, d_x);
 	}
-#ifndef __CUDA_ARCH__
-	if(checkDebug(syncHappy))checkCudaError(cudaDeviceSynchronize());
-#endif
 }
 
 
@@ -294,13 +284,13 @@ template<typename T> __host__ CUDART_DEVICE void CuMatrix<T>::featureAvgMultiStr
 		DMatrix<T>& d_means, const DMatrix<T>& d_x, bool localVar,
 		int nstreams) {
 	uint maxDim = MAX(d_means.m, d_means.n);
-	uint threads = maxDim;
+	int threads = maxDim;
 	dim3 dBlocks, dThreads;
 	uint smem = d_x.n * sizeof(T);
 	if (smem > ExecCaps::currCaps()->memSharedPerBlock) {
 		setLastError(smemExceededEx);
 	}
-	b_util::execContext(threads, d_x.n, dBlocks, dThreads);
+	b_util::vectorExecContext(threads, d_x.n, dBlocks, dThreads);
 
 	//int meanSize = MAX(d_means.m, d_means.n) * sizeof(T);
 	cudaStream_t *streams = (cudaStream_t *) malloc(
@@ -352,15 +342,12 @@ template<typename T> __host__ CUDART_DEVICE void CuMatrix<T>::featureAvgMultiStr
 #endif
 	delete [] cols;
 
-#ifndef __CUDA_ARCH__
-	if(checkDebug(syncHappy))checkCudaError(cudaDeviceSynchronize());
-#endif
 }
 
 template<typename T> __host__ CUDART_DEVICE void CuMatrix<T>::featureAvgTxdKernelL(DMatrix<T>& d_means, const DMatrix<T>& d_x) {
-	uint threads = MIN(512, MAX(d_means.m, d_means.n));
+	int threads = MIN(512, MAX(d_means.m, d_means.n));
 	dim3 dBlocks, dThreads;
-	b_util::execContext(threads, d_x.m, dBlocks, dThreads);
+	b_util::vectorExecContext(threads, d_x.m, dBlocks, dThreads);
 	if(checkDebug(debugRedux)) {
 		printf("featureAvgTxdKernelL threads %u rows %u \n ",threads, d_x.m );
 		b_util::prd3(dBlocks,"featureAvgTxdKernelL dBlocks");
@@ -376,15 +363,13 @@ template<typename T> __host__ CUDART_DEVICE void CuMatrix<T>::featureAvgTxdKerne
 	//return unaryOp(multf);
 
 	//featureAvgKernelTxd<<<dBlocks, dThreads, smem>>>(d_means, d_x);
-#ifndef __CUDA_ARCH__
-	if(checkDebug(syncHappy))checkCudaError(cudaDeviceSynchronize());
-#else
+#ifdef __CUDA_ARCH__
 	__syncthreads();
 #endif
 }
 
-
-template<typename T> __global__ void meanSubKernel(DMatrix<T> res, const DMatrix<T> x,
+// very bad
+template<typename T> __global__ void meanSubKernel_slow(DMatrix<T> res, const DMatrix<T> x,
 		const DMatrix<T> means) {
 //	uint tid = threadIdx.x; // index into smem for block
 	uint i = blockIdx.x * blockDim.x + threadIdx.x; // index into column
@@ -418,32 +403,30 @@ template<typename T> __global__ void meanSubSqrKernel(DMatrix<T> res, const DMat
 }
 
 template<typename T> __host__ CUDART_DEVICE void CuMatrix<T>::meanSubL(DMatrix<T>& d_res, const DMatrix<T>& d_x, const DMatrix<T>& d_means, cudaStream_t stream) {
-	uint threads = 512;
+	int threads = 512;
 	dim3 dBlocks, dThreads;
 	uint smem = d_x.n * sizeof(T);
 	if (smem > ExecCaps::currCaps()->memSharedPerBlock) {
 		setLastError(smemExceededEx);
 	}
-	b_util::execContext(threads, d_x.n, dBlocks, dThreads);
+	b_util::vectorExecContext(threads, d_x.n, dBlocks, dThreads);
 	if(checkDebug(debugExec))printf(
 			"meanSubL for %d*%d, have %d bloks of %d threads, smem %d\n", d_x.m, d_x.n, dBlocks.x, dThreads.x,smem );
 	//outln("rows " << d_x.m);
-	meanSubKernel<<<dBlocks, dThreads, smem, stream>>>(d_res, d_x, d_means);
+	meanSubKernel_slow<<<dBlocks, dThreads, smem, stream>>>(d_res, d_x, d_means);
 }
 
 template<typename T> void CuMatrix<T>::meanSubSqrL(DMatrix<T>& d_res, const DMatrix<T>& d_x, const DMatrix<T>& d_means) {
-	uint threads = 512;
+	int threads = 512;
 	dim3 dBlocks, dThreads;
 	uint smem = d_x.n * sizeof(T);
 	if (smem > ExecCaps::currCaps()->memSharedPerBlock) {
 		throw new smemExceeded;
 	}
-	b_util::execContext(threads, d_x.n, dBlocks, dThreads);
+	b_util::vectorExecContext(threads, d_x.n, dBlocks, dThreads);
 	outln("meanSubL for " << d_x.m << "*" << d_x.n << ", have " << dBlocks.x << " blocks of " << dThreads.x << " threads with " << smem << " smem");
 	//outln("rows " << d_x.m);
-	if(checkDebug(syncHappy))checkCudaError(cudaGetLastError());
 	meanSubSqrKernel<<<dBlocks, dThreads, smem>>>( d_res, d_x, d_means);
-	if(checkDebug(syncHappy))checkCudaError(cudaDeviceSynchronize());
 }
 
 template<typename T> __global__ void columnProdKernel(DMatrix<T> prod, const DMatrix<T> x) {
@@ -460,9 +443,7 @@ template<typename T> __global__ void columnProdKernel(DMatrix<T> prod, const DMa
 template<typename T> void CuMatrix<T>::columnProduct(DMatrix<T>& d_prod, const DMatrix<T>& d_x) {
 	dim3 block(32), grid(DIV_UP( d_x.n,block.x));
 	//outln("rows " << d_x.m);
-	if(checkDebug(syncHappy))checkCudaError(cudaGetLastError());
 	columnProdKernel<<<grid, block,0>>>(d_prod, d_x);
-	if(checkDebug(syncHappy))checkCudaError(cudaDeviceSynchronize());
 }
 
 // copies as many rows as will fit to smem,
@@ -470,8 +451,8 @@ template<typename T> void CuMatrix<T>::columnProduct(DMatrix<T>& d_prod, const D
 // todo shuffle reduction for x.n < warp_size
 //
 template<typename T> __global__ void rowSumKernel(DMatrix<T> d_rowSums, const DMatrix<T> d_x) {
-	uint col = threadIdx.x; // index into column
-	uint row = blockIdx.y * blockDim.y + threadIdx.y; //
+	int col = threadIdx.x; // index into column
+	int row = blockIdx.y * blockDim.y + threadIdx.y; //
 	uint tileIdx = threadIdx.x + threadIdx.y * blockDim.x;
 	T* tile = SharedMemory<T>();
 	T currRowSum = 0;
@@ -511,23 +492,19 @@ template<typename T> string CuMatrix<T>::toShortString() const {
 	ssout << b_util::modStr(lastMod);
 	ssout << (colMajor ? "] ColMajor" : "]");
 	ssout << " h: ";
-	if(elements)
-		ssout << elements;
-	else
+	if(elements) {
+		ssout << elements; // << "/" << getMgr().refCount(elements);
+	}	else
 		ssout << "null";
-	ssout << ", d: ";
-	if(d_elements) {
-		ssout << d_elements;
-		cudaPointerAttributes ptrAtts;
-		checkCudaErrors(cudaPointerGetAttributes(&ptrAtts,d_elements));
-		ssout << "<" << ptrAtts.device << ">";
-	}
-	else
-		ssout << "null";
+	ssout << ", tiler: ";
+	ssout << tiler;
+	pair<int,int> par = refCounts();
+	//if(tiler.hasDmemQ() && elements) {
+		ssout << ", refCounts  h " << par.first << ", d " << par.second;
+	//}
 	ssout << "]]";
 	return ssout.str();
 }
-
 
 template<typename T> template<template <typename> class CostFunction> void CuMatrix<T>::gradientApprox(
 		CostFunction<T> costFn, DMatrix<T> theta, DMatrix<T> perturb, DMatrix<T> gradApprox, T epsilon) {
@@ -551,9 +528,12 @@ template<typename T> template<template <typename> class CostFunction> void CuMat
 	}
 }
 
-
 extern template class CuMatrix<float>;
 extern template class CuMatrix<double>;
+extern template class CuMatrix<long>;
+extern template class CuMatrix<ulong>;
+extern template class CuMatrix<int>;
+extern template class CuMatrix<uint>;
 
 #include "CuMatrixInster.cu"
 

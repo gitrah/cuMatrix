@@ -11,19 +11,19 @@
 #include "../ConjugateGradient.h"
 #include "tests.h"
 
-template int testParseOctave<float>::operator()(int argc, char const ** args) const;
-template int testParseOctave<double>::operator()(int argc, char const ** args) const;
-template <typename T> int testParseOctave<T>::operator()(int argc, char const ** args) const{
+template int testParseOctave<float>::operator()(int argc, const char **argv) const;
+template int testParseOctave<double>::operator()(int argc, const char **argv) const;
+template <typename T> int testParseOctave<T>::operator()(int argc, const char **argv) const{
 
 	if (argc < 2) {
-		std::cout << "a" << argc << "usage: " << args[0] << " <<filename>> "
+		std::cout << "a" << argc << "usage: " << argv[0] << " <<filename>> "
 				<< std::endl;
 
 		exit(-1);
 	}
 
-	std::cout << "opening " << args[1] << std::endl;
-	std::map<std::string, CuMatrix<T>*> results = util<T>::parseOctaveDataFile(args[1],
+	std::cout << "opening " << argv[1] << std::endl;
+	std::map<std::string, CuMatrix<T>*> results = CuMatrix<T>::parseOctaveDataFile(argv[1],
 			false, true);
 
 	std::cout << "found " << results.size() << " octave objects\n";
@@ -67,23 +67,19 @@ template <typename T> int testParseOctave<T>::operator()(int argc, char const **
 	return (0);
 }
 
-template int testLogRegCostFunctionNoRegMapFeature<float>::operator()(int argc, char const ** args) const;
-template int testLogRegCostFunctionNoRegMapFeature<double>::operator()(int argc, char const ** args) const;
-template <typename T> int testLogRegCostFunctionNoRegMapFeature<T>::operator()(int argc, char const ** args) const{
+template int testLogRegCostFunctionNoRegMapFeature<float>::operator()(int argc, const char **argv) const;
+template int testLogRegCostFunctionNoRegMapFeature<double>::operator()(int argc, const char **argv) const;
+template int testLogRegCostFunctionNoRegMapFeature<ulong>::operator()(int argc, const char **argv) const;
 
-	if (argc < 2) {
-		std::cout << "usage: " << args[0] << " <<filename>> " << std::endl;
-		exit(-1);
-	}
+template <typename T> int testLogRegCostFunctionNoRegMapFeature<T>::operator()(int argc, const char **argv) const{
 
-	std::cout << "opening " << args[1] << std::endl;
-	std::map<std::string, CuMatrix<T>*> results = util<T>::parseOctaveDataFile(args[1],
+	const char* filename = "ex2data2.txt";
+
+	std::cout << "opening " << filename << std::endl;
+	std::map<std::string, CuMatrix<T>*> results = CuMatrix<T>::parseOctaveDataFile(filename,
 			false, true);
 
 	std::cout << "found " << results.size() << " octave objects\n";
-	typedef typename std::map<std::string, CuMatrix<T>*>::iterator iterator;
-	iterator it;
-	it = results.begin();
 
 	CuMatrix<T>& x = *results["X"];
 	outln("x " << x.sum());
@@ -117,83 +113,126 @@ int innerFunc() {
 	return 0;
 }
 
-template <typename T> int outerFn() {
-	return innerFunc();
+template <typename T> void howAboutMe() {
+	T res = (T) innerFunc();
+	outln("res " << res);
 }
-template int testCostFunction<float>::operator()(int argc, char const ** args) const;
-template int testCostFunction<double>::operator()(int argc, char const ** args) const;
-template int testCostFunction<ulong>::operator()(int argc, char const ** args) const;
-template <typename T> int testCostFunction<T>::operator()(int argc, char const ** args) const{
 
-	//const char* filename = "ex2data2m.txt";
-	if (argc < 2) {
-		outln("argc " << argc);
-		std::cout << "usage: " << args[0] << " <<filename>> " << std::endl;
-		exit(-1);
+// TODO:  where is outerFn? Doesn't show in stack trace.
+template <typename T> int outerFn() {
+	howAboutMe<T>();
+	return 2;
+}
+
+template int testCostFunction<float>::operator()(int argc, const char **argv) const;
+template int testCostFunction<double>::operator()(int argc, const char **argv) const;
+template int testCostFunction<ulong>::operator()(int argc, const char **argv) const;
+template <typename T> int testCostFunction<T>::operator()(int argc, const char **argv) const{
+
+	const char* filename = null;
+	if (argc != 2 || argv[1][0] == '-') {
+		filename = "ex2data2.txt";
+		outln("using default filename " << filename);
+	} else {
+		filename = argv[1];
 	}
 
-	int iterations = b_util::getParameter(argc, args, "its", 400);
+	int iterations = b_util::getParameter(argc, argv, "its", 400);
 
-	std::cout << "opening " << args[1] << std::endl;
+	std::cout << "opening " << filename << std::endl;
 
-	std::map<std::string, CuMatrix<T>*> results = util<T>::parseOctaveDataFile(
-			args[1], false, true);
+	std::map<std::string, CuMatrix<T>*> results = CuMatrix<T>::parseOctaveDataFile(
+			filename, false, true);
 
 	outln( "found " << results.size() << " octave objects");
-	typedef typename std::map<std::string, CuMatrix<T>*>::iterator iterator;
-	iterator it;
-	it = results.begin();
 
-	CuMatrix<T>& x = *results["X"];
-	outln("x " << x.sum());
-	CuMatrix<T> xb = x.addBiasColumn();
+	CuMatrix<T>& x = CuMatrix<T>::getMatrix(results,"X");
+	CuMatrix<T> x1 = x.columnVector(0);
+	outln("x1\n" <<x1.syncBuffers());
+	CuMatrix<T> x2 = x.columnVector(1);
+	outln("x2\n" <<x2.syncBuffers());
+	// map feature adds 'bias'/intercept column
+	CuMatrix<T> xm = CuMatrix<T>::mapFeature(x1, x2, (float) 6);
+	//outln("xm\n" <<xm.syncBuffers());
 
-	CuMatrix<T>& y = *results["y"];
-/*
-	outln("y\n" <<y.toString();
-	CuMatrix<T> xm = CuMatrix<T>::mapFeature(x.columnVector(0), x.columnVector(1));
-	outln("xm " << xm.toShortString()));
-*/
-	int ans = outerFn<T>();
+	T xmSum = xm.sum();
+	outln("xm sum " <<xmSum );
+	assert(util<T>::almostEquals(328.71,xmSum, .01));
+	int m = xm.m;
 
-	CuMatrix<T> init_theta = CuMatrix<T>::zeros(xb.n, 1);
+	CuMatrix<T>& y = CuMatrix<T>::getMatrix(results,"y");
+	//outln("y " << y.syncBuffers());
+
+	CuMatrix<T> init_theta = CuMatrix<T>::zeros(xm.n, 1);
 	outln("init_theta " << init_theta.syncHost());
 	T lambda = 0;
-	CuMatrix<T> grad;
+	CuMatrix<T> grad,gradZeroLambda;
 	T cost;
 
-	LogisticRegression<T>::gradCostFunction(grad,cost,xb, y, init_theta,
-			lambda);
+	LogisticRegression<T>::gradCostFunction(gradZeroLambda, cost, xm, y, init_theta, lambda);
+
+	VerbOn();
+	outln("gradZeroLambda " << gradZeroLambda.syncBuffers() << ", cost " << cost);
+	VerbOff();
+
+	T gradZeroLambdaA[] = { (T) 0.008475, (T)0.01879, (T)7.777e-05, (T)0.05034, (T)0.0115, (T)0.03766,
+			(T)0.01836, (T)0.007324, (T)0.008192, (T)0.02348, (T)0.03935, (T)0.002239, (T)0.01286,
+			(T)0.003096, (T)0.0393, (T)0.01997, (T)0.00433, (T)0.003386, (T)0.005838, (T)0.004476,
+			(T)0.03101, (T)0.03103, (T)0.001097, (T)0.006316, (T)0.0004085, (T)0.007265, (T)0.001376,
+			(T)0.03879 };
+	CuMatrix<T> expGradZeroLambda(gradZeroLambdaA,init_theta.m,init_theta.n,true);
+	T diff = ((expGradZeroLambda - gradZeroLambda) ^ (T)2).sum();
+	outln("diff " << diff);
+	assert(diff < util<T>::epsilon());
+	assert(diff == expGradZeroLambda.sumSqrDiff(gradZeroLambda));
 	//au = prev;
 
-	outln("j " << cost);
+	outln("j (should be ~0.6931: " << cost);
 	assert(Math<T>::aboutEq(cost, .6931f, .0001f));
 
-	outln("grad\n" <<grad.syncHost());
-
 	lambda=1;
-	logRegCostFtor<T> ftor(y,init_theta.syncBuffers(), lambda);
-   // nnCostFtor<T> ftor(input_layer_size, hidden_layer_size, num_labels, training, ytrainingBiased, lambda);
+
+	LogisticRegression<T>::gradCostFunction(grad, cost, xm, y, init_theta, lambda);
+	// should still equal expGradZeroLambda because init_theta is a ZeroMatrix
+	assert(diff == expGradZeroLambda.sumSqrDiff(grad));
+
+	logRegCostFtor<T> ftor(y,xm, lambda);
 
     ConjugateGradient<T>::init();
     outln("post init last err " << b_util::lastErrStr());
 
     CuTimer justFmincg;
     justFmincg.start();
+   // CuMatrix<T> init_thetaT = init_theta.transpose();
     pair<CuMatrix<T>, pair<CuMatrix<T>, int > > tup2 = ConjugateGradient<T>::fmincg(ftor,init_theta, iterations);
     outln("back from fmincg, took " << justFmincg.stop());
 
-    CuMatrix<T> grad_reg = tup2.first;
+    CuMatrix<T> theta_reg = tup2.first;
+    outln("theta_reg " << theta_reg.syncBuffers());
+    CuMatrix<T> tup2_2m  = tup2.second.first;
+    outln("tup2_2m " << tup2_2m.syncBuffers());
+    outln(" tup2.second.second " << tup2.second.second);
+
+    ftor(grad, cost, theta_reg);
+    int iters = tup2.second.second;
+
+    outln("converged after iters " << iters);
+	assert(Math<T>::aboutEq(cost, .529f, .0001f));
 
 	outln("j lambda = 1 " << cost);
-	outln("grad_reg \n" << grad_reg.syncHost());
+	outln("grad \n" << grad.syncHost());
+	T accuracy =  LogisticRegression<T>::predictionAccuracy(theta_reg, xm, y);
+	outln("yields accuracy " <<accuracy);
 
-	assert(Math<T>::aboutEq(cost, .9081f, .0001f));
+	CuMatrix<T> predicted = (theta_reg.transpose() * xm.transpose()).sigmoid() >= (T).5;
+	outln("predicted " << predicted.syncBuffers());
+	// worth it to add a 'hadamard equals' operation?
+	CuMatrix<T> truePos =  predicted.transpose().binaryOp( y, Functory<T, equalsBinaryOp>::pinch());
+	outln("truePos " << truePos.syncBuffers());
+	assert( util<T>::almostEquals(100 * truePos.sum()/(truePos.m * truePos.n),accuracy, util<T>::epsilon())) ;
 
     util<CuMatrix<T> >::deletePtrMap(results);
-	//results[std::string("X")];
-	//std::cout << << "\n";
-	return ans;
+	return 0;
 }
 
 

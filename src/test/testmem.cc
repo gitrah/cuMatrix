@@ -3,9 +3,9 @@
 #include "../util.h"
 #include "../caps.h"
 
-template int testCudaMemcpy<float>::operator()(int argc, char const ** args) const;
-template int testCudaMemcpy<double>::operator()(int argc, char const ** args) const;
-template <typename T>  int testCudaMemcpy<T>::operator()(int argc, const char** args) const {
+template int testCudaMemcpy<float>::operator()(int argc, const char **argv) const;
+template int testCudaMemcpy<double>::operator()(int argc, const char **argv) const;
+template <typename T>  int testCudaMemcpy<T>::operator()(int argc, const char **argv) const {
 	size_t tsize = sizeof(T);
 	const int size = 2 * ExecCaps::currCaps()->alignment;
 	const int len = size/sizeof(T);
@@ -80,11 +80,11 @@ template <typename T>  int testCudaMemcpy<T>::operator()(int argc, const char** 
 
 
 
-template int testMemUsage<float>::operator()(int argc, char const ** args) const;
-template int testMemUsage<double>::operator()(int argc, char const ** args) const;
-template <typename T> int testMemUsage<T>::operator()(int argc, const char** args) const {
+template int testMemUsage<float>::operator()(int argc, const char **argv) const;
+template int testMemUsage<double>::operator()(int argc, const char **argv) const;
+template <typename T> int testMemUsage<T>::operator()(int argc, const char **argv) const {
 	outln("testMemUsage start");
-    int total = b_util::getCount(argc,args,1000);
+    int total = b_util::getCount(argc,argv,1000);
 /*
 	T s = 0;
 	for(int i = 0; i < total; i++ ){
@@ -96,7 +96,7 @@ template <typename T> int testMemUsage<T>::operator()(int argc, const char** arg
 
 */
 	CuMatrix<T> col = CuMatrix<T>::ones(500,1);
-	CuMatrix<T> blarb = zerom;
+	CuMatrix<T> blarb;
 	for(int i = 0; i < total; i++) {
 		blarb = blarb |= (col * (static_cast<T>( i)));
 		outln(i << "th iter; usage: " << b_util::usedMemRatio() << "%");
@@ -107,9 +107,10 @@ template <typename T> int testMemUsage<T>::operator()(int argc, const char** arg
 	return 0;
 }
 
-template int testCudaMemcpyVsCopyKernelVsmMemcpy<float>::operator()(int argc, char const ** args) const;
-template int testCudaMemcpyVsCopyKernelVsmMemcpy<double>::operator()(int argc, char const ** args) const;
-template <typename T> int testCudaMemcpyVsCopyKernelVsmMemcpy<T>::operator()(int argc, const char** args) const {
+
+template int testCudaMemcpyVsCopyKernelVsmMemcpy<float>::operator()(int argc, const char **argv) const;
+template int testCudaMemcpyVsCopyKernelVsmMemcpy<double>::operator()(int argc, const char **argv) const;
+template <typename T> int testCudaMemcpyVsCopyKernelVsmMemcpy<T>::operator()(int argc, const char **argv) const {
 
 	CuMatrix<T>::setMaxColsDisplayed(5);
 	CuMatrix<T>::setMaxRowsDisplayed(5);
@@ -136,13 +137,13 @@ template <typename T> int testCudaMemcpyVsCopyKernelVsmMemcpy<T>::operator()(int
 	src2.syncBuffers(); // to create d mem
 	T srcSum = src.sum();
 	T src2Sum = src2.sum();
-	src.asDmatrix(src_d, true, true);
-	src2.asDmatrix(src2_d, true, true);
-	trg.asDmatrix(trg_d, false, true);
+	src.tile0(src_d, true);
+	src2.tile0(src2_d,  true);
+	trg.tile0(trg_d, false);
 	outln("dmatrix src " << src.toShortString());
 	outln("dmatrix trg.ss " << trg.toShortString());
 
-	const int count = b_util::getCount(argc,args,1000);
+	const int count = b_util::getCount(argc,argv,1000);
 	const uint xfer = count * sizeG;
 
 	// cudmemcpy first
@@ -150,7 +151,7 @@ template <typename T> int testCudaMemcpyVsCopyKernelVsmMemcpy<T>::operator()(int
 	timer.start();
 	clock_t lastTime = clock();
 	for(int i = 0; i < count; i++) {
-		checkCudaError(cudaMemcpy(trg.d_elements, src.d_elements, src.size, cudaMemcpyDeviceToDevice));
+		checkCudaError(cudaMemcpy(trg.tiler.currBuffer(), src.tiler.currBuffer(), src.size, cudaMemcpyDeviceToDevice));
 		checkCudaError(cudaDeviceSynchronize());
 	}
 	exeTime = timer.stop();
@@ -161,14 +162,14 @@ template <typename T> int testCudaMemcpyVsCopyKernelVsmMemcpy<T>::operator()(int
     trg.syncHost();
     outln("trg sum " << trg.sum());
     dassert(util<T>::almostEquals(trg.sum(), srcSum));
-    outln("cudaMemcpy trg.d_elements, src.d_elements N " << count << " took exeTime " << (exeTime /1000) << "s or flow (r + w) of " << memFlowIter << "GB/s");
-	outln("after s-t trg.d_elements, src.d_elements trg " << trg);
+    outln("cudaMemcpy trg.tiler.currBuffer(), src.tiler.currBuffer() N " << count << " took exeTime " << (exeTime /1000) << "s or flow (r + w) of " << memFlowIter << "GB/s");
+	outln("after s-t trg.tiler.currBuffer(), src.tiler.currBuffer() trg " << trg);
 
 	// cudmemcpy h2d
     timer.start();
 	lastTime = clock();
 	for(int i = 0; i < count; i++) {
-		checkCudaError(cudaMemcpy(trg.d_elements, src2.elements, src.size, cudaMemcpyHostToDevice));
+		checkCudaError(cudaMemcpy(trg.tiler.currBuffer(), src2.elements, src.size, cudaMemcpyHostToDevice));
 		checkCudaError(cudaDeviceSynchronize());
 	}
 	delta = b_util::diffclock(clock(), lastTime) / 1000;
@@ -176,19 +177,19 @@ template <typename T> int testCudaMemcpyVsCopyKernelVsmMemcpy<T>::operator()(int
 	exeTime = timer.stop();
 	outln("exeTime " << exeTime);
     memFlowIter = xfer * 1000/exeTime;
-    outln("cudaMemcpy trg.d_elements, src2.elements N " << count << " took exeTime " << (exeTime /1000) << "s or flow (r + w) of " << memFlowIter << "GB/s");
+    outln("cudaMemcpy trg.tiler.currBuffer(), src2.elements N " << count << " took exeTime " << (exeTime /1000) << "s or flow (r + w) of " << memFlowIter << "GB/s");
     outln("trg sum " << trg.sum());
     dassert(util<T>::almostEquals(trg.sum(), src2Sum));
     trg.invalidateHost();
     trg.syncBuffers();
-    outln("after trg.d_elements, src2.elements trg " << trg.toShortString() << "\n" << trg.toString());
+    outln("after trg.tiler.currBuffer(), src2.elements trg " << trg.toShortString() << "\n" << trg.toString());
 
 	// cudmemcpy d2h
     timer.start();
 	lastTime = clock();
 	outln("trg " << trg);
 	for(int i = 0; i < count; i++) {
-		checkCudaError(cudaMemcpy(trg.elements, src.d_elements, src.size, cudaMemcpyDeviceToHost));
+		checkCudaError(cudaMemcpy(trg.elements, src.tiler.currBuffer(), src.size, cudaMemcpyDeviceToHost));
 		checkCudaError(cudaDeviceSynchronize());
 	}
 	delta = b_util::diffclock(clock(), lastTime) / 1000;
@@ -200,30 +201,30 @@ template <typename T> int testCudaMemcpyVsCopyKernelVsmMemcpy<T>::operator()(int
     trg.syncBuffers();
     outln("trg sum " << trg.sum());
     dassert(util<T>::almostEquals(trg.sum(), srcSum));
-    outln("cudaMemcpy trg.elements, src.d_elements N " << count << " took exeTime " << (exeTime /1000) << "s or flow (r + w) of " << memFlowIter << "GB/s");
-	outln("after s-t trg.elements, src.d_elements trg " << trg);
+    outln("cudaMemcpy trg.elements, src.tiler.currBuffer() N " << count << " took exeTime " << (exeTime /1000) << "s or flow (r + w) of " << memFlowIter << "GB/s");
+	outln("after s-t trg.elements, src.tiler.currBuffer() trg " << trg);
 
 	// copy kernel d2d
     lastTime = clock();
 
     timer.start();
 	for(int i = 0; i < count; i++) {
-		CuMatrix<T>::copy1D(trg.d_elements, src2.d_elements, lengthInTs, 0, lengthInTs);
+		CuMatrix<T>::copy1D(trg.tiler.currBuffer(), src2.tiler.currBuffer(), lengthInTs, 0, lengthInTs);
 		checkCudaError(cudaDeviceSynchronize());
 	}
     exeTime = timer.stop();
 
 	delta = b_util::diffclock(clock(), lastTime) / 1000;
-	outln("copyKernel trg.d_elements, src2.d_elements " << count << " took " << delta << " secs");
+	outln("copyKernel trg.tiler.currBuffer(), src2.tiler.currBuffer() " << count << " took " << delta << " secs");
 
     outln("exeTime " << exeTime);
     memFlowIter = xfer * 1000/exeTime;
-	outln("copyKernel trg.d_elements, src2.d_elements N " << count << " took exeTime " << (exeTime /1000) << "s or flow (r + w) of " << memFlowIter << "GB/s");
+	outln("copyKernel trg.tiler.currBuffer(), src2.tiler.currBuffer() N " << count << " took exeTime " << (exeTime /1000) << "s or flow (r + w) of " << memFlowIter << "GB/s");
     trg.invalidateHost();
 	trg.syncBuffers();
     outln("trg sum " << trg.sum());
     dassert(util<T>::almostEquals(trg.sum(), src2Sum));
-	outln("after s-t trg.d_elements, src2.d_elements trg " << trg);
+	outln("after s-t trg.tiler.currBuffer(), src2.tiler.currBuffer() trg " << trg);
 
 	// copy kerne h2h
     lastTime = clock();
@@ -248,36 +249,36 @@ template <typename T> int testCudaMemcpyVsCopyKernelVsmMemcpy<T>::operator()(int
     lastTime = clock();
     timer.start();
 	for(int i = 0; i < count; i++) {
-		CuMatrix<T>::copy1D(trg.d_elements, src2.elements, lengthInTs, 0, lengthInTs);
+		CuMatrix<T>::copy1D(trg.tiler.currBuffer(), src2.elements, lengthInTs, 0, lengthInTs);
 		checkCudaError(cudaDeviceSynchronize());
 	}
     exeTime = timer.stop();
 
 	delta = b_util::diffclock(clock(), lastTime) / 1000;
-	outln("copyKernel trg.d_elements, src2.elements " << count << " took " << delta << " secs");
+	outln("copyKernel trg.tiler.currBuffer(), src2.elements " << count << " took " << delta << " secs");
 
     memFlowIter = xfer * 1000/exeTime;
-	outln("copyKernel trg.d_elements, src2.elements N " << count << " took exeTime " << (exeTime /1000) << "s or flow (r + w) of " << memFlowIter << "GB/s");
+	outln("copyKernel trg.tiler.currBuffer(), src2.elements N " << count << " took exeTime " << (exeTime /1000) << "s or flow (r + w) of " << memFlowIter << "GB/s");
 	trg.syncBuffers();
     outln("trg sum " << trg.sum());
     dassert(util<T>::almostEquals(trg.sum(), src2Sum));
-	outln("after s-t trg.d_elements, src2.elements trg " << trg);
+	outln("after s-t trg.tiler.currBuffer(), src2.elements trg " << trg);
 
 	// copy kernel d2h myem
     lastTime = clock();
     timer.start();
 	for(int i = 0; i < count; i++) {
-		CuMatrix<T>::copy1D(trg.elements, src.d_elements, lengthInTs, 0, lengthInTs);
+		CuMatrix<T>::copy1D(trg.elements, src.tiler.currBuffer(), lengthInTs, 0, lengthInTs);
 		checkCudaError(cudaDeviceSynchronize());
 	}
     exeTime = timer.stop();
 
 	delta = b_util::diffclock(clock(), lastTime) / 1000;
-	outln("copyKernel trg.elements, src.d_elements " << count << " took " << delta << " secs");
+	outln("copyKernel trg.elements, src.tiler.currBuffer() " << count << " took " << delta << " secs");
 
     memFlowIter = xfer * 1000/exeTime;
-	outln("copyKernel trg.elements, src.d_elements N " << count << " took exeTime " << (exeTime /1000) << "s or flow (r + w) of " << memFlowIter << "GB/s");
-	outln("after s-t trg.elements, src.d_elements trg " << trg);
+	outln("copyKernel trg.elements, src.tiler.currBuffer() N " << count << " took exeTime " << (exeTime /1000) << "s or flow (r + w) of " << memFlowIter << "GB/s");
+	outln("after s-t trg.elements, src.tiler.currBuffer() trg " << trg);
 	trg.syncDevice();
     outln("trg sum " << trg.sum());
     dassert(util<T>::almostEquals(trg.sum(), srcSum));
@@ -307,10 +308,10 @@ template <typename T> int testCudaMemcpyVsCopyKernelVsmMemcpy<T>::operator()(int
 }
 
 
-template int testCopyKernels<float>::operator()(int argc, char const ** args) const;
-template int testCopyKernels<double>::operator()(int argc, char const ** args) const;
-template <typename T>  int testCopyKernels<T>::operator()(int argc, const char** args) const {
-	const int count = b_util::getCount(argc,args,1000);
+template int testCopyKernels<float>::operator()(int argc, const char **argv) const;
+template int testCopyKernels<double>::operator()(int argc, const char **argv) const;
+template <typename T>  int testCopyKernels<T>::operator()(int argc, const char **argv) const {
+	const int count = b_util::getCount(argc,argv,1000);
 	float exeTime;
 	CuMatrix<T> src = CuMatrix<T>::sequence(0,1000,900);
 	CuMatrix<T> trg = CuMatrix<T>::zeros(1000,900);
@@ -325,8 +326,8 @@ template <typename T>  int testCopyKernels<T>::operator()(int argc, const char**
 	CuTimer timer;
 
 	DMatrix<T> ds, dt;
-	ssub.asDmatrix(ds);
-	tsub.asDmatrix(dt,false);
+	ssub.tile0(ds,true);
+	tsub.tile0(dt,false);
 
 	CuMatrix<T>::copyUlong(dt,ds, 25,25);
 
@@ -390,16 +391,46 @@ template <typename T>  int testCopyKernels<T>::operator()(int argc, const char**
 	return 0;
 }
 
-template int testCudaMemcpyArray<float>::operator()(int argc, char const ** args) const;
-template int testCudaMemcpyArray<double>::operator()(int argc, char const ** args) const;
-template <typename T>  int testCudaMemcpyArray<T>::operator()(int argc, const char** args) const {
+template int testCudaMemcpyArray<float>::operator()(int argc, const char **argv) const;
+template int testCudaMemcpyArray<double>::operator()(int argc, const char **argv) const;
+template <typename T>  int testCudaMemcpyArray<T>::operator()(int argc, const char **argv) const {
 
 	return 0;
 }
 
-template int testRowCopy<float>::operator()(int argc, char const ** args) const;
-template int testRowCopy<double>::operator()(int argc, char const ** args) const;
-template <typename T> int testRowCopy<T>::operator()(int argc, const char** args) const {
+template int testCudaMemcpy2D<float>::operator()(int argc, const char **argv) const;
+template int testCudaMemcpy2D<double>::operator()(int argc, const char **argv) const;
+template int testCudaMemcpy2D<ulong>::operator()(int argc, const char **argv) const;
+template <typename T>  int testCudaMemcpy2D<T>::operator()(int argc, const char **argv) const {
+	CuMatrix<T> ones = CuMatrix<T>::ones(16,16);
+	outln("ones " << ones.syncBuffers());
+	//const T* array, const char* msg, int line, int n,int direction
+	printDevArray<T>(ones.tiler.buff(), "ones.tlr.buff", __LINE__, 16*16);
+	CuMatrix<T> zed = CuMatrix<T>::zeros(4,4);
+	outln("zed " << zed.syncBuffers());
+	CuMatrix<T> tinyOnes = CuMatrix<T>::ones(4,4);
+	//cherr( cudaMemcpy2D(m_elems +offset(roff, coff), m_p* sizeof(T), dm.elements, dm.p* sizeof(T), dm.n* sizeof(T), dm.m, cudaMemcpyDeviceToHost));
+	DMatrix<T> dmZed;
+	zed.tile0(dmZed,true);
+	flprintf("after tile0, dmZed.m %u dmZed n %u, dmZed.elems %p\n", dmZed.m, dmZed.n, dmZed.elements);
+	printDevArray<T>(dmZed.elements, "dmZed.elems", __LINE__, 4*4);
+
+	cherr( cudaMemcpy2D(ones.elements, ones.p * sizeof(T), dmZed.elements, dmZed.p* sizeof(T), dmZed.n* sizeof(T), dmZed.m, cudaMemcpyDeviceToHost));
+	cherr( cudaMemcpy2D(ones.elements + ones.tiler.offset(4,4), ones.p * sizeof(T), dmZed.elements, dmZed.p* sizeof(T), dmZed.n* sizeof(T), dmZed.m, cudaMemcpyDeviceToHost));
+	cherr( cudaMemcpy2D(ones.elements+ ones.tiler.offset(8,8), ones.p * sizeof(T), dmZed.elements, dmZed.p* sizeof(T), dmZed.n* sizeof(T), dmZed.m, cudaMemcpyDeviceToHost));
+	cherr( cudaMemcpy2D(ones.elements+ ones.tiler.offset(12,12), ones.p * sizeof(T), dmZed.elements, dmZed.p* sizeof(T), dmZed.n* sizeof(T), dmZed.m, cudaMemcpyDeviceToHost));
+
+	outln("ones post " << ones); // should set 16x16 ones with 4 4x4 'holes' in it
+
+	assert(ones.sum() == 16 * 16 - 4* 4* 4);
+
+	return 0;
+}
+
+
+template int testRowCopy<float>::operator()(int argc, const char **argv) const;
+template int testRowCopy<double>::operator()(int argc, const char **argv) const;
+template <typename T> int testRowCopy<T>::operator()(int argc, const char **argv) const {
 	int rows = 5, cols = 10;
 	CuMatrix<T> mOnes_rm = CuMatrix<T>::ones(rows, cols);
 	CuMatrix<T> mZeros_cm = CuMatrix<T>::zeros(rows,cols,true);
@@ -418,9 +449,10 @@ template <typename T> int testRowCopy<T>::operator()(int argc, const char** args
 }
 
 
-template int testCopyVsCopyK<float>::operator()(int argc, char const ** args) const;
-template int testCopyVsCopyK<double>::operator()(int argc, char const ** args) const;
-template <typename T> int testCopyVsCopyK<T>::operator()(int argc, const char** args) const {
+template int testCopyVsCopyK<float>::operator()(int argc, const char **argv) const;
+template int testCopyVsCopyK<double>::operator()(int argc, const char **argv) const;
+template int testCopyVsCopyK<ulong>::operator()(int argc, const char **argv) const;
+template <typename T> int testCopyVsCopyK<T>::operator()(int argc, const char **argv) const {
 
 	int rows = 10, cols = 10;
 	CuMatrix<T> mOnes = CuMatrix<T>::ones(rows, cols);
@@ -439,9 +471,10 @@ template <typename T> int testCopyVsCopyK<T>::operator()(int argc, const char** 
 }
 
 
-template int testClippedRowSubset<float>::operator()(int argc, char const ** args) const;
-template int testClippedRowSubset<double>::operator()(int argc, char const ** args) const;
-template <typename T> int testClippedRowSubset<T>::operator()(int argc, const char** args) const {
+template int testClippedRowSubset<float>::operator()(int argc, const char **argv) const;
+template int testClippedRowSubset<double>::operator()(int argc, const char **argv) const;
+template int testClippedRowSubset<ulong>::operator()(int argc, const char **argv) const;
+template <typename T> int testClippedRowSubset<T>::operator()(int argc, const char **argv) const {
 	int rows = 5, cols = 10;
 	CuMatrix<T> seq = CuMatrix<T>::sequence(-1,10,5);
 	CuMatrix<T> seq2 = CuMatrix<T>::sequence(-1,5,10);

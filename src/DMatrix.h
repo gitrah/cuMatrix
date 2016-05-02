@@ -11,7 +11,7 @@
 template<typename T> struct DMatrix {
 public:
 	T* elements;
-	uint m, n, p;
+	int m, n, p;
 
 	__host__ __device__ DMatrix() :
 			elements(null), m(0), n(0), p(0) {
@@ -45,17 +45,13 @@ struct SharedMemory
 	}
 };
 
-template<typename T> __host__ __device__ inline void prdm(const char* msg, const DMatrix<T>& m) {
-	printf("%s %x %d*%d*%d\n",msg, m.elements, m.m, m.n,m.p);
-}
-template<typename T> __host__ __device__ inline void prdm( const DMatrix<T>& m) {
-	prdm("",m);
-}
+
 
 template<typename T> extern inline __device__ T get(const DMatrix<T>& dm, uint l) {
 	//	if(dm.n == dm.p) {
 //		return dm.elements[l];
 //	}
+	assert(l < dm.m * dm.n);
 	uint div = l /dm.n;
 	uint idx = div * dm.p;
 	idx += l - div * dm.n;

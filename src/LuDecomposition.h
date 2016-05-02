@@ -12,7 +12,7 @@
 
 template <typename T> class LUDecomposition {
   T* lu;
-  uint m,n;
+  int m,n;
   int* pivots;
   CuMatrix<T>& mRef;
 

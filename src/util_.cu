@@ -1,5 +1,4 @@
 #include "util.h"
-#include <helper_cuda.h>
 #include "caps.h"
 #include <string>
 #include <sstream>
@@ -10,9 +9,148 @@
 #include "Maths.h"
 #include "Kernels.h"
 
+using std::numeric_limits;
+
+template <typename T> inline __host__ __device__ void printColoArray(const T* array, int n, int direction) {
+	flprintf("array %p[0::%d] ", array, n);
+	for(int i =0; i < n; i++) {
+		printf("%f", (float) array[i]);
+		if(i < n -1) printf(", ");
+	}
+	printf("\n");
+}
+template __host__ __device__ void printColoArray<float>(const float*,int,int);
+template __host__ __device__ void printColoArray<double>(const double*,int,int);
+template __host__ __device__ void printColoArray<int>(const int*,int,int);
+template __host__ __device__ void printColoArray<uint>(const uint*,int,int);
+template __host__ __device__ void printColoArray<long>(const long*, int,int);
+template __host__ __device__ void printColoArray<ulong>(const ulong*, int,int);
+
+
+template <typename T> inline __host__ __device__ void prtColoArrayDiag(
+		const T* array,const char*msg,int line,  int pitch,int n, int direction, T notEq) {
+	flprintf("%s:%d h arraydiag %p p:%d[0::%d] notEq %f\n", msg, line, array, pitch, n, notEq);
+	int neqCnt = 0;
+	int idxFb= -1;
+	const T* firstBad = nullptr;
+	for(int i =0; i < n; i++) {
+		if(!notEq || array[i * (pitch + 1)] != notEq) {
+			printf("%p + %d (%p) = %f != %f", array, direction*i, array + direction * i * (pitch + 1), (float) array[i * (pitch + 1)], notEq);
+			if(i < n -1) printf(", ");
+			if(notEq) { idxFb = i; firstBad = array  + i * (pitch + 1); neqCnt++; }
+		}
+	}
+	if(!neqCnt)
+		flprintf("\nfound none != %f\n",notEq);
+	else {
+		flprintf("found %d unexpected values starting at %p idx %d\n", neqCnt, firstBad,idxFb);
+	}
+	assert(neqCnt == 0);
+
+}
+template __host__ __device__ void prtColoArrayDiag<float>(const float*,const char*msg,int line,int,int,int,float);
+template __host__ __device__ void prtColoArrayDiag<double>(const double*,const char*msg,int line,int,int,int,double);
+template __host__ __device__ void prtColoArrayDiag<int>(const int*,const char*msg,int line,int,int,int,int);
+template __host__ __device__ void prtColoArrayDiag<uint>(const uint*,const char*msg,int line,int,int,int,uint);
+template __host__ __device__ void prtColoArrayDiag<long>(const long*,const char*msg,int line,int,int,int,long);
+template __host__ __device__ void prtColoArrayDiag<ulong>(const ulong*,const char*msg,int line,int,int,int,ulong);
+
+template <typename T> inline __host__ __device__ void cntColoArrayDiag(
+		const T* array,const char*msg,int line,  int pitch,int n, int direction, T test) {
+	flprintf("%s:%d h arraydiag %p p:%d[0::%d] test %f\n", msg, line, array, pitch, n, test);
+	int neqCnt = 0;
+	int idxNeq= -1;
+	int eqCnt = 0;
+	int idxEq= -1;
+	const T* firstNeq = nullptr,* firstEq = nullptr;
+	for(int i =0; i < n; i++) {
+		if(!test || array[i * (pitch + 1)] != test) {
+			//printf("%p + %d (%p) = %f != %f", array, direction*i, array + direction * i * (pitch + 1), (float) array[i * (pitch + 1)], notEq);
+			if(test && firstNeq == nullptr) { idxNeq = i; firstNeq= array  + i * (pitch + 1);  }
+			neqCnt++;
+		}else {
+			if(test&& firstEq == nullptr) { idxEq = i; firstEq = array  + i * (pitch + 1);  }
+			eqCnt++;
+		}
+	}
+
+	flprintf("\nfound %d neq %f, %d eq out of %d; first neq @ %p idx %d first eq %p idx %d\n", neqCnt, test, eqCnt, n, firstNeq,idxNeq,firstEq,idxEq);
+}
+
+template __host__ __device__ void cntColoArrayDiag<float>(const float*,const char*msg,int line,int,int,int,float);
+template __host__ __device__ void cntColoArrayDiag<double>(const double*,const char*msg,int line,int,int,int,double);
+template __host__ __device__ void cntColoArrayDiag<int>(const int*,const char*msg,int line,int,int,int,int);
+template __host__ __device__ void cntColoArrayDiag<uint>(const uint*,const char*msg,int line,int,int,int,uint);
+template __host__ __device__ void cntColoArrayDiag<long>(const long*,const char*msg,int line,int,int,int,long);
+template __host__ __device__ void cntColoArrayDiag<ulong>(const ulong*,const char*msg,int line,int,int,int,ulong);
+
+template <typename T> inline __host__ __device__ void prtColoArrayInterval(const T* array,
+		const char* msg, long n, int sampleElemCount, int sampleCount) {
+	int step = n / sampleCount;
+	printf("%s array %p n %ld selems %d samCnt %d step %d\n", msg, array, n, sampleElemCount, sampleCount, step);
+	printf("array %p[0::%d]\n", array, n);
+	for(int s = 0; s < n -sampleElemCount; s += step) {
+		printf("  %d::%d --> ", s, s+ sampleElemCount);
+		for(int i =0; i < sampleElemCount; i++) {
+			printf("  %f", (float) array[s + i ]);
+			if(i < sampleElemCount -1) printf(", ");
+		}
+		printf("\n");
+	}
+	printf("\n");
+}
+template __host__ __device__ void prtColoArrayInterval<float>(const float*, const char*,long,int,int);
+template __host__ __device__ void prtColoArrayInterval<double>(const double*, const char*,long,int,int);
+template __host__ __device__ void prtColoArrayInterval<int>(const int*, const char*,long,int,int);
+template __host__ __device__ void prtColoArrayInterval<uint>(const uint*, const char*,long,int,int);
+template __host__ __device__ void prtColoArrayInterval<long>(const long*, const char*, long,int,int);
+template __host__ __device__ void prtColoArrayInterval<ulong>(const ulong*, const char*, long,int,int);
+__host__ void b_util::warmupL() {
+	outln("warminup");
+	warmup<<<1,1>>>();
+	outln("blokin");
+	checkCudaError(cudaDeviceSynchronize());
+}
+
 __host__ __device__ bool b_util::isPow2(uint x) {
     return ((x&(x-1))==0);
 }
+
+__host__ __device__  const char* tdStr(TileDirection td) {
+	switch (td ){
+	case tdNeither:
+		return "tdNeither";
+	case tdRows:
+		return "tdRows";
+	case tdCols:
+		return "tdCols";
+	}
+	return "unknown";
+}
+
+
+__host__ __device__ bool b_util::adjustExpectations(dim3& grid, dim3& block, const cudaFuncAttributes& atts) {
+    uint curBlk = block.x * block.y;
+    flprintf("curBlk %d\n",curBlk);
+    float factor =  1.0 * curBlk / atts.maxThreadsPerBlock;
+    flprintf("factor %f\n",factor);
+    if(factor > 1) {
+    	flprintf("was block(%d,%d)\n", block.x, block.y);
+    	flprintf("factor %d\n", factor);
+    	if(block.x  > block.y) {
+    		block.x /= factor;
+    		grid.x *= factor;
+    	} else {
+    		block.y /= factor;
+    		grid.y *= factor;
+    	}
+    	flprintf("now block(%d,%d)\n", block.x, block.y);
+    	return true;
+    }
+    return false;
+}
+
+
 __host__ __device__ bool b_util::onGpuQ() {
 #ifdef __CUDA_ARCH__
 	return true;
@@ -46,23 +184,21 @@ __device__ __host__ uint b_util::nextPowerOf2(uint x) {
 }
 
 template<> __host__ __device__ float util<float>::epsilon() {
-	printf("util<float>::epsilon()\n");
 	return 1e-6;
 }
 template<> __host__ __device__ double util<double>::epsilon() {
-	printf("util<double>::epsilon()\n");
 	return 1e-10;
 }
+template<> __host__ __device__ long util<long>::epsilon() {
+	return 0;
+}
 template<> __host__ __device__ ulong util<ulong>::epsilon() {
-	printf("util<ulong>::epsilon()\n");
 	return 0;
 }
 template<> __host__ __device__ uint util<uint>::epsilon() {
-	printf("util<uint>::epsilon()\n");
 	return 0;
 }
 template<> __host__ __device__ int util<int>::epsilon() {
-	printf("util<int>::epsilon()\n");
 	return 0;
 }
 
@@ -78,75 +214,72 @@ template <> __host__  __device__ uint util<uint>::minValue() {
 	return 0;
 }
 
-/*
 template<typename T> __host__ float util<T>::vAddGflops(int device){
-	int currDev;
-	cherr(cudaGetDevice(&currDev));
-	cherr(cudaSetDevice(device));
-	uint n = 1000000;
-	T* a, *b, *c;
-	cherr(cudaMalloc(&a, n * sizeof(T)));
-	cherr(cudaMemset(a,1,n));
-	cherr(cudaMalloc(&b, n * sizeof(T)));
-	cherr(cudaMemset(b,2,n));
-	cherr(cudaMalloc(&c, n * sizeof(T)));
-	cherr(cudaMemset(c,0,n));
-	uint blockSize = 1024;
-	CuTimer timer;
-	timer.start();
-	vectorAdd<T><<<DIV_UP(n,blockSize), blockSize>>>(c, a, b, n);
-	cherr(cudaDeviceSynchronize());
-	float exeTimeMs = timer.stop();
-	flprintf("n %u adds took exeTimeMs %f millis (%f s)\n", n, exeTimeMs, exeTimeMs/Kilo);
-	exeTimeMs /= Kilo;
-	flprintf("n/extTimeS %f\n", n/exeTimeMs);
-	float nExe = n/exeTimeMs;
-	flprintf("n/extTimeS %f\n", nExe);
-	flprintf("nExe/Giga %f\n", nExe/Giga);
-	// one add per result element, so n adds per invocation
-	cherr(cudaFree(a));
-	cherr(cudaFree(b));
-	cherr(cudaFree(c));
-	cherr(cudaSetDevice(currDev));
-	return (n/(exeTimeMs/Kilo) )/ Giga;
-}
-*/
-template<typename T> __host__ float util<T>::vAddGflops(int device){
-	int currDev;
+	int orgDev;
 	cherr(cudaPeekAtLastError());
-	cherr(cudaGetDevice(&currDev));
-	cherr(cudaSetDevice(device));
-#ifndef __CUDA_ARCH__
+	cherr(cudaGetDevice(&orgDev));
+	if(orgDev != device) {
+		ExecCaps_visitDevice(device);
+	}
 	flprintf("util<T>::vAddGflops(device = %d, %s) set device\n", device, gpuNames[device].c_str());
-#else
-	flprintf("util<T>::vAddGflops(device = %d) set device\n", device);
-#endif
-	uint n = 1000000;
-CuMatrix<T> mc = CuMatrix<T>::zeros(n,1);
+	outln("checking fer dev " << device);
+	//usedDevMem();
+	int n = 1000000;
+	//outln("before mc");
+	//usedDevMem();
+	CuMatrix<T> mc = CuMatrix<T>::ones(n,1);
+	//outln("after mc");
+	//outln("checking fer dev " << device);
+	//usedDevMem();
+	//outln("made mc\n " << mc.syncBuffers());
+	//outln("after mc syncbuffes \n ");
+	//printColoArrayInterval(mc.elements, n, 10, 40);
+	//usedDevMem();
+
+	CuMatrix<T> m2 = CuMatrix<T>::fill((T)2, n,1);
+	//outln("made m2\n " << m2.syncBuffers());
+	//usedDevMem();
+	CuMatrix<T> m3 = CuMatrix<T>::zeros( n,1);
+	outln("made mc " << mc.toShortString() << ", " << m2.toShortString() << ", m3 " << m3.toShortString());
+	m3.syncBuffers();
+
 	DMatrix<T> dc = mc.asDmatrix();
-	T* a=null, *b=null, *c = dc.elements;
-	cherr(cudaMalloc(&a, n * sizeof(T)));
-	cherr(cudaMemset(a,1,n));
-	cherr(cudaMalloc(&b, n * sizeof(T)));
-	cherr(cudaMemset(b,2,n));
+	DMatrix<T> d2 = m2.asDmatrix();
+	DMatrix<T> d3 = m3.asDmatrix();
+//	outln("after d1-d3");
+	//usedDevMem();
+	//flprintf("util<T>::vAddGflops dc.el %p d2.el %p d3.el %p\n", dc.elements, d2.elements, d3.elements);
 	uint blockSize = 1024;
 	CuTimer timer;
 	timer.start();
 	cherr(cudaPeekAtLastError());
-	vectorAdd<T><<<DIV_UP(n,blockSize), blockSize>>>(c, a, b, n);
+	MemMgr<T>::checkValid(  dc.elements);
+	MemMgr<T>::checkValid(  d2.elements);
+	MemMgr<T>::checkValid(  d3.elements);
+
+	vectorAdd<T><<<DIV_UP(n,blockSize), blockSize>>>(d3.elements, dc.elements, d2.elements, n);
 	cherr(cudaDeviceSynchronize());
-	float exeTimeMs = timer.stop();
-	flprintf("n %u adds took exeTimeMs %f millis (%f s)\n", n, exeTimeMs, exeTimeMs/Kilo);
-	exeTimeMs /= Kilo;
-	flprintf("n/extTimeS %f\n", n/exeTimeMs);
-	float nExe = n/exeTimeMs;
+	float addTimeMs = timer.stop();
+	timer.start();
+	m3.syncBuffers();
+	assert(m3.sum() == 3 * n);
+	float memTimeMs = timer.stop();
+
+	//outln("m3 " << m3 );
+//	b_util::usedDmem(1);
+	//printColoArrayInterval(m3.elements, n, 10, 40);
+	//flprintf("n %u adds took exeTimeMs %f millis (%f s)\n", n, exeTimeMs, exeTimeMs/Kilo);
+	addTimeMs /= Kilo;
+	flprintf("n/addTimeMs %f\n", n/addTimeMs);
+	float nExe = n/addTimeMs;
 	flprintf("n/extTimeS %f\n", nExe);
 	flprintf("nExe/Giga %f\n", nExe/Giga);
+
 	// one add per result element, so n adds per invocation
-	cherr(cudaFree(a));
-	cherr(cudaFree(b));
-	cherr(cudaSetDevice(currDev));
-	return (n/(exeTimeMs/Kilo) )/ Giga;
+	if(orgDev != device) {
+		ExecCaps_restoreDevice(orgDev);
+	}
+	return (n/(addTimeMs/Kilo) )/ Giga;
 }
 template __host__  float util<float>::vAddGflops(int device);
 template __host__  float util<double>::vAddGflops(int device);
@@ -158,6 +291,9 @@ template<> __host__ __device__ float util<float>::minValue() {
 }
 template<> __host__ __device__ double util<double>::minValue() {
 	return DBL_MIN;
+}
+template<> __host__ __device__ long util<long>::minValue() {
+	return 0;
 }
 template<> __host__ __device__ ulong util<ulong>::minValue() {
 	return 0;
@@ -180,6 +316,9 @@ template<> __host__ __device__ float util<float>::maxValue() {
 template<> __host__ __device__ double util<double>::maxValue() {
 
 	return DBL_MAX;
+}
+template<> __host__ __device__ long util<long>::maxValue() {
+	return LONG_MAX;
 }
 template<> __host__ __device__ ulong util<ulong>::maxValue() {
 	return 0xffffffff;
@@ -209,13 +348,13 @@ static const char * neither = "neither";
 __host__ __device__ const char * b_util::modStr(Modification lastMod) {
 	switch (lastMod) {
 	case mod_host:
-		return mods_host;
+		return "lstmd: " mods_host;
 	case mod_device:
-		return mods_device;
+		return "lstmd: " mods_device;
 	case mod_synced:
-		return mods_synced;
+		return "lstmd: " mods_synced;
 	case mod_neither:
-		return mods_neither;
+		return "lstmd: " mods_neither;
 	default:
 		return "????";
 	}
@@ -230,7 +369,6 @@ int b_util::kernelOccupancy( void* kernel, int* maxBlocks, int blockSize) {
 	return 0;
 }
 
-struct Flooblar;
 
 template<typename T> __host__ __device__ void b_util::pPtrAtts(T * ptr) {
 #ifndef __CUDA_ARCH__
@@ -248,7 +386,6 @@ template __host__ __device__ void b_util::pPtrAtts<UnaryOpIndexF<unsigned long,0
 template __host__ __device__ void b_util::pPtrAtts<float (*)(float)>(float (**)(float));
 template __host__ __device__ void b_util::pPtrAtts<double (*)(double)>(double (**)(double));
 template __host__ __device__ void b_util::pPtrAtts<unsigned long (*)(unsigned long)>(unsigned long (**)(unsigned long));
-template __host__ __device__ void b_util::pPtrAtts<Flooblar>(Flooblar*);
 template __host__ __device__ void b_util::pFuncPtrAtts<void>(void*);
 template __host__ __device__ void b_util::pPtrAtts<void>(void*);
 template __host__ __device__ void b_util::pPtrAtts<constFiller<float> >(constFiller<float>*);
@@ -257,6 +394,14 @@ template __host__ __device__ void b_util::pPtrAtts<constFiller<unsigned long> >(
 template __host__ __device__  void b_util::pPtrAtts<float const>(float const*);
 template __host__ __device__  void b_util::pPtrAtts<ulong const>(ulong const*);
 template __host__ __device__  void b_util::pPtrAtts<double const>(double const*);
+
+template __host__ __device__  void b_util::pPtrAtts<float>(float*);
+template __host__ __device__  void b_util::pPtrAtts<double>(double*);
+template __host__ __device__  void b_util::pPtrAtts<int>(int*);
+template __host__ __device__  void b_util::pPtrAtts<uint>(uint*);
+template __host__ __device__  void b_util::pPtrAtts<long>(long*);
+template __host__ __device__  void b_util::pPtrAtts<ulong>(ulong*);
+
 template<typename T> __host__ __device__ void b_util::pFuncPtrAtts(T * ptr) {
 //#ifndef __CUDA_ARCH__
 #ifdef CuMatrix_Enable_Cdp
@@ -313,14 +458,14 @@ __host__ __device__ void b_util::prd3(const dim3& d3,const char* msg) {
 		for x.n < ws
 		for ws % x.n != 0,
 			for primeQ(x.n) there are x.n-1 spanrows per ws*x.n threads
-			for !primeQ(x.n) there are x.n/largestMutualFactor(x.n, ws) - 1 spanrows
-				for every ws * x.n/largestMutualFactor(x.n, ws) warps
+			for !primeQ(x.n) there are x.n/largestCommonFactor(x.n, ws) - 1 spanrows
+				for every ws * x.n/largestCommonFactor(x.n, ws) warps
 
 	for m*n threads, there can be at most totalWarps -1 spanrows ( totalWarps = DIV_UP(threads, warpSize))
 
 */
 
-__host__ CUDART_DEVICE int b_util::countSpanrows( uint m, uint n, uint warpSize ) {
+__host__ CUDART_DEVICE int b_util::countSpanrows( int m, int n, uint warpSize ) {
 	uint num = MAX(n,warpSize), den = MIN(n,warpSize);
 	int div = num/den;
 	if( div* den == num) {
@@ -336,7 +481,7 @@ __host__ CUDART_DEVICE int b_util::countSpanrows( uint m, uint n, uint warpSize 
 	//flprintf("factor (%u) s.t. (uint) (  m * (1. * (factor-1)/(factor))) == %u\n", factor, sr);
 }
 
-__host__ __device__ bool b_util::spanrowQ( uint row, uint n, uint warpSize) {
+__host__ __device__ bool b_util::spanrowQ( int row, int n, uint warpSize) {
 #ifdef __CUDA_ARCH__
 	return ::spanrowQ(row, n);
 #else
@@ -346,14 +491,25 @@ __host__ __device__ bool b_util::spanrowQ( uint row, uint n, uint warpSize) {
 #endif
 }
 
-template<typename T> __host__ __device__ void util<T>::prdm(const DMatrix<T>& md) {
-	printf("dmat d: %p (%u*%u*%u)\n", md.elements, md.m,md.n,md.p);
+template<typename T> __host__ __device__ void util<T>::prdm(const char* msg, const DMatrix<T>& md) {
+	printf("%s d: %p (%u*%u*%u)", msg, md.elements, md.m,md.n,md.p);
 }
-template  __host__ __device__ void util<float>::prdm(const DMatrix<float>& md);
-template  __host__ __device__ void util<double>::prdm(const DMatrix<double>& md);
-template  __host__ __device__ void util<ulong>::prdm(const DMatrix<ulong>& md);
-template  __host__ __device__ void util<uint>::prdm(const DMatrix<uint>& md);
-template  __host__ __device__ void util<int>::prdm(const DMatrix<int>& md);
+template  __host__ __device__ void util<float>::prdm(const char*,const DMatrix<float>& md);
+template  __host__ __device__ void util<double>::prdm(const char*,const DMatrix<double>& md);
+template  __host__ __device__ void util<long>::prdm(const char*,const DMatrix<long>& md);
+template  __host__ __device__ void util<ulong>::prdm(const char*,const DMatrix<ulong>& md);
+template  __host__ __device__ void util<uint>::prdm(const char*,const DMatrix<uint>& md);
+template  __host__ __device__ void util<int>::prdm(const char*,const DMatrix<int>& md);
+
+template<typename T> __host__ __device__ void util<T>::prdmln(const char* msg, const DMatrix<T>& md) {
+	printf("%s d: %p (%u*%u*%u)\n", msg, md.elements, md.m,md.n,md.p);
+}
+template  __host__ __device__ void util<float>::prdmln(const char*,const DMatrix<float>& md);
+template  __host__ __device__ void util<double>::prdmln(const char*,const DMatrix<double>& md);
+template  __host__ __device__ void util<long>::prdmln(const char*,const DMatrix<long>& md);
+template  __host__ __device__ void util<ulong>::prdmln(const char*,const DMatrix<ulong>& md);
+template  __host__ __device__ void util<uint>::prdmln(const char*,const DMatrix<uint>& md);
+template  __host__ __device__ void util<int>::prdmln(const char*,const DMatrix<int>& md);
 
 template<typename T> __host__ __device__ void util<T>::printDm( const DMatrix<T>& dm , const char* msg) {
 	uint size = dm.m*dm.p;
@@ -515,18 +671,19 @@ template<typename T> __host__ __device__ void util<T>::printDm( const DMatrix<T>
 	}
 #ifndef __CUDA_ARCH__
 	if(elems) {
+		flprintf("freeing host elems %p\n", elems);
 		checkCudaErrors(cudaFreeHost(elems));
 	}
 #endif
 
 }
-template void util<float>::printDm(DMatrix<float> const&,char const*);
-template void util<double>::printDm(DMatrix<double> const&,char const*);
-template void util<ulong>::printDm(DMatrix<ulong> const&,char const*);
-template void util<uint>::printDm(DMatrix<uint> const&,char const*);
-template void util<int>::printDm(DMatrix<int> const&,char const*);
+template void util<float>::printDm(DMatrix<float> const&,const char*);
+template void util<double>::printDm(DMatrix<double> const&,const char*);
+template void util<ulong>::printDm(DMatrix<ulong> const&,const char*);
+template void util<uint>::printDm(DMatrix<uint> const&,const char*);
+template void util<int>::printDm(DMatrix<int> const&,const char*);
 
-template<typename T> __host__ __device__ void util<T>::printRow(const DMatrix<T>& dm, uint row) {
+template<typename T> __host__ __device__ void util<T>::printRow(const DMatrix<T>& dm, int row) {
 	prlocf("printRow\n");
 	if(!dm.elements) {
 		printf("row %d: null elements\n", row);
@@ -547,21 +704,23 @@ template<typename T> __host__ __device__ void util<T>::printRow(const DMatrix<T>
 	}
 	printf("\n");
 #ifndef __CUDA_ARCH__
+	flprintf("freeing host elems %p\n", elems);
 	checkCudaError(cudaFreeHost(elems));
 #endif
 }
-template void util<float>::printRow(DMatrix<float> const&,uint);
-template void util<double>::printRow(DMatrix<double> const&,uint);
-template void util<ulong>::printRow(DMatrix<ulong> const&,uint);
-template void util<int>::printRow(DMatrix<int> const&,uint);
-template void util<uint>::printRow(DMatrix<uint> const&,uint);
+template void util<float>::printRow(DMatrix<float> const&,int);
+template void util<double>::printRow(DMatrix<double> const&,int);
+template void util<long>::printRow(DMatrix<long> const&,int);
+template void util<ulong>::printRow(DMatrix<ulong> const&,int);
+template void util<int>::printRow(DMatrix<int> const&,int);
+template void util<uint>::printRow(DMatrix<uint> const&,int);
 
-__host__ __device__ void b_util::execContext(uint threads, uint count, dim3& dBlocks,
+__host__ __device__ void b_util::vectorExecContext(int threads, int count, dim3& dBlocks,
 		dim3& dThreads) {
 	if (threads % WARP_SIZE != 0) {
 			printf("WARN: %d is not a multiple of the warp size (32)\n",threads);
 	}
-	uint blocks = (count + threads - 1) / threads;
+	int blocks = (count + threads - 1) / threads;
 	dBlocks.y = dBlocks.z = 1;
 	dBlocks.x = blocks;
 	dThreads.y = dThreads.z = 1;
@@ -586,6 +745,7 @@ template<typename T> __host__ __device__ void util<T>::pDarry(const T* arry, int
 	}
 	printf("\n");
 #ifndef __CUDA_ARCH__
+	flprintf("freeing host ptr %p\n", ptr);
 	checkCudaError(cudaFreeHost(ptr));
 #endif
 }
@@ -601,6 +761,7 @@ template<> __host__ __device__ void util<uint>::pDarry(const uint* arry, int cnt
 	}
 	printf("\n");
 #ifndef __CUDA_ARCH__
+	flprintf("freeing host ptr %p\n", ptr);
 	checkCudaError(cudaFreeHost(ptr));
 #endif
 }
@@ -609,6 +770,21 @@ template __host__ __device__ void util<float>::pDarry(const float*, int);
 template __host__ __device__ void util<double>::pDarry(const double*, int);
 template __host__ __device__ void util<ulong>::pDarry(const ulong*, int);
 template __host__ __device__ void util<int>::pDarry(const int*, int);
+
+template <typename T> void util<T>::fillNDev(T* trg, T val, long n) {
+	int threads = 512;
+	dim3 dBlocks, dThreads;
+	b_util::vectorExecContext(threads, n, dBlocks, dThreads);
+	if(checkDebug(debugCheckValid)) flprintf("trg %p val %.5f\n", trg,val);
+	fillKernel<<<dBlocks,dThreads>>>(trg, val, n);
+	cherr(cudaDeviceSynchronize());
+}
+template void util<float>::fillNDev(float*, float, long);
+template void util<double>::fillNDev(double*, double, long);
+template void util<ulong>::fillNDev(ulong*, ulong, long);
+template void util<long>::fillNDev(long*, long, long);
+template void util<uint>::fillNDev(uint*, uint, long);
+template void util<int>::fillNDev(int*, int, long);
 
 //////////////////////////
 //
@@ -636,9 +812,9 @@ __host__ __device__ IndexArray::IndexArray(uint idx1, uint idx2) :
 	indices[1] = idx2;
 }
 
-uintPair IndexArray::toPair() const {
+intPair IndexArray::toPair() const {
 	assert(count == 2);
-	return uintPair(indices[0], indices[1]);
+	return intPair(indices[0], indices[1]);
 }
 
 __host__ __device__ IndexArray::~IndexArray() {
@@ -662,6 +838,49 @@ string IndexArray::toString(bool lf) const {
 
 }
 
+__host__ __device__ void b_util::expNotation(char* buff, long val) {
+	double factor = 1.;
+#ifndef __CUDA_ARCH__
+	if (val >= Giga) {
+		factor = 1. / Giga;
+		sprintf(buff, "%2.3gGb", (double) val * factor);
+	} else if (val >= Mega) {
+		factor = 1. / Mega;
+		sprintf(buff, "%2.3gMb", (double)val * factor);
+	} else if (val >= Kilo) {
+		factor = 1. / Kilo;
+		sprintf(buff, "%2.3gKb", (double)val * factor);
+	} else {
+		sprintf(buff, "%2.3gb", (double)val * factor);
+	}
+#endif
+}
+
+__host__ CUDART_DEVICE double b_util::usedMemRatio(bool allDevices) {
+	//outln("b_util::usedMemRatio("<< tOrF(allDevices) <<  ") ent");
+	//b_util::dumpStack();
+	size_t freeMemory =1, totalMemory =1;
+	if(allDevices) {
+#ifndef __CUDA_ARCH__
+		ExecCaps::allGpuMem(&freeMemory, &totalMemory);
+#endif
+	}
+	else {
+		cudaMemGetInfo(&freeMemory, &totalMemory);
+	}
+	return 100 * (1 - freeMemory * 1. / totalMemory);
+}
+
+
+
+__host__ CUDART_DEVICE void b_util::usedDmem(bool allDevices) {
+	//outln("b_util::usedDmem("<< tOrF(allDevices) <<  ") ent");
+#ifndef __CUDA_ARCH__
+	flprintf("Memory %d% used\n", usedMemRatio(allDevices));
+#else
+	flprintf("Memory %d% used\n", usedMemRatio(false));
+#endif
+}
 
 __host__ __device__  void b_util::_checkCudaError(const char* file, int line, cudaError_t val) {
 	if (val != cudaSuccess) {
@@ -678,6 +897,9 @@ template <> __host__ __device__ float sqrt_p(float val) {
 }
 template <> __host__ __device__ double sqrt_p(double val) {
 	return sqrt(val);
+}
+template <> __host__ __device__ long sqrt_p(long val) {
+	return (long)sqrtf(val);
 }
 template <> __host__ __device__ ulong sqrt_p(ulong val) {
 	return (ulong)sqrtf(val);

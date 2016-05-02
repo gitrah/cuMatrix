@@ -16,11 +16,11 @@
 template<typename T, uint blockSize, bool nIsPow2, template <typename> class UnaryOp,
 template <typename> class BinaryOp>
 __global__ void gloloReduceOpKernel(DMatrix<T> out, const DMatrix<T> src,
-		ulong n, UnaryOp<T> gop, BinaryOp<T> lop, T start)
+		long n, UnaryOp<T> gop, BinaryOp<T> lop, T start)
 #else
 template<typename T, uint blockSize, bool nIsPow2, int UopDim, int BopDim>
 __global__ void gloloReduceOpKernel(DMatrix<T> out, const DMatrix<T> src,
-		ulong n, UnaryOpF<T,UopDim> gop, MonoidF<T,BopDim> lop, T start)
+		long n, UnaryOpF<T,UopDim> gop, MonoidF<T,BopDim> lop, T start)
 #endif
 {
 	T* sdata = SharedMemory<T>();
@@ -142,16 +142,16 @@ __global__ void gloloReduceOpKernel(DMatrix<T> out, const DMatrix<T> src,
 // input pass from global to local via unaryop 'gop', subsequent passes over local are regular self-reductions using binaryop 'lop'
 #ifdef  CuMatrix_Enable_KTS
 template<typename T, template <typename> class UnaryOp, template <typename> class BinaryOp> __host__ CUDART_DEVICE void gloloReduceOpLauncher(T* result,
-		DMatrix<T> buff, ulong n,	const DMatrix<T> src, UnaryOp<T> gop, BinaryOp<T> lop,
+		DMatrix<T> buff, long n, const DMatrix<T> src, UnaryOp<T> gop, BinaryOp<T> lop,
 		T start, cudaStream_t stream )
 #else
 template<typename T, int UopDim, int BopDim> __host__ CUDART_DEVICE void gloloReduceOpLauncher(T* result,
-		DMatrix<T> buff, ulong n,	const DMatrix<T> src, UnaryOpF<T,UopDim> gop, MonoidF<T,BopDim> lop,
+		DMatrix<T> buff, long n,	const DMatrix<T> src, UnaryOpF<T,UopDim> gop, MonoidF<T,BopDim> lop,
 		T start, cudaStream_t stream )
 #endif
 {
 
-	uint blocks,threads;
+	int blocks,threads;
 
 	// when there is only one warp per block, we need to allocate two warps
 	// worth of shared memory so that we don't index shared memory out of bounds
@@ -168,12 +168,21 @@ template<typename T, int UopDim, int BopDim> __host__ CUDART_DEVICE void gloloRe
 				(threads <= 32) ? 2 * threads * sizeof(T) : threads * sizeof(T);
 		dimBlock.x = threads;
 		dimGrid.x = blocks;
-		if(checkDebug(debugRedux))flprintf("n %d src.elements %p, lastelement @ %p\n" , n, rSrc.elements, rSrc.elements + n -1);
-		if(checkDebug(debugRedux)){ prlocf("dimGrid "); b_util::prd3(dimGrid);}
-		if(checkDebug(debugRedux)){ prlocf("dimBlock "); b_util::prd3(dimBlock);}
-		if(checkDebug(debugRedux))flprintf("threads %d\n",threads);
-		if(checkDebug(debugRedux))flprintf("smemSize %d\n",smemSize);
-		if(checkDebug(debugRedux))flprintf("smem Ts %d\n", smemSize/sizeof(T));
+		if(checkDebug(debugRedux)) {
+			flprintf("n %d src.elements %p, lastelement @ %p\n" , n, rSrc.elements, rSrc.elements + n -1);
+#ifndef __CUDA_ARCH__
+			MemMgr<T>::checkValid(rSrc.elements,  "rSrc.elements");
+			MemMgr<T>::checkValid(rSrc.elements + n -1,  "rSrc.elements + n -1");
+#endif
+			prlocf("dimGrid ");
+				b_util::prd3(dimGrid);
+			prlocf("dimBlock ");
+				b_util::prd3(dimBlock);
+			flprintf("threads %d\n",threads);
+			flprintf("smemSize %d\n",smemSize);
+			flprintf("smem Ts %d\n", smemSize/sizeof(T));
+			flprintf("after block n %d src.elements %p, lastelement @ %p\n" , n, rSrc.elements, rSrc.elements + n -1);
+				}
 		if(firstRedux) {
 			if (powOf2Q) {
 				if(checkDebug(debugRedux)) prlocf("powOf2Q\n");
@@ -227,7 +236,10 @@ template<typename T, int UopDim, int BopDim> __host__ CUDART_DEVICE void gloloRe
 #endif
 				}
 			} else {
-				if(checkDebug(debugRedux)) prlocf("!powOf2Q\n");
+				if(checkDebug(debugRedux) ) {
+					prlocf("!powOf2Q\n");
+					flprintf("buff %p rSrc.elements %p\n", buff.elements, rSrc.elements);
+				}
 				switch (threads) {
 #ifdef  CuMatrix_Enable_KTS
 					case 1024:
@@ -282,9 +294,10 @@ template<typename T, int UopDim, int BopDim> __host__ CUDART_DEVICE void gloloRe
 		}
 
 	#ifndef __CUDA_ARCH__
-		if(stream!=null)cudaStreamSynchronize(stream); else  cudaDeviceSynchronize();
+		if(checkDebug(debugRedux)) flprintf("stream %p\n", stream);
+		cherr(cudaStreamSynchronize(stream));
 	#else
-		cudaDeviceSynchronize();
+		cherr(cudaDeviceSynchronize());
 	#endif
 		if(firstRedux) {
 			if(checkDebug(debugRedux))prlocf("gloloReduceLauncher after first redux, setting input to output\n");
@@ -314,13 +327,13 @@ template<typename T, int UopDim, int BopDim> __host__ CUDART_DEVICE void gloloRe
 
 // for primeQ
 #ifdef  CuMatrix_Enable_KTS
-template __host__ CUDART_DEVICE  void gloloReduceOpLauncher<int, divisibleUnaryOp, maxBinaryOp>(int*, DMatrix<int>, unsigned long, DMatrix<int>, divisibleUnaryOp<int>, maxBinaryOp<int>, int, CUstream_st*);
-template __host__ CUDART_DEVICE  void gloloReduceOpLauncher<int, mutuallyDivisibleUnaryOp, maxBinaryOp>(int*, DMatrix<int>, unsigned long, DMatrix<int>, mutuallyDivisibleUnaryOp<int>, maxBinaryOp<int>, int, CUstream_st*);
-template __host__ CUDART_DEVICE  void gloloReduceOpLauncher<int, divisibleUnaryOp, minNotZeroBinaryOp>(int*, DMatrix<int>, unsigned long, DMatrix<int>, divisibleUnaryOp<int>, minNotZeroBinaryOp<int>, int, CUstream_st*);
-template __host__ CUDART_DEVICE  void gloloReduceOpLauncher<int, mutuallyDivisibleUnaryOp, minNotZeroBinaryOp>(int*, DMatrix<int>, unsigned long, DMatrix<int>, mutuallyDivisibleUnaryOp<int>, minNotZeroBinaryOp<int>, int, CUstream_st*);
+template __host__ CUDART_DEVICE  void gloloReduceOpLauncher<int, divisibleUnaryOp, maxBinaryOp>(int*, DMatrix<int>,  long, DMatrix<int>, divisibleUnaryOp<int>, maxBinaryOp<int>, int, CUstream_st*);
+template __host__ CUDART_DEVICE  void gloloReduceOpLauncher<int, mutuallyDivisibleUnaryOp, maxBinaryOp>(int*, DMatrix<int>,  long, DMatrix<int>, mutuallyDivisibleUnaryOp<int>, maxBinaryOp<int>, int, CUstream_st*);
+template __host__ CUDART_DEVICE  void gloloReduceOpLauncher<int, divisibleUnaryOp, minNotZeroBinaryOp>(int*, DMatrix<int>,  long, DMatrix<int>, divisibleUnaryOp<int>, minNotZeroBinaryOp<int>, int, CUstream_st*);
+template __host__ CUDART_DEVICE  void gloloReduceOpLauncher<int, mutuallyDivisibleUnaryOp, minNotZeroBinaryOp>(int*, DMatrix<int>,  long, DMatrix<int>, mutuallyDivisibleUnaryOp<int>, minNotZeroBinaryOp<int>, int, CUstream_st*);
 #else
-template __host__ CUDART_DEVICE  void gloloReduceOpLauncher<int, 1, 1>(int*, DMatrix<int>, unsigned long, DMatrix<int>, UnaryOpF<int,1>, MonoidF<int,1>, int, CUstream_st*);
-template __host__ CUDART_DEVICE  void gloloReduceOpLauncher<int, 2, 1>(int*, DMatrix<int>, unsigned long, DMatrix<int>, UnaryOpF<int, 2>, MonoidF<int, 1>, int, CUstream_st*);
+template __host__ CUDART_DEVICE  void gloloReduceOpLauncher<int, 1, 1>(int*, DMatrix<int>, long, DMatrix<int>, UnaryOpF<int,1>, MonoidF<int,1>, int, CUstream_st*);
+template __host__ CUDART_DEVICE  void gloloReduceOpLauncher<int, 2, 1>(int*, DMatrix<int>, long, DMatrix<int>, UnaryOpF<int, 2>, MonoidF<int, 1>, int, CUstream_st*);
 #endif
 
 #ifdef  CuMatrix_Enable_KTS
@@ -333,13 +346,13 @@ T CuMatrix<T>::gloloReduceL(const DMatrix<T>& d_M, UnaryOpF<T,IopDim> gop, Monoi
 		T start, cudaStream_t stream ) const
 #endif
 {
-	uint nP = d_M.m * d_M.n;
-	uint threads;
-	uint blocks;
+	long nP = d_M.m * d_M.n;
+	int threads;
+	int blocks;
 	::getReductionExecContext(blocks,threads, nP);
 	CuMatrix<T> res(blocks, 1,true, true);
 	DMatrix<T> d_Res;
-	res.asDmatrix(d_Res, false);
+	res.tile0(d_Res, false);
 	T total;
 	gloloReduceOpLauncher(&total, d_Res, nP, d_M, gop, lop, start, stream);
 	return total;
@@ -354,8 +367,67 @@ T CuMatrix<T>::gloloReduce(UnaryOpF<T,UopDim> gop, MonoidF<T,BopDim> lop, T star
 #endif
 {
 	DMatrix<T> d_A;
-	asDmatrix(d_A);
-	T res = gloloReduceL(d_A, gop, lop, start, stream);
+
+	cherr(cudaPeekAtLastError());
+	T* resA;
+	T res;
+	int tileCount = tiler.getTileCount();
+
+#ifndef __CUDA_ARCH__
+	cherr(cudaHostAlloc(&resA,tileCount*sizeof(T),0));
+	uint roff,coff, tileM = 0, tileN;
+	int lastGpu = 0;
+	int gpuCount = tiler.countGpus();
+	int orgDevice = ExecCaps::currDev();
+	cudaStream_t* streams = null;
+	if(gpuCount > 1) {
+		assert(!stream);
+		cudaStream_t* streams = (cudaStream_t* ) malloc(gpuCount * sizeof(cudaStream_t));
+		for(int i =0 ; i < gpuCount; i++) {
+			lastGpu = tiler.nextGpu(lastGpu);
+			if(gpuCount > 1)
+				ExecCaps_setDevice(lastGpu);
+			cherr(cudaStreamCreateWithFlags(&streams[i],cudaStreamNonBlocking));
+		}
+	}
+
+	for(int tile = 0; tile < tileCount; tile++) {
+		lastGpu = tiler.nextGpu(0);
+		if(gpuCount > 1)
+			ExecCaps_setDevice(lastGpu);
+		tiler.tile1D( d_A,roff,coff,tileM, tileN, tile, tdRows, tileCount > 1 || lastMod == mod_host, lastGpu,gpuCount > 1 ? streams[tile] : stream);
+		resA[tile] = gloloReduceL(d_A, gop, lop, start,gpuCount > 1 ? streams[tile] : stream);
+		if(checkDebug(debugRedux) ) flprintf("gloloreducing tile %d\n",tile );
+	}
+
+	if(gpuCount > 1) {
+		for(int i =0 ; i < gpuCount; i++) {
+			cherr(cudaStreamDestroy(streams[i]));
+		}
+		free(streams);
+	}
+
+	if(tileCount > 1) {
+		if(checkDebug(debugRedux) ) flprintf("reduce across %d tile gloloreductions %d\n",tileCount);
+		// reduce across tile reductions
+		T* dres = null;
+		cherr(cudaMalloc(&dres, tileCount * sizeof(T)));
+		cherr(cudaMemcpy(dres, resA, tileCount * sizeof(T), cudaMemcpyHostToDevice));
+		d_A.elements = dres;
+		d_A.m = tileCount;
+		d_A.n = 1; d_A.p = 1;
+		res = reduce(d_A, lop, start, stream);
+		cudaFree(dres);
+	} else {
+		if(checkDebug(debugRedux) ) flprintf("single tile gloloreduction -> %f\n", (float) resA[0]);
+		res =  resA[0];
+	}
+	if(checkDebug(debugDestr))flprintf("freeing host %p\n", resA);
+	cherr(cudaFreeHost(resA));
+#else
+	res = gloloReduceL(d_A, gop, lop, start, stream);
+#endif
+
 	return res;
 }
 #ifdef  CuMatrix_Enable_KTS
@@ -370,6 +442,7 @@ template __host__ CUDART_DEVICE ulong CuMatrix<ulong>::gloloReduce<almostEqUnary
 template __host__ CUDART_DEVICE float CuMatrix<float>::gloloReduce<sqrUnaryOp, plusBinaryOp>(sqrUnaryOp<float>, plusBinaryOp<float>, float, CUstream_st*) const;
 template __host__ CUDART_DEVICE double CuMatrix<double>::gloloReduce<sqrUnaryOp, plusBinaryOp>(sqrUnaryOp<double>, plusBinaryOp<double>, double, CUstream_st*) const;
 template __host__ CUDART_DEVICE ulong CuMatrix<ulong>::gloloReduce<sqrUnaryOp, plusBinaryOp>(sqrUnaryOp<ulong>, plusBinaryOp<ulong>, ulong, CUstream_st*) const;
+template  __host__ CUDART_DEVICE long CuMatrix<long>::gloloReduce<sqrUnaryOp, plusBinaryOp>(sqrUnaryOp<long>, plusBinaryOp<long>, long, CUstream_st*) const;
 
 template __host__ CUDART_DEVICE float CuMatrix<float>::gloloReduce<almostEqUnaryOp, plusBinaryOp>(almostEqUnaryOp<float>, plusBinaryOp<float>, float, CUstream_st*) const;
 template __host__ CUDART_DEVICE double CuMatrix<double>::gloloReduce<almostEqUnaryOp, plusBinaryOp>(almostEqUnaryOp<double>, plusBinaryOp<double>, double, CUstream_st*) const;
@@ -410,21 +483,26 @@ template __host__ CUDART_DEVICE ulong CuMatrix<ulong>::gloloReduce<almostEqUnary
 
 template __host__ CUDART_DEVICE int CuMatrix<int>::gloloReduce<almostEqUnaryOp, andBinaryOp>(almostEqUnaryOp<int>, andBinaryOp<int>, int, CUstream_st*) const;
 template __host__ CUDART_DEVICE int CuMatrix<int>::gloloReduce<oneOrZeroUnaryOp, andBinaryOp>(oneOrZeroUnaryOp<int>, andBinaryOp<int>, int, CUstream_st*) const;
-template __host__ CUDART_DEVICE unsigned int CuMatrix<unsigned int>::gloloReduce<almostEqUnaryOp, andBinaryOp>(almostEqUnaryOp<unsigned int>, andBinaryOp<unsigned int>, unsigned int, CUstream_st*) const;
-template __host__ CUDART_DEVICE unsigned int CuMatrix<unsigned int>::gloloReduce<oneOrZeroUnaryOp, andBinaryOp>(oneOrZeroUnaryOp<unsigned int>, andBinaryOp<unsigned int>, unsigned int, CUstream_st*) const;
+template __host__ CUDART_DEVICE uint CuMatrix<uint>::gloloReduce<almostEqUnaryOp, andBinaryOp>(almostEqUnaryOp<uint>, andBinaryOp<uint>, uint, CUstream_st*) const;
+template __host__ CUDART_DEVICE uint CuMatrix<uint>::gloloReduce<oneOrZeroUnaryOp, andBinaryOp>(oneOrZeroUnaryOp<uint>, andBinaryOp<uint>, uint, CUstream_st*) const;
 
+template __host__ CUDART_DEVICE  int CuMatrix<int>::gloloReduce<sqrUnaryOp, plusBinaryOp>(sqrUnaryOp<int>, plusBinaryOp<int>, int, CUstream_st*) const;
+template __host__ CUDART_DEVICE  uint CuMatrix<uint>::gloloReduce<sqrUnaryOp, plusBinaryOp>(sqrUnaryOp<uint>, plusBinaryOp<uint>, uint, CUstream_st*) const;
 
 #else
 template __host__ CUDART_DEVICE float CuMatrix<float>::gloloReduce<0,1>(UnaryOpF<float,0>, MonoidF<float,1>, float,cudaStream_t) const;
 template __host__ CUDART_DEVICE double CuMatrix<double>::gloloReduce<0,1>(UnaryOpF<double,0>, MonoidF<double,1>, double,cudaStream_t) const;
 template __host__ CUDART_DEVICE int CuMatrix<int>::gloloReduce<0,1>(UnaryOpF<int,0>, MonoidF<int,1>, int ,cudaStream_t) const;
 template __host__ CUDART_DEVICE uint CuMatrix<uint>::gloloReduce<0,1>(UnaryOpF<uint,0>, MonoidF<uint,1>, uint ,cudaStream_t) const;
+template __host__ CUDART_DEVICE long CuMatrix<long>::gloloReduce<0,1>(UnaryOpF<long,0>, MonoidF<long,1>, long,cudaStream_t) const;
 template __host__ CUDART_DEVICE ulong CuMatrix<ulong>::gloloReduce<0,1>(UnaryOpF<ulong,0>, MonoidF<ulong,1>, ulong,cudaStream_t) const;
 template __host__ CUDART_DEVICE float CuMatrix<float>::gloloReduce<1,1>(UnaryOpF<float,1>, MonoidF<float,1>, float,cudaStream_t) const;
 template __host__ CUDART_DEVICE double CuMatrix<double>::gloloReduce<1,1>(UnaryOpF<double,1>, MonoidF<double,1>, double,cudaStream_t) const;
+template __host__ CUDART_DEVICE long CuMatrix<long>::gloloReduce<1,1>(UnaryOpF<long,1>, MonoidF<long,1>, long,cudaStream_t) const;
 template __host__ CUDART_DEVICE ulong CuMatrix<ulong>::gloloReduce<1,1>(UnaryOpF<ulong,1>, MonoidF<ulong,1>, ulong,cudaStream_t) const;
 template __host__ CUDART_DEVICE float CuMatrix<float>::gloloReduce<2,1>(UnaryOpF<float,2>, MonoidF<float,1>, float,cudaStream_t) const;
 template __host__ CUDART_DEVICE double CuMatrix<double>::gloloReduce<2,1>(UnaryOpF<double,2>, MonoidF<double,1>, double,cudaStream_t) const;
+template __host__ CUDART_DEVICE long CuMatrix<long>::gloloReduce<2,1>(UnaryOpF<long,2>, MonoidF<long,1>, long,cudaStream_t) const;
 template __host__ CUDART_DEVICE ulong CuMatrix<ulong>::gloloReduce<2,1>(UnaryOpF<ulong,2>, MonoidF<ulong,1>, ulong,cudaStream_t) const;
 template __host__ CUDART_DEVICE int CuMatrix<int>::gloloReduce<2,1>(UnaryOpF<int,2>, MonoidF<int,1>, int,cudaStream_t) const;
 template __host__ CUDART_DEVICE uint CuMatrix<uint>::gloloReduce<2, 1>(UnaryOpF<uint, 2>, MonoidF<uint, 1>, uint, CUstream_st*) const;

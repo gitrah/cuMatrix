@@ -9,7 +9,7 @@
 #define PATH_H_
 #include <vector>
 
-using namespace std;
+using std::vector;
 
 template<typename T> struct T3 {
 	T data[3];

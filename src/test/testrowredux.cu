@@ -12,40 +12,32 @@
 #include "../Maths.h"
 #include "testKernels.h"
 
-int launchDevInclisiveSum(uint fin) {
-	if(fin == 0 || fin == 1) {
-		return fin;
-	}
-	uint res = 0;
-	uint* d_res;
-	cherr(cudaMalloc(&d_res,sizeof(uint)));
-	inclusiveSum<<<1,1>>>( d_res, fin);
-	cherr(cudaMemcpy(&res,d_res,sizeof(uint), cudaMemcpyDeviceToHost));
-	cherr(cudaFree(d_res));
-	return res;
-}
-template int testReduceRows<float>::operator()(int argc, char const ** args) const;
-template int testReduceRows<double>::operator()(int argc, char const ** args) const;
-template int testReduceRows<ulong>::operator()(int argc, char const ** args) const;
-template <typename T> int testReduceRows<T>::operator()(int argc, const char** args) const {
+template int testReduceRows<float>::operator()(int argc, const char **argv) const;
+template int testReduceRows<double>::operator()(int argc, const char **argv) const;
+template int testReduceRows<ulong>::operator()(int argc, const char **argv) const;
+template <typename T> int testReduceRows<T>::operator()(int argc, const char **argv) const {
 	outln("testReduceRows start " );
 	plusBinaryOp<T> plus = Functory<T,plusBinaryOp>::pinch();
-	int start = b_util::getStart(argc,args,1);
+	int start = b_util::getStart(argc,argv,1);
+
+	for(int i = 0; i < 65; i++ ) {
+		outln( "scanSumL(" << i <<") " << scanSumL(i));
+	}
 	for(int i = start; i < 65; i++ ) {
-		outln("i " << i << ", inclusum " << launchDevInclisiveSum(i-1));
+		outln("i " << i << ", inclusum " << scanSumL(i-1));
 		CuMatrix<T> m1 = CuMatrix<T>::increasingColumns(0,1024,i);
 		outln("m1 " << m1.syncBuffers());
 
 		CuMatrix<T> resVec = CuMatrix<T>::zeros(m1.m,1);
 
 		DMatrix<T> d_res, d_m1;
-		m1.asDmatrix(d_m1);
-		resVec.asDmatrix(d_res);
+		m1.tile0(d_m1,true);
+		resVec.tile0(d_res,true);
 
 		CuMatrix<T>::reduceRows(d_res,d_m1,plus);
 
 		T rvSum = resVec.sum();
-		uint inclusum = launchDevInclisiveSum(i-1);
+		uint inclusum = scanSumL(i-1);
 		outln("resVec " << resVec.syncBuffers() << "\nresVec.sum() " << rvSum);
 		outln("should equals rows X inclusive sum (" << m1.m << " X " << inclusum << ")");
 		assert(resVec.sum() ==  inclusum * d_res.m);
@@ -62,8 +54,8 @@ template <typename T> int testReduceRows<T>::operator()(int argc, const char** a
 	CuMatrix<T> bigResVec = CuMatrix<T>::zeros(bigm1.m,1);
 
 	DMatrix<T> d_bigres, d_bigm1;
-	bigm1.asDmatrix(d_bigm1);
-	bigResVec.asDmatrix(d_bigres);
+	bigm1.tile0(d_bigm1,true);
+	bigResVec.tile0(d_bigres,true);
 
 	setCurrGpuDebugFlags( debugRedux,true,false);
 	CuMatrix<T>::reduceRows(d_bigres,d_bigm1,plus);

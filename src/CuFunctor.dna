@@ -1,12 +1,5 @@
 copyrightText = 
 """ *
- * Copyright 1993-2014 NVIDIA Corporation.  All rights reserved.
- *
- * Please refer to the NVIDIA end user license agreement (EULA) associated
- * with this source code for terms and conditions that govern your use of
- * this software. Any use, reproduction, disclosure, or distribution of
- * this software and related documentation outside the terms of the EULA
- * is strictly prohibited.
  *"""
 #  CuFunctor.dna - template used by ribosome to generate functor methods 
 #  glue code to enable pass-by-value polymorphism
@@ -93,6 +86,7 @@ if(!kts)
         .
         .template struct FunctionTableMgr<float>;
         .template struct FunctionTableMgr<double>;
+        .template struct FunctionTableMgr<long>;
         .template struct FunctionTableMgr<ulong>;
         .template struct FunctionTableMgr<uint>;
         .template struct FunctionTableMgr<int>;
@@ -109,6 +103,7 @@ if(!kts)
         .
         .template struct MethodTableMgr<float>;
         .template struct MethodTableMgr<double>;
+        .template struct MethodTableMgr<long>;
         .template struct MethodTableMgr<ulong>;
         .template struct MethodTableMgr<uint>;
         .template struct MethodTableMgr<int>;
@@ -119,11 +114,11 @@ if(!kts)
     if(statFunc) 
         .template <typename T> __global__ void findUop0sFunctions( 
         .    typename UnaryOpF<T,0>::uopFunction *uopFunctions) {
-        .       printf("findUop0sFunctions uopFunctions %p\n", uopFunctions);
+        .       if(checkDebug(debugFtor))printf("findUop0sFunctions uopFunctions %p\n", uopFunctions);
     else
         .template <typename T> __global__ void findUop0sMethods( 
         .    typename UnaryOpF<T,0>::uopMethod *uopMethods) {
-        .       printf("findUop0sMethods uopMethods %p\n", uopMethods);
+        .       if(checkDebug(debugFtor))printf("findUop0sMethods uopMethods %p\n", uopMethods);
     end #statFunc
 
     ./!output(fBaseUnaryOp)
@@ -231,14 +226,17 @@ nameExps = [
     ["Deg2", "return - xi* xi - 2 * xi + 11.5;"],
    
     ["Negate", "return (static_cast<T>(-xi));" ],
-    ["Log", "return (static_cast<T>(log(xi)));"],
+    ["Log", "return (static_cast<T>(logf(xi)));"],
+    ["Floor", "return (static_cast<T>(floor(xi)));"],
+    ["Ceil", "return (static_cast<T>(ceilf(xi)));"],
+    ["Abs", "return (static_cast<T>(fabs(xi)));"],
     ["OneOver", "return (static_cast<T>(1.) / static_cast<T>(xi));"],
     ["Exp","return (static_cast<T>(expf(xi)));"],
     ["poly2_1","return xi * xi - 2 * xi - 11.5;"],
     ["Sqrt", "return (static_cast<T>(sqrt(xi)));"],
-    ["ApproxInvSqrt", "return static_cast<T>(1) / sqrt(xi);"],
+    ["ApproxInvSqrt", "return static_cast<T>(1) / sqrtf(xi);"],
      ["Sqr", "return (xi * xi);"],
-    ["SlowInvSqrt", "return static_cast<T>(1) / sqrt(xi);"],
+    ["SlowInvSqrt", "return static_cast<T>(1) / sqrtf(xi);"],
     ["OneOrZero", "return (xi == 0 || xi == 1);"]
         ]
 # setupXsMethodTables will copy the device-side member function pointer to host-side arrays 
@@ -293,7 +291,7 @@ nameExps.each do |nameExp|
     
     if(locateFunction) 
         tempExp = exp 
-        exp = "\nprintf(\"invoked " + name + "'s operator()\\n\");\n" + exp
+        exp = "\nif(checkDebug(debugFtor))printf(\"invoked " + name + "'s operator()\\n\");\n" + exp
     end #locateFunction
     
     ./!append(fUnaryOp)
@@ -313,7 +311,7 @@ nameExps.each do |nameExp|
     
     if(locateFunction) 
         exp = tempExp
-        exp = "printf(\"invoked operator"+name+"()\\n\");\n    " + exp
+        exp = "if(checkDebug(debugFtor))printf(\"invoked operator"+name+"()\\n\");\n    " + exp
     end # locateFunction
     expStatic = exp
     
@@ -387,11 +385,11 @@ if(!kts)
     if(statFunc) 
         .template <typename T> __global__ void findUop1sFunctions(
         .        typename UnaryOpF<T,1>::uopFunction *uopFunctions) {
-        .       printf("findUop1sFunctions uopFunctions %p\n", uopFunctions);
+        .       if(checkDebug(debugFtor))printf("findUop1sFunctions uopFunctions %p\n", uopFunctions);
     else
         .template <typename T> __global__ void findUop1sMethods(
         .        typename UnaryOpF<T,1>::uopMethod *uopMethods) {
-        .       printf("findUop1sMethods uopMethods %p\n", uopMethods);
+        .       if(checkDebug(debugFtor))printf("findUop1sMethods uopMethods %p\n", uopMethods);
     end #statFunc
     # create 1 template
     . /!append(fBaseUnaryOp)
@@ -486,7 +484,7 @@ nameExps.each do |nameExp|
     
     if(locateFunction) 
         tempExp = exp 
-        exp = "\nprintf(\"invoked " + name + "'s operator()\\n\");\n" + exp
+        exp = "\nif(checkDebug(debugFtor))printf(\"invoked " + name + "'s operator()\\n\");\n" + exp
     end #locateFunction
     
     ./!append(fUnaryOp)
@@ -496,7 +494,7 @@ nameExps.each do |nameExp|
     
     if(locateFunction) 
         exp = tempExp
-        exp = "printf(\"invoked operator"+name+"()\\n\");\n    " + exp
+        exp = "if(checkDebug(debugFtor))printf(\"invoked operator"+name+"()\\n\");\n    " + exp
     end #locateFunction
     expStatic = exp
     
@@ -571,11 +569,11 @@ if(!kts)
     if(statFunc) 
         .template <typename T> __global__ void findUop2sFunctions(
         .        typename UnaryOpF<T,2>::uopFunction *uopFunctions) {
-        .       printf("findUop2sFunctions uopFunctions %p\n", uopFunctions);
+        .       if(checkDebug(debugFtor))printf("findUop2sFunctions uopFunctions %p\n", uopFunctions);
     else
         .template <typename T> __global__ void findUop2sMethods(
         .        typename UnaryOpF<T,2>::uopMethod *uopMethods) {
-        .       printf("findUop2sMethods uopMethods %p\n", uopMethods);
+        .       if(checkDebug(debugFtor))printf("findUop2sMethods uopMethods %p\n", uopMethods);
     end #statFunc
     
     # create 2 template
@@ -643,7 +641,7 @@ nameExps.each do |nameExp|
     
     if(locateFunction) 
         tempExp = exp 
-        exp = "\nprintf(\"invoked " + name + "'s operator()\\n\");\n" + exp
+        exp = "\nif(checkDebug(debugFtor))printf(\"invoked " + name + "'s operator()\\n\");\n" + exp
     end #locate 
     
     ./!append(fUnaryOp)
@@ -692,7 +690,7 @@ nameExps.each do |nameExp|
         .
         if(locateFunction) 
             exp = tempExp
-            exp = "printf(\"invoked operator"+name+"()\\n\");\n    " + exp
+            exp = "if(checkDebug(debugFtor))printf(\"invoked operator"+name+"()\\n\");\n    " + exp
         end #locateFunction
         expStatic = exp
         
@@ -832,11 +830,11 @@ if(!kts)
     if(statFunc) 
         .template <typename T> __global__ void findIop0sFunctions(
         .       typename UnaryOpIndexF<T,0>::iopFunction *iopFunctions) {
-        .       printf("findIop0sFunctions iopFunctions %p\n", iopFunctions);
+        .       if(checkDebug(debugFtor))printf("findIop0sFunctions iopFunctions %p\n", iopFunctions);
     else
         .template <typename T> __global__ void findIop0sMethods(
         .       typename UnaryOpIndexF<T,0>::iopMethod *iopMethods) {
-        .       printf("findIop0sMethods iopMethods %p\n", iopMethods);
+        .       if(checkDebug(debugFtor))printf("findIop0sMethods iopMethods %p\n", iopMethods);
     end #statFunc
     
     # create 0 template
@@ -883,12 +881,12 @@ nameExps.each do |nameExp|
         . /!append(fMethodTableMgr)
         if(statFunc) 
         .    iopFunctions[Iop0s@{name}Filler] = &UnaryOpIndexF<T,0>::operator@{name};
-        .    printf("found iopFunctions[Iop0s@{name}Filler] %p\n", &UnaryOpIndexF<T,0>::operator@{name});
-        .    printf(" &@{uncap}Filler<T>::operator() %p &iopFunctions[Iop0s@{name}Filler] %p\n", &@{uncap}Filler<T>::operator(), &iopFunctions[Iop0s@{name}Filler]);
+        .    if(checkDebug(debugFtor))printf("found iopFunctions[Iop0s@{name}Filler] %p\n", &UnaryOpIndexF<T,0>::operator@{name});
+        .    if(checkDebug(debugFtor))printf(" &@{uncap}Filler<T>::operator() %p &iopFunctions[Iop0s@{name}Filler] %p\n", &@{uncap}Filler<T>::operator(), &iopFunctions[Iop0s@{name}Filler]);
         else
         .    iopMethods[Iop0s@{name}Filler] = &UnaryOpIndexF<T,0>::operator@{name};
-        .    printf("found iopMethods[Iop0s@{name}Filler] %p\n", &UnaryOpIndexF<T,0>::operator@{name});
-        .    printf(" &@{uncap}Filler<T>::operator() %p &iopMethods[Iop0s@{name}Filler] %p\n", &@{uncap}Filler<T>::operator(), &iopMethods[Iop0s@{name}Filler]);
+        .    if(checkDebug(debugFtor))printf("found iopMethods[Iop0s@{name}Filler] %p\n", &UnaryOpIndexF<T,0>::operator@{name});
+        .    if(checkDebug(debugFtor))printf(" &@{uncap}Filler<T>::operator() %p &iopMethods[Iop0s@{name}Filler] %p\n", &@{uncap}Filler<T>::operator(), &iopMethods[Iop0s@{name}Filler]);
         end #statFunc
     end #kts
     
@@ -903,7 +901,7 @@ nameExps.each do |nameExp|
     
     if(locateFunction) 
         tempExp = exp 
-        exp = "\nprintf(\"invoked " + name + "'s operator()\\n\");\n" + exp
+        exp = "\nif(checkDebug(debugFtor))printf(\"invoked " + name + "'s operator()\\n\");\n" + exp
     end #locateFunction
     
     ./!append(fUnaryOpIdx)
@@ -922,7 +920,7 @@ nameExps.each do |nameExp|
     
     if(locateFunction) 
         exp = tempExp
-        exp = "printf(\"invoked operator"+name+"()\\n\");\n    " + exp
+        exp = "if(checkDebug(debugFtor))printf(\"invoked operator"+name+"()\\n\");\n    " + exp
     end #locateFunction
     expStatic = exp
     
@@ -990,11 +988,11 @@ if(!kts)
     if(statFunc) 
         .template <typename T> __global__ void findIop1sFunctions(
         .       typename UnaryOpIndexF<T,1>::iopFunction *iopFunctions) {
-        .       printf("findIop1sFunctions iopFunctions %p\n", iopFunctions);
+        .       if(checkDebug(debugFtor))printf("findIop1sFunctions iopFunctions %p\n", iopFunctions);
     else
         .template <typename T> __global__ void findIop1sMethods(
         .       typename UnaryOpIndexF<T,1>::iopMethod *iopMethods) {
-        .       printf("findIop1sMethods iopMethods %p\n", iopMethods);
+        .       if(checkDebug(debugFtor))printf("findIop1sMethods iopMethods %p\n", iopMethods);
     end #statFunc
     
     # create 1 template
@@ -1049,10 +1047,10 @@ nameExps.each do |nameExp|
         . /!append(fMethodTableMgr)
             if(statFunc)
             .    iopFunctions[Iop1s@{name}Filler] = &UnaryOpIndexF<T,1>::operator@{name};
-            .    printf("found iopFunctions[Iop1s@{name}Filler] %p\n", &UnaryOpIndexF<T,1>::operator@{name});
+            .    if(checkDebug(debugFtor))printf("found iopFunctions[Iop1s@{name}Filler] %p\n", &UnaryOpIndexF<T,1>::operator@{name});
             else
             .    iopMethods[Iop1s@{name}Filler] = &UnaryOpIndexF<T,1>::operator@{name};
-            .    printf("found iopMethods[Iop1s@{name}Filler] %p\n", &UnaryOpIndexF<T,1>::operator@{name});
+            .    if(checkDebug(debugFtor))printf("found iopMethods[Iop1s@{name}Filler] %p\n", &UnaryOpIndexF<T,1>::operator@{name});
             end # statFunc
     end #kts
     ./!append(fUnaryOpIdx)
@@ -1068,7 +1066,7 @@ nameExps.each do |nameExp|
     
     if(locateFunction) 
         tempExp = exp 
-        exp = "\nprintf(\"invoked " + name + "'s operator()\\n\");\n" + exp
+        exp = "\nif(checkDebug(debugFtor))printf(\"invoked " + name + "'s operator()\\n\");\n" + exp
     end #locate 
     expStatic=exp
     
@@ -1101,7 +1099,7 @@ nameExps.each do |nameExp|
         end # !allIopAccs.include?(prop
         if(locateFunction) 
             exp = tempExp
-            exp = "printf(\"invoked operator"+name+"()\\n\");\n    " + exp
+            exp = "if(checkDebug(debugFtor))printf(\"invoked operator"+name+"()\\n\");\n    " + exp
         end #locate
         expStatic = exp
         
@@ -1164,11 +1162,11 @@ if(!kts)
     if(statFunc) 
         .template <typename T> __global__ void findIop2sFunctions(
         .       typename UnaryOpIndexF<T,2>::iopFunction *iopFunctions) {
-        .       printf("findIop1sFunctions iopFunctions %p\n", iopFunctions);
+        .       if(checkDebug(debugFtor))printf("findIop1sFunctions iopFunctions %p\n", iopFunctions);
         else
         .template <typename T> __global__ void findIop2sMethods(
         .       typename UnaryOpIndexF<T,2>::iopMethod *iopMethods) {
-        .       printf("findIop1sMethods iopMethods %p\n", iopMethods);
+        .       if(checkDebug(debugFtor))printf("findIop1sMethods iopMethods %p\n", iopMethods);
     end #statFunc
     # create 2 template
     allIopAccs=""
@@ -1226,10 +1224,10 @@ nameExps.each do |nameExp|
     
         if(statFunc) 
         .    iopFunctions[Iop2s@{name}Filler] = &UnaryOpIndexF<T,2>::operator@{name};
-        .    printf("found iopFunctions[Iop2s@{name}Filler] %p\n", &UnaryOpIndexF<T,2>::operator@{name});
+        .    if(checkDebug(debugFtor))printf("found iopFunctions[Iop2s@{name}Filler] %p\n", &UnaryOpIndexF<T,2>::operator@{name});
         else
         .    iopMethods[Iop2s@{name}Filler] = &UnaryOpIndexF<T,2>::operator@{name};
-        .    printf("found iopMethods[Iop2s@{name}Filler] %p\n", &UnaryOpIndexF<T,2>::operator@{name});
+        .    if(checkDebug(debugFtor))printf("found iopMethods[Iop2s@{name}Filler] %p\n", &UnaryOpIndexF<T,2>::operator@{name});
         end #statFunc
     
         # add method copy
@@ -1242,7 +1240,7 @@ nameExps.each do |nameExp|
       
     if(locateFunction) 
         tempExp = exp 
-        exp = "\nprintf(\"invoked " + name + "'s operator()\\n\");\n" + exp
+        exp = "\nif(checkDebug(debugFtor))printf(\"invoked " + name + "'s operator()\\n\");\n" + exp
     end #lcoate 
     
     ./!append(fUnaryOpIdx)
@@ -1286,7 +1284,7 @@ nameExps.each do |nameExp|
     
         if(locateFunction) 
             exp = tempExp
-            exp = "printf(\"invoked operator"+name+"()\\n\");\n    " + exp
+            exp = "if(checkDebug(debugFtor))printf(\"invoked operator"+name+"()\\n\");\n    " + exp
         end #locate
         expStatic = exp
         
@@ -1352,11 +1350,11 @@ if(!kts)
     if(statFunc) 
     .template <typename T> __global__ void findIop3sFunctions(
     .       typename UnaryOpIndexF<T,3>::iopFunction *iopFunctions) {
-    .       printf("findIop3sFunctions iopFunctions %p\n", iopFunctions);
+    .       if(checkDebug(debugFtor))printf("findIop3sFunctions iopFunctions %p\n", iopFunctions);
     else
     .template <typename T> __global__ void findIop3sMethods(
     .       typename UnaryOpIndexF<T,3>::iopMethod *iopMethods) {
-    .       printf("findIop3sMethods iopMethods %p\n", iopMethods);
+    .       if(checkDebug(debugFtor))printf("findIop3sMethods iopMethods %p\n", iopMethods);
     end #statFunc
 
     # create 3 template
@@ -1410,10 +1408,10 @@ nameExps.each do |nameExp|
         . /!append(fMethodTableMgr)
         if(statFunc)
         .    iopFunctions[Iop3s@{name}Filler] = &UnaryOpIndexF<T,3>::operator@{name};
-        .    printf("found iopFunctions[Iop3s@{name}Filler] %p\n", &UnaryOpIndexF<T,3>::operator@{name});
+        .    if(checkDebug(debugFtor))printf("found iopFunctions[Iop3s@{name}Filler] %p\n", &UnaryOpIndexF<T,3>::operator@{name});
         else
         .    iopMethods[Iop3s@{name}Filler] = &UnaryOpIndexF<T,3>::operator@{name};
-        .    printf("found iopMethods[Iop3s@{name}Filler] %p\n", &UnaryOpIndexF<T,3>::operator@{name});
+        .    if(checkDebug(debugFtor))printf("found iopMethods[Iop3s@{name}Filler] %p\n", &UnaryOpIndexF<T,3>::operator@{name});
         end #statFunc
     
         # add method copy
@@ -1425,7 +1423,7 @@ nameExps.each do |nameExp|
         
         if(locateFunction) 
             tempExp = exp 
-            exp = "\nprintf(\"invoked " + name + "'s operator()\\n\");\n" + exp
+            exp = "\nif(checkDebug(debugFtor))printf(\"invoked " + name + "'s operator()\\n\");\n" + exp
         end #locate 
     end #kts
     
@@ -1481,7 +1479,7 @@ nameExps.each do |nameExp|
         
         if(locateFunction) 
             exp = tempExp
-            exp = "printf(\"invoked operator"+name+"()\\n\");\n    " + exp
+            exp = "if(checkDebug(debugFtor))printf(\"invoked operator"+name+"()\\n\");\n    " + exp
         end #locate
         expStatic = exp
         
@@ -1685,10 +1683,10 @@ nameExps.each do |nameExp|
         
         if(statFunc)
         .    bopFunctions[Bop0s@{name}BinaryOp] = &BinaryOpF<T,0>::operator@{name};
-        .    printf("found bopFunctions[Bop0s@{name}BinaryOp] %p\n", &BinaryOpF<T,0>::operator@{name});
+        .    if(checkDebug(debugFtor))printf("found bopFunctions[Bop0s@{name}BinaryOp] %p\n", &BinaryOpF<T,0>::operator@{name});
         else
         .    bopMethods[Bop0s@{name}BinaryOp] = &BinaryOpF<T,0>::operator@{name};
-        .    printf("found bopMethods[Bop0s@{name}BinaryOp] %p\n", &BinaryOpF<T,0>::operator@{name});
+        .    if(checkDebug(debugFtor))printf("found bopMethods[Bop0s@{name}BinaryOp] %p\n", &BinaryOpF<T,0>::operator@{name});
         end #statFunc
     
         ./!append(fBinaryOp)
@@ -1702,7 +1700,7 @@ nameExps.each do |nameExp|
         
     if(locateFunction) 
         tempExp = exp 
-        exp = "\nprintf(\"invoked " + name + "'s operator()\\n\");\n" + exp
+        exp = "\nif(checkDebug(debugFtor))printf(\"invoked " + name + "'s operator()\\n\");\n" + exp
     end #locate
     
     .template<typename T> struct @{uncap}BinaryOp: public BinaryOpF<T,0> {
@@ -1712,7 +1710,7 @@ nameExps.each do |nameExp|
     
     if(locateFunction) 
         exp = tempExp
-        exp = "printf(\"invoked operator"+name+"()\\n\");\n    " + exp
+        exp = "if(checkDebug(debugFtor))printf(\"invoked operator"+name+"()\\n\");\n    " + exp
     end #locate
     expStatic = exp
     
@@ -1854,10 +1852,10 @@ nameExps.each do |nameExp|
         
         if(statFunc)
         .    bopFunctions[Bop1s@{name}BinaryOp] = &BinaryOpF<T,1>::operator@{name};
-        .    printf("found bopFunctions[Bop1s@{name}BinaryOp] %p\n", &BinaryOpF<T,1>::operator@{name});
+        .    if(checkDebug(debugFtor))printf("found bopFunctions[Bop1s@{name}BinaryOp] %p\n", &BinaryOpF<T,1>::operator@{name});
         else
         .    bopMethods[Bop1s@{name}BinaryOp] = &BinaryOpF<T,1>::operator@{name};
-        .    printf("found bopMethods[Bop1s@{name}BinaryOp] %p\n", &BinaryOpF<T,1>::operator@{name});
+        .    if(checkDebug(debugFtor))printf("found bopMethods[Bop1s@{name}BinaryOp] %p\n", &BinaryOpF<T,1>::operator@{name});
         end #statFunc
             
         #add method copy
@@ -1870,7 +1868,7 @@ nameExps.each do |nameExp|
         
     if(locateFunction) 
         tempExp = exp 
-        exp = "\nprintf(\"invoked " + name + "'s operator()\\n\");\n" + exp
+        exp = "\nif(checkDebug(debugFtor))printf(\"invoked " + name + "'s operator()\\n\");\n" + exp
     end #locate
     
     ./!append(fBinaryOp)
@@ -1895,7 +1893,7 @@ nameExps.each do |nameExp|
         
         if(locateFunction) 
             exp = tempExp
-            exp = "printf(\"invoked operator"+name+"()\\n\");\n    " + exp
+            exp = "if(checkDebug(debugFtor))printf(\"invoked operator"+name+"()\\n\");\n    " + exp
         end #locate 
         expStatic = exp
         
@@ -1958,10 +1956,10 @@ nameExps.each do |nameExp|
         . /!append(fMethodTableMgr)
         if(statFunc) 
         .    bopFunctions[Bop1s@{name}BinaryOp] = &BinaryOpF<T,1>::operator@{name};
-        .    printf("found bopFunctions[Bop1s@{name}BinaryOp] %p\n", &BinaryOpF<T,1>::operator@{name});
+        .    if(checkDebug(debugFtor))printf("found bopFunctions[Bop1s@{name}BinaryOp] %p\n", &BinaryOpF<T,1>::operator@{name});
         else
         .    bopMethods[Bop1s@{name}BinaryOp] = &BinaryOpF<T,1>::operator@{name};
-        .    printf("found bopMethods[Bop1s@{name}BinaryOp] %p\n", &BinaryOpF<T,1>::operator@{name});
+        .    if(checkDebug(debugFtor))printf("found bopMethods[Bop1s@{name}BinaryOp] %p\n", &BinaryOpF<T,1>::operator@{name});
         end #statFunc
         
         ./!append(fBinaryOp)
@@ -1975,7 +1973,7 @@ nameExps.each do |nameExp|
     
     if(locateFunction) 
         tempExp = exp 
-        exp = "\nprintf(\"invoked " + name + "'s operator()\\n\");\n" + exp
+        exp = "\nif(checkDebug(debugFtor))printf(\"invoked " + name + "'s operator()\\n\");\n" + exp
     end #lcoate 
     exp = exp.gsub(prop, prop + "_ro()")
     
@@ -2000,7 +1998,7 @@ nameExps.each do |nameExp|
         
         if(locateFunction) 
             exp = tempExp
-            exp = "printf(\"invoked operator"+name+"()\\n\");\n    " + exp
+            exp = "if(checkDebug(debugFtor))printf(\"invoked operator"+name+"()\\n\");\n    " + exp
         end #locate 
         expStatic = exp
         
@@ -2070,9 +2068,9 @@ if(!kts)
     .    checkCudaErrors(cudaMalloc(&iopFunctions, Iop0sLast * sizeof(typename UnaryOpIndexF<T,0>::iopFunction)));
     .    checkCudaErrors(cudaMalloc(&uopFunctions, Uop0sLast * sizeof(typename UnaryOpF<T,0>::uopFunction)));
     .    checkCudaErrors(cudaMalloc(&bopFunctions, Bop0sLast * sizeof(typename BinaryOpF<T,0>::bopFunction)));
-    .    printf("void FunctionTableMgr<T>::setup0sFunctionTables() Iop0sLast %d iopFunctions @ %p\n", Iop0sLast, iopFunctions);
-    .    printf("void FunctionTableMgr<T>::setup0sFunctionTables() Uop0sLast %d uopFunctions @ %p\n", Uop0sLast, uopFunctions);
-    .    printf("void FunctionTableMgr<T>::setup0sFunctionTables() Bop0sLast %d bopFunctions @ %p\n", Bop0sLast, bopFunctions);
+    .    if(checkDebug(debugFtor))printf("void FunctionTableMgr<T>::setup0sFunctionTables() Iop0sLast %d iopFunctions @ %p\n", Iop0sLast, iopFunctions);
+    .    if(checkDebug(debugFtor))printf("void FunctionTableMgr<T>::setup0sFunctionTables() Uop0sLast %d uopFunctions @ %p\n", Uop0sLast, uopFunctions);
+    .    if(checkDebug(debugFtor))printf("void FunctionTableMgr<T>::setup0sFunctionTables() Bop0sLast %d bopFunctions @ %p\n", Bop0sLast, bopFunctions);
     .    findUop0sFunctions<T><<<1,1>>>(uopFunctions);
     .    checkCudaErrors(cudaDeviceSynchronize());
     .    findIop0sFunctions<T><<<1,1>>>(iopFunctions);
@@ -2081,7 +2079,7 @@ if(!kts)
     .    checkCudaErrors(cudaDeviceSynchronize());
     .
     .&{setup0sFunctionTables}
-    .    for(int i=0; i < Iop0sLast; i++) {
+    .    if(checkDebug(debugFtor))for(int i=0; i < Iop0sLast; i++) {
     .           printf("FunctionTableMgr<T>::setup0sFunctionTables h_iop0sFunctions %d at %p\n", i, FunctionTableMgr<T>::h_iop0sFunctions[device][i]);
     .    }   
     .
@@ -2095,13 +2093,13 @@ if(!kts)
     .    typename UnaryOpIndexF<T,0>::iopMethod * iopMethods;
     .    typename UnaryOpF<T,0>::uopMethod * uopMethods;
     .    typename BinaryOpF<T,0>::bopMethod * bopMethods;
-    .    printf("MethodTableMgr<%s>::setup0sMethodTables(%d)\n", typeid(T).name(), device);
+    .    if(checkDebug(debugFtor))printf("MethodTableMgr<%s>::setup0sMethodTables(%d)\n", typeid(T).name(), device);
     .    checkCudaErrors(cudaMalloc(&iopMethods, Iop0sLast * sizeof(typename UnaryOpIndexF<T,0>::iopMethod)));
     .    checkCudaErrors(cudaMalloc(&uopMethods, Uop0sLast * sizeof(typename UnaryOpF<T,0>::uopMethod)));
     .    checkCudaErrors(cudaMalloc(&bopMethods, Bop0sLast * sizeof(typename BinaryOpF<T,0>::bopMethod)));
-    .    printf("void MethodTableMgr<T>::setup0sMethodTables() Iop0sLast %d iopMethods @ %p\n", Iop0sLast, iopMethods);
-    .    printf("void MethodTableMgr<T>::setup0sMethodTables() Uop0sLast %d uopMethods @ %p\n", Uop0sLast, uopMethods);
-    .    printf("void MethodTableMgr<T>::setup0sMethodTables() Bop0sLast %d bopMethods @ %p\n", Bop0sLast, bopMethods);
+    .    if(checkDebug(debugFtor))printf("void MethodTableMgr<T>::setup0sMethodTables() Iop0sLast %d iopMethods @ %p\n", Iop0sLast, iopMethods);
+    .    if(checkDebug(debugFtor))printf("void MethodTableMgr<T>::setup0sMethodTables() Uop0sLast %d uopMethods @ %p\n", Uop0sLast, uopMethods);
+    .    if(checkDebug(debugFtor))printf("void MethodTableMgr<T>::setup0sMethodTables() Bop0sLast %d bopMethods @ %p\n", Bop0sLast, bopMethods);
     .    findUop0sMethods<T><<<1,1>>>(uopMethods);
     .    checkCudaErrors(cudaDeviceSynchronize());
     .    findIop0sMethods<T><<<1,1>>>(iopMethods);
@@ -2110,7 +2108,7 @@ if(!kts)
     .    checkCudaErrors(cudaDeviceSynchronize());
     .
     .&{setup0sMethodTables}
-    .    for(int i=0; i < Iop0sLast; i++) {
+    .    if(checkDebug(debugFtor))for(int i=0; i < Iop0sLast; i++) {
     .           printf("MethodTableMgr<T>::setup0sMethodTables h_iop0sMethods %d at %p\n", i, MethodTableMgr<T>::h_iop0sMethods[device][i]);
     .    }   
     .
@@ -2138,12 +2136,10 @@ if(!kts)
     .    checkCudaErrors(cudaDeviceSynchronize());
     .
     .&{setup1sFunctionTables}
-    .    for(int i=0; i < Iop1sLast; i++) {
+    .    if(checkDebug(debugFtor))for(int i=0; i < Iop1sLast; i++) {
     .           printf("FunctionTableMgr<T>::setup1sFunctionTables h_iop1sFunctions %d at %p\n", i, FunctionTableMgr<T>::h_iop1sFunctions[device][i]);
     .    }   
     .
-    .
-    .    // free! free!
     .    checkCudaErrors(cudaFree(iopFunctions));
     .    checkCudaErrors(cudaFree(uopFunctions));
     .    checkCudaErrors(cudaFree(bopFunctions));
@@ -2157,9 +2153,9 @@ if(!kts)
     .    checkCudaErrors(cudaMalloc(&uopMethods, Uop1sLast * sizeof(typename UnaryOpF<T,1>::uopMethod)));
     .    checkCudaErrors(cudaMalloc(&bopMethods, Bop1sLast * sizeof(typename BinaryOpF<T,1>::bopMethod)));
     
-    .    printf("void FunctionTableMgr<T>::setup1sFunctionTables() Iop1sLast %d iopFunctions @ %p\n", Iop1sLast, iopFunctions);
-    .    printf("void FunctionTableMgr<T>::setup1sFunctionTables() Uop1sLast %d uopFunctions @ %p\n", Uop1sLast, uopFunctions);
-    .    printf("void FunctionTableMgr<T>::setup1sFunctionTables() Bop1sLast %d bopFunctions @ %p\n", Bop1sLast, bopFunctions);
+    .    if(checkDebug(debugFtor))printf("void FunctionTableMgr<T>::setup1sFunctionTables() Iop1sLast %d iopFunctions @ %p\n", Iop1sLast, iopFunctions);
+    .    if(checkDebug(debugFtor))printf("void FunctionTableMgr<T>::setup1sFunctionTables() Uop1sLast %d uopFunctions @ %p\n", Uop1sLast, uopFunctions);
+    .    if(checkDebug(debugFtor))printf("void FunctionTableMgr<T>::setup1sFunctionTables() Bop1sLast %d bopFunctions @ %p\n", Bop1sLast, bopFunctions);
     
     .    findUop1sMethods<T><<<1,1>>>(uopMethods);
     .    findIop1sMethods<T><<<1,1>>>(iopMethods);
@@ -2167,7 +2163,7 @@ if(!kts)
     .    checkCudaErrors(cudaDeviceSynchronize());
     .
     .&{setup1sMethodTables}
-    .    for(int i=0; i < Iop1sLast; i++) {
+    .    if(checkDebug(debugFtor))for(int i=0; i < Iop1sLast; i++) {
     .           printf("MethodTableMgr<T>::setup1sMethodTables h_iop1sMethods %d at %p\n", i, MethodTableMgr<T>::h_iop1sMethods[device][i]);
     .    }   
     .
@@ -2188,19 +2184,18 @@ if(!kts)
     .    checkCudaErrors(cudaMalloc(&iopFunctions, Iop2sLast * sizeof(typename UnaryOpIndexF<T,2>::iopFunction)));
     .    checkCudaErrors(cudaMalloc(&uopFunctions, Uop2sLast * sizeof(typename UnaryOpF<T,2>::uopFunction)));
 
-    .    printf("void FunctionTableMgr<T>::setup2sFunctionTables() Iop2sLast %d iopFunctions @ %p\n", Iop2sLast, iopFunctions);
-    .    printf("void FunctionTableMgr<T>::setup2sFunctionTables() Uop2sLast %d uopFunctions @ %p\n", Uop2sLast, uopFunctions);
+    .    if(checkDebug(debugFtor))printf("void FunctionTableMgr<T>::setup2sFunctionTables() Iop2sLast %d iopFunctions @ %p\n", Iop2sLast, iopFunctions);
+    .    if(checkDebug(debugFtor))printf("void FunctionTableMgr<T>::setup2sFunctionTables() Uop2sLast %d uopFunctions @ %p\n", Uop2sLast, uopFunctions);
     
     .    findUop2sFunctions<T><<<1,1>>>(uopFunctions);
     .    findIop2sFunctions<T><<<1,1>>>(iopFunctions);
     .    checkCudaErrors(cudaDeviceSynchronize());
     .
     .&{setup2sFunctionTables}
-    .    for(int i=0; i < Iop2sLast; i++) {
+    .    if(checkDebug(debugFtor))for(int i=0; i < Iop2sLast; i++) {
     .           printf("FunctionTableMgr<T>::setup2sFunctionTables h_iop2sFunctions %d at %p\n", i, FunctionTableMgr<T>::h_iop2sFunctions[device][i]);
     .    }   
     .
-    .    // free! free!
     .    checkCudaErrors(cudaFree(iopFunctions));
     .    checkCudaErrors(cudaFree(uopFunctions));
     .}
@@ -2210,13 +2205,13 @@ if(!kts)
     .    typename UnaryOpF<T,2>::uopMethod * uopMethods;
     .    checkCudaErrors(cudaMalloc(&iopMethods, Iop2sLast * sizeof(typename UnaryOpIndexF<T,2>::iopMethod)));
     .    checkCudaErrors(cudaMalloc(&uopMethods, Uop2sLast * sizeof(typename UnaryOpF<T,2>::uopMethod)));
-    .    printf("void MethodTableMgr<T>::setup2sMethodTables() device @ %d\n", device);
+    .    if(checkDebug(debugFtor))printf("void MethodTableMgr<T>::setup2sMethodTables() device @ %d\n", device);
     .    findUop2sMethods<T><<<1,1>>>(uopMethods);
     .    findIop2sMethods<T><<<1,1>>>(iopMethods);
     .    checkCudaErrors(cudaDeviceSynchronize());
     .
     .&{setup2sMethodTables}
-    .    for(int i=0; i < Iop2sLast; i++) {
+    .    if(checkDebug(debugFtor))for(int i=0; i < Iop2sLast; i++) {
     .           printf("MethodTableMgr<T>::setup2sMethodTables h_iop2sMethods %d at %p\n", i, MethodTableMgr<T>::h_iop2sMethods[device][i]);
     .    }   
     .
@@ -2232,12 +2227,10 @@ if(!kts)
     .template <typename T> void FunctionTableMgr<T>::setup3sFunctionTables(int device) {
     .    typename UnaryOpIndexF<T,3>::iopFunction * iopFunctions;
     .    checkCudaErrors(cudaMalloc(&iopFunctions, Iop3sLast * sizeof(typename UnaryOpIndexF<T,3>::iopFunction)));
-
-    .    printf("void FunctionTableMgr<T>::setup3sFunctionTables() Iop3sLast %d iopFunctions @ %p\n", Iop3sLast, iopFunctions);
-
+    .    if(checkDebug(debugFtor))printf("void FunctionTableMgr<T>::setup3sFunctionTables() Iop3sLast %d iopFunctions @ %p\n", Iop3sLast, iopFunctions);
     .    findIop3sFunctions<T><<<1,1>>>(iopFunctions);
     .    checkCudaErrors(cudaDeviceSynchronize());
-    .    for(int i=0; i < Iop3sLast; i++) {
+    .    if(checkDebug(debugFtor))for(int i=0; i < Iop3sLast; i++) {
     .           printf("FunctionTableMgr<T>::setup3sFunctionTables h_iop3sFunctions %d at %p\n", i, FunctionTableMgr<T>::h_iop3sFunctions[device][i]);
     .    }   
     .&{setup3sFunctionTables}
@@ -2249,10 +2242,10 @@ if(!kts)
     .template <typename T> void MethodTableMgr<T>::setup3sMethodTables(int device) {
     .    typename UnaryOpIndexF<T,3>::iopMethod * iopMethods;
     .    checkCudaErrors(cudaMalloc(&iopMethods, Iop3sLast * sizeof(typename UnaryOpIndexF<T,3>::iopMethod)));
-    .    printf("void MethodTableMgr<T>::setup3sMethodTables() device @ %d\n", device);
+    .    if(checkDebug(debugFtor))printf("void MethodTableMgr<T>::setup3sMethodTables() device @ %d\n", device);
     .    findIop3sMethods<T><<<1,1>>>(iopMethods);
     .    checkCudaErrors(cudaDeviceSynchronize());
-    .    for(int i=0; i < Iop3sLast; i++) {
+    .    if(checkDebug(debugFtor))for(int i=0; i < Iop3sLast; i++) {
     .           printf("MethodTableMgr<T>::setup3sMethodTables h_iop3sMethods %d at %p\n", i, MethodTableMgr<T>::h_iop3sMethods[device][i]);
     .    }   
     .&{setup3sMethodTables}
@@ -2268,20 +2261,19 @@ if(!kts)
         .    bool& configd = SetupMbrFuncs[getTypeEnum<T>()][device];
         .    if(!configd) {
         .    
-        .        printf("building method tables for type %s and device %d\n",getTypeName<T>(), device);
-        .        // caroooseeahl
+        .        if(checkDebug(debugFtor))printf("building method tables for type %s and device %d\n",getTypeName<T>(), device);
         .        int currDev = ExecCaps::currDev();
         .        if(currDev != device) {
-        .            printf("not current device, switching from %d to %d\n", currDev, device);
+        .            if(checkDebug(debugFtor))printf("not current device, switching from %d to %d\n", currDev, device);
         .            checkCudaErrors(cudaSetDevice(device));
         .        }      
         .        FunctionTableMgr<T>::setup0sFunctionTables(device);
         .        FunctionTableMgr<T>::setup1sFunctionTables(device);
         .        FunctionTableMgr<T>::setup2sFunctionTables(device);
         .        FunctionTableMgr<T>::setup3sFunctionTables(device);
-        .        printf("setting SetupMbrFuncs[%d][%d] to true\n", getTypeEnum<T>(),device);
+        .        if(checkDebug(debugFtor))printf("setting SetupMbrFuncs[%d][%d] to true\n", getTypeEnum<T>(),device);
         .        if(currDev != device) {
-        .            printf("reverting current device to %d from %d\n", currDev, device);
+        .            if(checkDebug(debugFtor))printf("reverting current device to %d from %d\n", currDev, device);
         .            checkCudaErrors(cudaSetDevice(currDev));
         .        }      
         .    
@@ -2291,6 +2283,7 @@ if(!kts)
         .}
         .template void unaryOpIndexMbrs<float>::setupAllFunctionTables(int);
         .template void unaryOpIndexMbrs<double>::setupAllFunctionTables(int);
+        .template void unaryOpIndexMbrs<long>::setupAllFunctionTables(int);
         .template void unaryOpIndexMbrs<ulong>::setupAllFunctionTables(int);
         .template void unaryOpIndexMbrs<int>::setupAllFunctionTables(int);
         .template void unaryOpIndexMbrs<uint>::setupAllFunctionTables(int);
@@ -2300,20 +2293,20 @@ if(!kts)
         .    bool& configd = SetupMbrFuncs[getTypeEnum<T>()][device];
         .    if(!configd) {
         .    
-        .        printf("building method tables for device %d\n",device);
+        .        if(checkDebug(debugFtor))printf("building method tables for device %d\n",device);
         .        // caroooseeahl
         .        int currDev = ExecCaps::currDev();
         .        if(currDev != device) {
-        .            printf("not current device, switching from %d to %d\n", currDev, device);
+        .            if(checkDebug(debugFtor))printf("not current device, switching from %d to %d\n", currDev, device);
         .            checkCudaErrors(cudaSetDevice(device));
         .        }      
         .        MethodTableMgr<T>::setup0sMethodTables(device);
         .        MethodTableMgr<T>::setup1sMethodTables(device);
         .        MethodTableMgr<T>::setup2sMethodTables(device);
         .        MethodTableMgr<T>::setup3sMethodTables(device);
-        .        printf("setting SetupMbrFuncs[%d][%d] to true\n", getTypeEnum<T>(),device);
+        .        if(checkDebug(debugFtor))printf("setting SetupMbrFuncs[%d][%d] to true\n", getTypeEnum<T>(),device);
         .        if(currDev != device) {
-        .            printf("reverting current device to %d from %d\n", currDev, device);
+        .            if(checkDebug(debugFtor))printf("reverting current device to %d from %d\n", currDev, device);
         .            checkCudaErrors(cudaSetDevice(currDev));
         .        }      
         .    
@@ -2323,6 +2316,7 @@ if(!kts)
         .}
         .template void unaryOpIndexMbrs<float>::setupAllMethodTables(int);
         .template void unaryOpIndexMbrs<double>::setupAllMethodTables(int);
+        .template void unaryOpIndexMbrs<long>::setupAllMethodTables(int);
         .template void unaryOpIndexMbrs<ulong>::setupAllMethodTables(int);
         .template void unaryOpIndexMbrs<int>::setupAllMethodTables(int);
         .template void unaryOpIndexMbrs<uint>::setupAllMethodTables(int);

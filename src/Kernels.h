@@ -18,12 +18,17 @@
 __global__ void warmup();
 __global__ void slep(long slepMs);
 
-template<typename T>__global__ void vectorAdd(T *c, const T *a, const T *b, uint n) {
+template<typename T>__global__ void vectorAdd(T *c, const T *a, const T *b, int n) {
 #ifdef __CUDA_ARCH__
 	uint idx = blockDim.x * blockIdx.x + threadIdx.x;
 
     if (idx < n) {
         idx[c] = idx[a] + idx[b];
+/*
+        if(idx > n - 5) {
+        	printf("idx %u -> c[idx] %f &(c[idx]) %p a[idx] %f b[idx] %f \n", idx, (float)idx[c], c + idx, (float)a[idx], (float)b[idx]);
+        }
+*/
     }
 #endif
 }
@@ -42,16 +47,19 @@ template <typename T> __global__ void copyDmRowShuffleKernel(DMatrix<T> trg, con
 /*
 template<typename T> __global__ void fill_Kernel(
 		T* trg,
-		uint height,
-		uint width,
-		uint pitch,
+		int height,
+		int width,
+		int pitch,
 		bool colMajor);
 */
 
 // set
-template <typename T> __global__ void setKernel(T* elements,  uint m, uint n, uint p,  ulong l, T val);
-template <typename T> __host__ CUDART_DEVICE void set(T* elements, uint m, uint n, uint p, uint row, uint col, T val);
-template <typename T> __host__ CUDART_DEVICE void set(T* elements, uint m, uint n, uint p, ulong idx, T val);
+template <typename T> __global__ void setKernel(T* elements,  int m, int n, int p,  long l, T val);
+template <typename T> __host__ CUDART_DEVICE void setL(T* elements, int m, int n, int p, int row, int col, T val);
+template <typename T> __host__ CUDART_DEVICE void setL(T* elements, int m, int n, int p, long idx, T val);
+
+// fill
+template <typename T> __global__ void fillKernel(T* elements,  T val, long n);
 
 // unaryops
 #ifdef  CuMatrix_Enable_KTS
@@ -65,11 +73,11 @@ template<typename T, int StateDim> __host__ CUDART_DEVICE void unaryOpDmL(DMatri
 
 #ifdef  CuMatrix_Enable_KTS
 template<typename T, uint blockSize, bool nIsPow2, template <typename> class BinaryOp>
-__global__ void reduceOpKernel( T* g_odata, const T* g_idata, ulong n,
+__global__ void reduceOpKernel( T* g_odata, const T* g_idata, long n,
 		BinaryOp<T> op, T start, uint stride = 1, uint offset = 0);
 #else
 template<typename T, uint blockSize, bool nIsPow2, int StateDim>
-__global__ void reduceOpKernel( T* g_odata, const T* g_idata, ulong n,
+__global__ void reduceOpKernel( T* g_odata, const T* g_idata, long n,
 		BinaryOpF<T,StateDim> op, T start, uint stride = 1, uint offset = 0);
 #endif
 
@@ -79,19 +87,19 @@ __global__ void reduceOpKernel( T* g_odata, const T* g_idata, ulong n,
 template<typename T, uint blockSize, bool nIsPow2, typename UnaryOp,
 		typename BinaryOp>
 __global__ void gloloReduceOpKernel(DMatrix<T> out, const DMatrix<T> src,
-		ulong n, UnaryOp gop, BinaryOp lop, T start);
+		long n, UnaryOp gop, BinaryOp lop, T start);
 template<typename T, template <typename> class UnaryOp, template <typename> class BinaryOp>
 __host__ CUDART_DEVICE void gloloReduceOpLauncher(T* result,
-		DMatrix<T> buff, ulong n,	const DMatrix<T> src, UnaryOp<T> gop, BinaryOp<T> lop,
+		DMatrix<T> buff, long n,	const DMatrix<T> src, UnaryOp<T> gop, BinaryOp<T> lop,
 		T start, cudaStream_t stream = 0) ;
 #else
 template<typename T, uint blockSize, bool nIsPow2, int UopDim,
 		int BopDim>
 __global__ void gloloReduceOpKernel(DMatrix<T> out, const DMatrix<T> src,
-		ulong n, UnaryOpF<T,UopDim> gop, MonoidF<T,BopDim> lop, T start);
+		long n, UnaryOpF<T,UopDim> gop, MonoidF<T,BopDim> lop, T start);
 template<typename T, int UopDim, int BopDim>
 __host__ CUDART_DEVICE void gloloReduceOpLauncher(T* result,
-		DMatrix<T> buff, ulong n,	const DMatrix<T> src, UnaryOpF<T,UopDim> gop, MonoidF<T,BopDim> lop,
+		DMatrix<T> buff, long n,	const DMatrix<T> src, UnaryOpF<T,UopDim> gop, MonoidF<T,BopDim> lop,
 		T start, cudaStream_t stream = 0) ;
 #endif
 
@@ -109,20 +117,20 @@ void binaryOpKernel1dNeqP(T* trg, const T* src1, const T* src2, BinaryOpF<T,Stat
 
 #ifdef  CuMatrix_Enable_KTS
 template<typename T, template <typename> class BinaryOp> __global__
-void binaryOpKernel1dNeqPRow(T* trg, const T* src1, const T* src2, ulong n, BinaryOp<T> op,	ulong len);
+void binaryOpKernel1dNeqPRow(T* trg, const T* src1, const T* src2, long n, BinaryOp<T> op,	ulong len);
 #else
 template<typename T, int StateDim> __global__
-void binaryOpKernel1dNeqPRow(T* trg, const T* src1, const T* src2, ulong n, BinaryOpF<T,StateDim> op,	ulong len);
+void binaryOpKernel1dNeqPRow(T* trg, const T* src1, const T* src2, long n, BinaryOpF<T,StateDim> op,	ulong len);
 #endif
 
 #ifdef  CuMatrix_Enable_KTS
 template<typename T, template <typename> class BinaryOp> __global__
 void binaryOpKernel2d(T* trg, const T* src1, const T* src2, BinaryOp<T> op,
-		ulong len, uint p, uint * misses = 0);
+		ulong len, int p, uint * misses = 0);
 #else
 template<typename T, int StateDim> __global__
 void binaryOpKernel2d(T* trg, const T* src1, const T* src2, BinaryOpF<T,StateDim> op,
-		ulong len, uint p, uint * misses = 0);
+		ulong len, int p, uint * misses = 0);
 #endif
 
 #ifdef  CuMatrix_Enable_KTS
@@ -158,27 +166,27 @@ void binaryOpDmL( DMatrix<T>& trg, const DMatrix<T>& src1,	const DMatrix<T>& src
 #endif
 
 #ifdef  CuMatrix_Enable_KTS
-template<typename T, template <typename> class BinaryOp>  __host__ CUDART_DEVICE void  reduceLauncher(T* result, DMatrix<T> buff, ulong nP, const DMatrix<T> src,
-		BinaryOp<T> op, T start, uint stride= 1, uint offset = 0, cudaStream_t stream = 0);
+template<typename T, template <typename> class BinaryOp>  __host__ CUDART_DEVICE void  reduceLauncher(T* result, DMatrix<T> buff, long nP, const DMatrix<T> src,
+		BinaryOp<T> op, T start, int stride= 1, int offset = 0, cudaStream_t stream = 0);
 #else
-template<typename T, int StateDim>  __host__ CUDART_DEVICE void  reduceLauncher(T* result, DMatrix<T> buff, ulong nP, const DMatrix<T> src,
-		MonoidF<T,StateDim> op, T start, uint stride= 1, uint offset = 0, cudaStream_t stream = 0);
+template<typename T, int StateDim>  __host__ CUDART_DEVICE void  reduceLauncher(T* result, DMatrix<T> buff, long nP, const DMatrix<T> src,
+		MonoidF<T,StateDim> op, T start, int stride= 1, int offset = 0, cudaStream_t stream = 0);
 #endif
 
 #ifdef  CuMatrix_Enable_KTS
-template<typename T, template <typename> class BinaryOp>  __global__ void  reduceLauncherG(T* result, DMatrix<T> buff, ulong nP, const DMatrix<T> src,
-		BinaryOp<T> op, T start, uint stride= 1, cudaStream_t stream = 0);
+template<typename T, template <typename> class BinaryOp>  __global__ void  reduceLauncherG(T* result, DMatrix<T> buff, long nP, const DMatrix<T> src,
+		BinaryOp<T> op, T start, int stride= 1, cudaStream_t stream = 0);
 #else
-template<typename T, int StateDim>  __global__ void  reduceLauncherG(T* result, DMatrix<T> buff, ulong nP, const DMatrix<T> src,
-		BinaryOpF<T,StateDim> op, T start, uint stride= 1, cudaStream_t stream = 0);
+template<typename T, int StateDim>  __global__ void  reduceLauncherG(T* result, DMatrix<T> buff, long nP, const DMatrix<T> src,
+		BinaryOpF<T,StateDim> op, T start, int stride= 1, cudaStream_t stream = 0);
 #endif
 
 #ifdef CuMatrix_Enable_Cdp
 	#ifdef  CuMatrix_Enable_KTS
-	template<typename T, template <typename> class BinaryOp>  __global__ void  reduceLauncherCount(T* result, DMatrix<T> buff, ulong nP, const DMatrix<T> src,
+	template<typename T, template <typename> class BinaryOp>  __global__ void  reduceLauncherCount(T* result, DMatrix<T> buff, long nP, const DMatrix<T> src,
 			BinaryOp<T> op, T start, int count);
 	#else
-	template<typename T, int StateDim>  __global__ void  reduceLauncherCount(T* result, DMatrix<T> buff, ulong nP, const DMatrix<T> src,
+	template<typename T, int StateDim>  __global__ void  reduceLauncherCount(T* result, DMatrix<T> buff, long nP, const DMatrix<T> src,
 			MonoidF<T,StateDim> op, T start, int count);
 	#endif
 #endif
@@ -187,39 +195,39 @@ template<typename T, int StateDim>  __global__ void  reduceLauncherG(T* result, 
 #ifdef  CuMatrix_Enable_KTS
 template<typename T, uint blockSize, bool nIsPow2, template <typename> class BinaryOp1, template <typename> class  BinaryOp2>
 __global__ void combineReduceOpKernel(const T* g_idata1, const T* g_idata2,
-		T* g_odata, ulong n, BinaryOp1<T> mop, BinaryOp2<T> bop, T start);
+		T* g_odata, long n, BinaryOp1<T> mop, BinaryOp2<T> bop, T start);
 #else
 template<typename T, uint blockSize, bool nIsPow2, int MopDim, int BopDim>
 __global__ void combineReduceOpKernel(const T* g_idata1, const T* g_idata2,
-		T* g_odata, ulong n, BinaryOpF<T,MopDim> mop, BinaryOpF<T,BopDim> bop, T start);
+		T* g_odata, long n, BinaryOpF<T,MopDim> mop, BinaryOpF<T,BopDim> bop, T start);
 #endif
 
 #ifdef  CuMatrix_Enable_KTS
 template<typename T, template <typename> class BinaryOp1, template <typename> class BinaryOp2> __host__ CUDART_DEVICE T
-	combineReduceOpLauncher(T* d_odata, const T* d_idata1, const T* d_idata2, ulong n, BinaryOp1<T> mop, BinaryOp2<T> bop, T start, cudaStream_t stream = 0);
+	combineReduceOpLauncher(T* d_odata, const T* d_idata1, const T* d_idata2, long n, BinaryOp1<T> mop, BinaryOp2<T> bop, T start, cudaStream_t stream = 0);
 #else
 template<typename T, int MopDim, int BopDim> __host__ CUDART_DEVICE T
-	combineReduceOpLauncher(T* d_odata, const T* d_idata1, const T* d_idata2, ulong n, BinaryOpF<T,MopDim> mop, BinaryOpF<T,BopDim> bop, T start, cudaStream_t stream = 0);
+	combineReduceOpLauncher(T* d_odata, const T* d_idata1, const T* d_idata2, long n, BinaryOpF<T,MopDim> mop, BinaryOpF<T,BopDim> bop, T start, cudaStream_t stream = 0);
 #endif
 
 #ifdef  CuMatrix_Enable_KTS
 template<typename T, uint blockSize, bool nIsPow2, template <typename> class MatBinaryOp,
 template <typename> class BinaryOp>
 __global__ void combineReduceOpKernel2(const T* g_idata1, const T* g_idata2,
-		T* g_odata, ulong n, MatBinaryOp<T> mop, BinaryOp<T> op, T start);
+		T* g_odata, long n, MatBinaryOp<T> mop, BinaryOp<T> op, T start);
 #else
 template<typename T, uint blockSize, bool nIsPow2, int MopDim, int BopDim>
 __global__ void combineReduceOpKernel2(const T* g_idata1, const T* g_idata2,
-		T* g_odata, ulong n, BinaryOpF<T,MopDim> mop, BinaryOpF<T,BopDim> op, T start);
+		T* g_odata, long n, BinaryOpF<T,MopDim> mop, BinaryOpF<T,BopDim> op, T start);
 #endif
 
 #ifdef  CuMatrix_Enable_KTS
 template<typename T, uint blockSize, bool nIsPow2, template <typename> class BinaryOp>
-__global__ void reduceOpKernel2( T* g_odata, const T* g_idata, ulong n,
+__global__ void reduceOpKernel2( T* g_odata, const T* g_idata, long n,
 		BinaryOp<T> op, T start);
 #else
 template<typename T, uint blockSize, bool nIsPow2, int StateDim>
-__global__ void reduceOpKernel2( T* g_odata, const T* g_idata, ulong n,
+__global__ void reduceOpKernel2( T* g_odata, const T* g_idata, long n,
 		BinaryOpF<T,StateDim> op, T start);
 #endif
 
@@ -250,6 +258,7 @@ template<typename T> __global__ void matrixProductBandwidthKernel(DMatrix<T> C,c
 template<typename T> __global__ void matrixProductKernel(DMatrix<T> C,const DMatrix<T> A, const DMatrix<T> B, int steps);
 template<typename T> __global__ void matrixProductKernel2(DMatrix<T> C,const DMatrix<T> A, const DMatrix<T> B, int steps);
 template<typename T> __global__ void matrixProductKernel3(DMatrix<T> C,const DMatrix<T> A, const DMatrix<T> B, int steps);
+template<typename T> __global__ void matrixProductKernel4(DMatrix<T> C,const DMatrix<T> A, const DMatrix<T> B, int steps);
 
 template<typename T> __global__ void matrixProductKernelTxdB(DMatrix<T> C,const DMatrix<T> A, const DMatrix<T> B, int steps);
 template<typename T> __global__ void matrixProductKernelTxdB2(DMatrix<T> C,
@@ -275,36 +284,38 @@ template<typename T> void kayrnlL();
 
 template<typename T, int StateDim> __global__ void fillOpKernel( UnaryOpIndexF<T,StateDim> op,
 		T* trg,
-		uint height,
-		uint width,
-		uint pitch,
+		int height,
+		int width,
+		int pitch,
+		uint rowStart,
+		uint colStart,
 		bool colMajor);
 
 /*
 template<typename T, template <typename> class FillOp> __global__
 void fillOpKernel(FillOp<T> op,
 		T* trg,
-		uint height,
-		uint width,
-		uint pitch,
+		int height,
+		int width,
+		int pitch,
 		bool colMajor);
 */
 
 template<typename T, int StateDim> __global__
 void fillOpNsbKernel( UnaryOpIndexF<T,StateDim> op,
 		T* trg,
-		uint height,
-		uint width,
-		uint pitch,
+		int height,
+		int width,
+		int pitch,
 		bool colMajor);
 
 /*
 template<typename T, template <typename> class FillOp> __global__
 void fillOpNsbKernel(FillOp<T> op,
 		T* trg,
-		uint height,
-		uint width,
-		uint pitch,
+		int height,
+		int width,
+		int pitch,
 		bool colMajor);
 */
 

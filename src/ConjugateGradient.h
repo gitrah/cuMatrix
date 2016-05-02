@@ -4,9 +4,8 @@
  *  Created on: Oct 13, 2012
  *      Author: reid
  */
+#pragma once
 
-#ifndef CONJUGATEGRADIENT_H_
-#define CONJUGATEGRADIENT_H_
 #include "CuMatrix.h"
 
 template<typename T> class ConjugateGradient {
@@ -19,6 +18,8 @@ public:
 	static T ratio;
 
 	static T MinPositiveValue;
+
+	// 'ISO C++ forbids in-class initialization of non-const static member,' so...
 	static void init() {
 		rho = 0.01;
 		sig = .5;
@@ -27,8 +28,7 @@ public:
 		max = 20;
 		ratio = 100;
 	}
-	template<typename CostFunction> static std::pair<CuMatrix<T>,
-			std::pair<CuMatrix<T>, int> >
+	template<typename CostFunction> static std::pair<CuMatrix<T>, std::pair<CuMatrix<T>, int> >
 	fmincg(CostFunction& f, CuMatrix<T>& x, int length = 50, int red = 1);
 	static inline bool nanQ(T value);
 
@@ -44,5 +44,3 @@ template <typename T> T ConjugateGradient<T>::int0;
 template <typename T> T ConjugateGradient<T>::ext;
 template <typename T> T ConjugateGradient<T>::max;
 template <typename T> T ConjugateGradient<T>::ratio;
-
-#endif /* CONJUGATEGRADIENT_H_ */

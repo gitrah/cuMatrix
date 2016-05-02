@@ -11,7 +11,7 @@
 int blockH = TX_BLOCK_SIZE/4;
 
 // tiles must be square
-template <typename T> __global__ void transposeNaive(const T* sElements, T* tElements, uint width, uint height) {
+template <typename T> __global__ void transposeNaive(const T* sElements, T* tElements, int width, int height) {
     int xIndex = blockIdx.x * blockDim.x + threadIdx.x;
     int yIndex = blockIdx.y * blockDim.x + threadIdx.y; // not blockDim.y, which we assume a factor of blockDim.x
 
@@ -23,10 +23,11 @@ template <typename T> __global__ void transposeNaive(const T* sElements, T* tEle
 		if(xIndex < width && yIndex + i < height)
 			tElements[index_out+i] = sElements[index_in+i*width];
 }
-template void __global__ transposeNaive<float>(const float*,float*,uint,uint);
-template void __global__ transposeNaive<double>(const double*,double*,uint,uint);
+template void __global__ transposeNaive<float>(const float*,float*,int,int);
+template void __global__ transposeNaive<double>(const double*,double*,int,int);
+template void __global__ transposeNaive<ulong>(const ulong*,ulong*,int,int);
 
-template <typename T> __global__ void transposeSubTile(const T* sElements, T* tElements, uint width, uint height)
+template <typename T> __global__ void transposeSubTile(const T* sElements, T* tElements, int width, int height)
 {
 	T* tile = SharedMemory<T>();
     uint xIndex = threadIdx.x;
@@ -43,7 +44,7 @@ template <typename T> __global__ void transposeSubTile(const T* sElements, T* tE
 	}
 }
 
-template <typename T> __global__ void transposeCoalesced(const T* sElements, T* tElements, uint width, uint height)
+template <typename T> __global__ void transposeCoalesced(const T* sElements, T* tElements, int width, int height)
 {
 	T* tile = SharedMemory<T>();
 
@@ -66,11 +67,12 @@ template <typename T> __global__ void transposeCoalesced(const T* sElements, T* 
     	if(xIndex < height && yIndex + i < width)
     		tElements[index_out + i * height] = tile[tileIdxOut + i];
 }
-template void __global__ transposeCoalesced<float>(const float*,float*,uint,uint);
-template void __global__ transposeCoalesced<double>(const double*,double*,uint,uint);
+template void __global__ transposeCoalesced<float>(const float*,float*,int,int);
+template void __global__ transposeCoalesced<double>(const double*,double*,int,int);
+template void __global__ transposeCoalesced<ulong>(const ulong*,ulong*,int,int);
 
 template <typename T>
-__global__ void transposeNoBankConflicts(const T* sElements, T* tElements, uint width, uint height)
+__global__ void transposeNoBankConflicts(const T* sElements, T* tElements, int width, int height)
 {
 	T* tile = SharedMemory<T>();
 
@@ -93,7 +95,7 @@ __global__ void transposeNoBankConflicts(const T* sElements, T* tElements, uint 
 
 }
 
-template <typename T> __global__ void transposeDiagonalKernel(const T* sElements, T* tElements, uint width, uint height)
+template <typename T> __global__ void transposeDiagonalKernel(const T* sElements, T* tElements, int width, int height)
 {
 	T* tile = SharedMemory<T>();
 
@@ -127,7 +129,7 @@ template <typename T> __global__ void transposeDiagonalKernel(const T* sElements
 
 }
 
-template <typename T> __host__ CUDART_DEVICE void CuMatrix<T>::transposeKernelPtrL(DMatrix<T>& t,void (*kernel)(const T*, T*, uint, uint), const DMatrix<T>& s )  {
+template <typename T> __host__ CUDART_DEVICE void CuMatrix<T>::transposeKernelPtrL(DMatrix<T>& t,void (*kernel)(const T*, T*, int, int), const DMatrix<T>& s )  {
 	ulong len = s.m * s.n;
 	assert( len == t.m * t.n );
 	int blockW = TX_BLOCK_SIZE;
@@ -135,9 +137,9 @@ template <typename T> __host__ CUDART_DEVICE void CuMatrix<T>::transposeKernelPt
 	defaultBlock(block);
     dim3 grid(DIV_UP(s.n, blockW), DIV_UP(s.m, blockW));
 
-    void (*txNmbcPtr)(const T*,T*,uint,uint);
+    void (*txNmbcPtr)(const T*,T*,int,int);
     txNmbcPtr=&transposeNoBankConflicts;
-    void (*txDiagPtr)(const T*,T*,uint,uint);
+    void (*txDiagPtr)(const T*,T*,int,int);
     txDiagPtr=&transposeDiagonalKernel;
 	int tileWidth = blockW;
 	if(kernel == txNmbcPtr || kernel == txDiagPtr) {
@@ -148,102 +150,95 @@ template <typename T> __host__ CUDART_DEVICE void CuMatrix<T>::transposeKernelPt
 	//outln("tx with grid " << b_util::pd3(grid).c_str() << " of block " << b_util::pd3(block).c_str() << " smem " << smem);
 }
 
-template <typename T> __host__ CUDART_DEVICE void CuMatrix<T>::transposeL( DMatrix<T>& t, const DMatrix<T>& s)  {
-    void (*txNmbcPtr)(const T*,T*,uint,uint);
+template <typename T> __host__ CUDART_DEVICE void CuMatrix<T>::transposeL( DMatrix<T>& t, const DMatrix<T>& s)  {\
+
+    void (*txNmbcPtr)(const T*,T*,int,int);
     txNmbcPtr=&transposeDiagonalKernel;
+
+    int tdev =  util<T>::getDevice(t.elements);
+    int sdev =  util<T>::getDevice(t.elements);
+    if(checkDebug(debugTxp))flprintf("trg elems %p (dev %d) src %p (dev %d)\n", t.elements,tdev, s.elements, sdev);
+    assert( tdev == sdev );
+
     //txNmbcPtr=&transposeNoBankConflicts;
-	return transposeKernelPtrL(t, txNmbcPtr,s);
+	transposeKernelPtrL(t, txNmbcPtr,s);
+	cherr(cudaDeviceSynchronize());
 }
 
-template<typename T> CuMatrix<T> CuMatrix<T>::transposeKernelPtr(void (*kernel)(const T*  sElements,  T* tElements, uint width, uint height)) {
-/*
-	if(scalarQ()) {
-		return *this;
-	}
-	if(!CuMatrix<T>::txp) {
-		CuMatrix<T>::txp = new CuMatrix<T>(n, m);
-		CuMatrix<T>::ownsTxp = true;
-		DMatrix<T> retD;
-		CuMatrix<T>::txp->asDmatrix(retD, false);
-		transposeL(asDmatrix(), retD);
-		CuMatrix<T>::txp->lastMod = device;
-		CuMatrix<T>::txp->txp = this;
-		CuMatrix<T>::txp->ownsTxp = false;
-		if(checkDebug(debugTxp))outln("created txp for " << this->toShortString() << " ( " << CuMatrix<T>::txp->toShortString() << ")");
-	} else {
-		if(checkDebug(debugTxp))outln("reusing txp for " << this->toShortString() << " ( " << CuMatrix<T>::txp->toShortString() << ")");
-	}
-	return *CuMatrix<T>::txp;
-*/
+template<typename T> CuMatrix<T> CuMatrix<T>::transposeKernelPtr(void (*kernel)(const T*  sElements,  T* tElements, int width, int height)) {
+
 	if(vectorQ()) {
-		outln("degenerate tx");
+		if(checkDebug(debugTxp))prlocf("degenerate tx");
 		CuMatrix<T> ret = copy(true);
 		ret.m = n;
 		ret.n = m;
 		return ret;
 	}
-	CuMatrix<T> ret(n,m,false,true);
-	outln("tx from " << this->toShortString() << " to " << ret.toShortString() );
-	DMatrix<T> retD;
-	ret.asDmatrix(retD, false);
-	transposeKernelPtrL(retD, kernel, asDmatrix());
+	assert(tiler.tileSize == tiler.m_size);
+	CuMatrix<T> ret(n,m,true,true);
+#ifndef __CUDA_ARCH__
+	if(checkDebug(debugTxp))outln("tx on dev " << ExecCaps::currDev() << " from " << this->toShortString() << " to " << ret.toShortString() );
+#endif
+	DMatrix<T> retD, d_A;
+	tile0(d_A, lastMod == mod_host);
+	ret.tile0(retD, false);
+	transposeKernelPtrL(retD, kernel, d_A);
 	ret.invalidateHost();
 	return ret;
 }
 
 
-template<typename T>  CuMatrix<T> CuMatrix<T>::transpose() const {
-/*
+template<typename T>  __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::transpose() const {
 	if(scalarQ()) {
 		return *this;
 	}
-	if(!CuMatrix<T>::txp) {
-		CuMatrix<T>::txp = new CuMatrix<T>(n, m);
-		CuMatrix<T>::ownsTxp = true;
-		DMatrix<T> retD;
-		CuMatrix<T>::txp->asDmatrix(retD, false);
-		transposeL(asDmatrix(), retD);
-		CuMatrix<T>::txp->lastMod = device;
-		CuMatrix<T>::txp->txp = this;
-		CuMatrix<T>::txp->ownsTxp = false;
-		if(checkDebug(debugTxp))outln("created txp for " << toShortString() << " ( " << CuMatrix<T>::txp->toShortString() << ")");
-	} else {
-		if(checkDebug(debugTxp))outln("reusing txp for " << toShortString() << " ( " << CuMatrix<T>::txp->toShortString() << ")");
-	}
-	return *CuMatrix<T>::txp;
-*/
 	if(vectorQ() && n == p) {
-		if(checkDebug(debugExec)) outln("transpose() on nonaliased vector");
-		CuMatrix<T> ret;
+		if(checkDebug(debugTxp)) prlocf("transpose() on nonaliased vector");
+		CuMatrix<T> ret = copy(true);
 		ret.m = n;
 		ret.n = m;
 		ret.p = m;
+		ret.tiler.m_m = n;
+		ret.tiler.m_n = m;
+		ret.tiler.m_p = m;
+/*
 		ret.ownsBuffers = ownsBuffers;
 		ret.elements = elements;
-		ret.d_elements = d_elements;
+		ret.tiler = tiler;
+		ret.tiler.m_m = n;
+		ret.tiler.m_n = m;
 		ret.lastMod = lastMod;
 		ret.size = size;
-		if(ret.d_elements) ret.getMgr().addDevice(ret);
+		if(ret.tiler.hasDmemQ()) ret.getMgr().addTiles(&(ret.tiler));
 		if(ret.elements) ret.getMgr().addHost(ret);
-		if(checkDebug(debugExec))outln("spoofing transpose for column/row matrix " << toShortString());
+		if(checkDebug(debugTxp)) outln("spoofing transpose for column/row matrix " << toShortString());
+*/
 		return ret;
 	}
-	CuMatrix<T> ret(n,m, false,true);
-	//outln("tx from " << toShortString() << " to " << ret.toShortString() );
-	DMatrix<T> retD;
-	ret.asDmatrix(retD, false);
-	transposeL(retD, asDmatrix());
+	assert(tiler.tileSize == tiler.m_size);
+	//ExecCaps_setDevice( tiler.nextGpu());
+	CuMatrix<T> ret(n,m, true,true);
+	//if(checkDebug(debugTxp)) outln("tx from " << toShortString() << " to " << ret.toShortString() );
+	DMatrix<T> retD, d_A;
+	tile0(d_A, lastMod == mod_host);
+	ret.tile0(retD, false);
+	transposeL(retD, d_A);
 	ret.invalidateHost();
+
 	return ret;
 }
 
-template<typename T> void CuMatrix<T>::transposeKernelPtr(DMatrix<T>& retD, void (*kernel)(const T*,T*,uint,uint)) {
-	transposeKernelPtrL(retD, kernel, CuMatrix<T>::asDmatrix());
+template<typename T> void CuMatrix<T>::transposeKernelPtr(DMatrix<T>& retD, void (*kernel)(const T*,T*,int,int)) {
+	DMatrix<T>  d_A;
+	tile0(d_A, lastMod == mod_host);
+	transposeKernelPtrL(retD, kernel, d_A);
 	invalidateHost();
 }
 
 template<typename T> void CuMatrix<T>::transpose(DMatrix<T>& retD) {
-	transposeL(retD, asDmatrix());
+	DMatrix<T>  d_A;
+	tile0(d_A, lastMod == mod_host);
+	transposeL(retD, d_A);
 	invalidateHost();
 }
 

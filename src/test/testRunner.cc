@@ -14,40 +14,12 @@
 #include "../ogl/AccelEvents.h"
 #include <pthread.h>
 #include "../CuFunctor.h"
-const auto allChoice = "all";
-const auto anomChoice = "anom";
-const auto memChoice = "mem";
-const auto copyChoice = "copy";
-const auto copyDhChoice = "copyDh";
-const auto execChoice = "exec";
-const auto fillChoice = "fill";
-const auto lifeChoice = "life";
-const auto matprodChoice = "matprod";
-const auto matprodBlockResizeChoice = "mpbr";
-const auto debugMatStatsChoice = "stats";
-
-const auto consChoice = "cons";
-const auto stackChoice = "stack";
-const auto verboseChoice = "verb";
-const auto syncChoice = "sync";
-const auto nnChoice = "nn";
-const auto cgChoice = "cg";
-const auto txpChoice = "txp";
-const auto syncHappyChoice = "shappy";
-const auto smallBlkChoice = "sblk";
-const auto medBlkChoice = "mblk";
-const auto lrgBlkChoice = "lblk";
-const auto debugMultGPUChoice = "gpu";
-const auto debugMillisForMicrosChoice = "m4m";
-const auto debugReduxChoice = "rdx";
-const auto debugNoReduxChoice = "ndx";
-const auto debugUnaryOpChoice = "uny";
-const auto debugPrecisionChoice = "prec";
-const auto debugMeansChoice = "mean";
-const auto debugBinOpChoice = "bnop";
-
 extern template class CuMatrix<float>;
 extern template class CuMatrix<double>;
+extern template class CuMatrix<long>;
+extern template class CuMatrix<ulong>;
+extern template class CuMatrix<int>;
+extern template class CuMatrix<uint>;
 
 int funquenstein(int argc, char *argv<::>)
 <%
@@ -71,6 +43,8 @@ struct B
 template<typename T> T tests<T>::timeTest( const Test<T>& test, int argc, const char** argv, int* theResult )
 {
 	int dev = ExecCaps::currDev();
+	outln("freest device " << b_util::getDeviceThatIs(gcFreeest));
+	outln("coolest device " << b_util::getDeviceThatIs(gcCoolest));
 	CuTimer timer;
 	sigmoidUnaryOp<T> sig;
 	outln("tests<T>::timeTest on device " << dev << " starting argc " << argc <<" argv " << argv);
@@ -108,8 +82,17 @@ template<typename T> T tests<T>::timeTest( const Test<T>& test, int argc, const 
 }
 template<typename T>void constFillKrnleL( );
 
+
+std::thread::id main_thread_id = std::this_thread::get_id();
+
+
 template <typename T> int tests<T>::runTest(int argc, const char** argv) {
 
+	static bool printedSizes = false;
+	if(!printedSizes) {
+		printObjSizes<T>();
+		printedSizes  = true;
+	}
 	outln("tests<T>::runTest starting argc " << argc <<" argv " << argv);
 	if(argv) for(int i =0; i < argc; i++) {
 		outln("tests<T>::runTest arg " <<i << ": " << argv[i]);
@@ -119,6 +102,7 @@ template <typename T> int tests<T>::runTest(int argc, const char** argv) {
 	int idev= 0;
 	char *device = null;
 	char *debugChoice = null;
+	char *testChoice = null;
 	char *kernelChoice = null;
 
     int status = -1;
@@ -132,32 +116,35 @@ template <typename T> int tests<T>::runTest(int argc, const char** argv) {
 
 	//testCheckValid();
 	getCmdLineArgumentString(argc, (const char **) argv, "dbg", &debugChoice);
+	getCmdLineArgumentString(argc, (const char **) argv, "test", &testChoice);
 	getCmdLineArgumentString(argc, (const char **) argv, "dev", &device);
 	getCmdLineArgumentString(argc, (const char **) argv, "krn", &kernelChoice);
-	outln("tests<T>::brunTest starting argc " << argc <<" argv " << argv);
+
+	flprintf("starting argc %d\n", argc);
+
 	if(argv) for(int i =0; i < argc; i++) {
-		outln("tests<T>::brunTest arg " <<i << ": " << argv[i]);
+		flprintf("arg %d: %s\n",i,argv[i]);
 	}
 
 	uint localDbgFlags = 0;
 	if (debugChoice) {
 		string debug(debugChoice);
-		cout << "debug choices: ";
+		cout << "\ndebug choices: ";
 		if (debug.find(allChoice) != string::npos) {
 			cout << " ALL";
 			localDbgFlags |= debugMem;
-			localDbgFlags |= debugLife;
+			localDbgFlags |= debugFtor;
 			localDbgFlags |= debugCopy;
 			localDbgFlags |= debugCopyDh;
 			localDbgFlags |= debugMatProd;
 			localDbgFlags |= debugCons;
-			localDbgFlags |= debugStack;
+			localDbgFlags |= debugDestr;
+			localDbgFlags |= debugRefcount;
 			localDbgFlags |= debugVerbose;
 			localDbgFlags |= debugNn;
 			localDbgFlags |= debugCg;
 			localDbgFlags |= debugTxp;
 			localDbgFlags |= debugExec;
-			localDbgFlags |= debugSync;
 			localDbgFlags |= debugMultGPU;
 			localDbgFlags |= debugFill;
 			localDbgFlags |= debugAnomDet;
@@ -171,17 +158,17 @@ template <typename T> int tests<T>::runTest(int argc, const char** argv) {
 				cout << " " << memChoice;
 				localDbgFlags |= debugMem;
 			}
-			if (debug.find(lifeChoice) != string::npos) {
-				cout << " " << lifeChoice;
-				localDbgFlags |= debugLife;
+			if (debug.find(debugCheckValidChoice) != string::npos) {
+				cout << " " << debugCheckValidChoice;
+				localDbgFlags |= debugCheckValid;
+			}
+			if (debug.find(ftorChoice) != string::npos) {
+				cout << " " << ftorChoice;
+				localDbgFlags |= debugFtor;
 			}
 			if (debug.find(copyChoice) != string::npos) {
 				cout << " " << copyChoice;
 				localDbgFlags |= debugCopy;
-			}
-			if (debug.find(copyDhChoice) != string::npos) {
-				cout << " " << copyDhChoice;
-				localDbgFlags |= debugCopyDh;
 			}
 			if (debug.find(execChoice) != string::npos) {
 				cout << " " << execChoice;
@@ -219,21 +206,23 @@ template <typename T> int tests<T>::runTest(int argc, const char** argv) {
 				cout << " " << consChoice;
 				localDbgFlags |= debugCons;
 			}
-			if (debug.find(stackChoice) != string::npos) {
-				cout << " " << stackChoice;
-				localDbgFlags |= debugStack;
+/*
+			if (debug.find(destrChoice) != string::npos) {
+				cout << " " << destrChoice;
+				localDbgFlags |= debugDestr;
+			}
+*/
+			if (debug.find(refcountChoice) != string::npos) {
+				cout << " " << refcountChoice;
+				localDbgFlags |= debugRefcount;
 			}
 			if (debug.find(verboseChoice) != string::npos) {
 				cout << " " << verboseChoice;
 				localDbgFlags |= debugVerbose;
 			}
-			if (debug.find(syncChoice) != string::npos) {
-				cout << " " << syncChoice;
-				localDbgFlags |= debugSync;
-			}
-			if (debug.find(syncHappyChoice) != string::npos) {
-				cout << " s(ync)happy";
-				localDbgFlags |= syncHappy;
+			if (debug.find(pmChoice) != string::npos) {
+				cout << " packed matrix ";
+				localDbgFlags |= debugPm;
 			}
 			if (debug.find(txpChoice) != string::npos) {
 				cout << " " << txpChoice;
@@ -243,9 +232,9 @@ template <typename T> int tests<T>::runTest(int argc, const char** argv) {
 				cout << " " << debugReduxChoice;
 				localDbgFlags |= debugRedux;
 			}
-			if (debug.find(debugNoReduxChoice) != string::npos) {
-				cout << " " << debugNoReduxChoice;
-				localDbgFlags |= debugNoRedux;
+			if (debug.find(debugTilerChoice) != string::npos) {
+				cout << " " << debugTilerChoice;
+				localDbgFlags |= debugTiler;
 			}
 			if (debug.find(debugUnaryOpChoice) != string::npos) {
 				cout << " " << debugUnaryOpChoice;
@@ -259,7 +248,6 @@ template <typename T> int tests<T>::runTest(int argc, const char** argv) {
 				cout << " " << debugMeansChoice;
 				localDbgFlags |= debugMeans;
 			}
-
 			if (debug.find(smallBlkChoice) != string::npos) {
 				cout << " " << smallBlkChoice;
 				CuMatrix<T>::DefaultMatProdBlock = dim3(8,8);
@@ -281,15 +269,22 @@ template <typename T> int tests<T>::runTest(int argc, const char** argv) {
 				AccelEvents<T>::DelayMillisForMicros = true;
 			}
 		}
-		cout << endl;
+		cout << "\n\n";
 	}
 
-	ExecCaps::findDevCaps();
+    outln("calling b_util::usedDmem()...");
+    b_util::usedDmem();
+
+    outln("calling 	ExecCaps::initDevCaps()");
+	ExecCaps::initDevCaps();
+
 
 	outln("localDbgFlags " << localDbgFlags);
-	setAllGpuDebugFlags(localDbgFlags,false,false);
+	//setAllGpuDebugFlags(localDbgFlags,false,false);
+	b_util::allDevices([localDbgFlags]() { setCurrGpuDebugFlags(localDbgFlags,false,false,0 );});
 	outln("set debug flags ");
 
+	if(checkDebug(debugCg))  outln("dbg cg");
 	if(device) {
 		idev = atoi(device);
 		int deviceCount;
@@ -311,31 +306,54 @@ template <typename T> int tests<T>::runTest(int argc, const char** argv) {
 		}
 	}
 
-	outln("setting device...");
+	int specTest = -1;
+	if(testChoice ) {
+		outln("testChoice " << testChoice);
+		specTest = atoi(testChoice);
+		outln("want specific test " << specTest);
+	}
+
+	outln("setting device to " << idev);
 	checkCudaErrors(cudaSetDevice(idev));
 	//cudaDeviceReset(); // cleans up the dev
-
 	outln("set device");
 	cudaError_t lastErr = cudaGetLastError();
 	checkCudaErrors(lastErr);
 
     outln("set device " << idev << "(" << ExecCaps::currCaps(idev)->deviceProp.name << "), now calling CuMatrix<T>::init(256, 64)");
+
+    outln("calling b_util::usedDmem()...");
     b_util::usedDmem();
 	outln("initing device...");
-	CuMatrix<float>::init(256, 64);
-	CuMatrix<double>::init(256, 64);
+	b_util::warmupL();
+
+
+#ifdef CuMatrix_UseCublas
+
+	g_useCublas = checkCmdLineFlag(argc,argv, "blas");
+	outln("g_useCublas  "<< tOrF(g_useCublas ));
+	if(g_useCublas) {
+		chblerr( cublasCreate(&g_handle));// todo determine time/space effects of making this optional
+		//flprintf("cublasCreate success");
+	}
+#endif
+
+	CuMatrix<float>::initMemMgrForType(256, 64);
+	CuMatrix<double>::initMemMgrForType(256, 64);
 
 	outln("clearing member function setup flags...");
 	clearSetupMbrFlags();
 	outln("...cleared member function setup flags");
-
+	
 	//unaryOpIndexMbrs<float>::setupAllMethodTables();
 //	unaryOpIndexMbrs<double>::setupAllMethodTables();
 
 	//constFillKrnleL<float>();
 	//unaryOpIndexMbrs<double>::setupAllMethodTables();
 	//cuFunctorMain();
-	outln("init device");
+	outln("pritn gerflops device");
+
+	b_util::usedDmem(true);
 
 	printAllDeviceGFlops<T>();
 
@@ -352,139 +370,307 @@ template <typename T> int tests<T>::runTest(int argc, const char** argv) {
     	int currDev = ExecCaps::currDev();
     	outln("currDev: " << currDev);
 		timer.start();
-		int count=10;
 		int idx=0;
-		Test<T>* actual[count];
-		memset(actual, 0, count * sizeof(Test<T>*));
+		vector<Test<T>*> vTests;
+		vTests.push_back(new testNeural<T>());
 
-		//actual[idx++] = new testCopyFtor<T>();
-		//actual[idx++] = new testSign<T>();
-		//actual[idx++] = new testFillFPtr<T>();
+		//vTests.push_back(new testDim3Octave<T>());
 
-		//actual[idx++] = new testProductShapesLoop<T>();
-		//actual[idx++] = new testCount<T>();
+		//vTests.push_back(new testNeural2Loop<T>());
 
-		//actual[idx++] = new testCopyVsCopyK<T>();
+		//vTests.push_back(new testMeansPitch<T>());
+		//vTests.push_back(new testPermus<T>());
 
-		//actual[idx++] = new testInc<T>();
+		//vTests.push_back(new testMemsetFill<T>());
 
-		//actual[idx++] = new testCostFunction<T>();
+		//vTests.push_back(new testRandAsFnOfSize<T>());
 
-		//actual[idx++] = new testHfreeDalloc<T>();
-		//actual[idx++] = new testMod<T>();
-		//actual[idx++] = new testMatRowMath<T>();
-		//actual[idx++] = new testCountSpanrows<T>();
+		//vTests.push_back(new testAnomDet<T>());
+	//	vTests.push_back(new testTranspose<T>());
 
-		//actual[idx++] = new testFillers<T>();
+		//vTests.push_back(new testNeural2l<T>());
+		//vTests.push_back(new testPackedMat<T>());
+		//vTests.push_back(new testBounds<T>());
+ 	//vTests.push_back(new testNeural2lAdult<T>());
+		//vTests.push_back(new testNeural2l<T>());
+	//	vTests.push_back(new testNeural2lYrPred<T>());
+		//vTests.push_back(new testMemset<T>());
+		//vTests.push_back(new testProductShapesLoop<T>());
+		//vTests.push_back(new testHugeMatProds<T>());
+		//vTests.push_back(new testCat<T>());
+		//vTests.push_back(new testKmeans<T>());
+		//vTests.push_back(new testSubmatrices<T>());
+		//vTests.push_back(new testLUdecomp<T>());
+		/*
+		vTests.push_back(new testProductShapes<T>());
+		vTests.push_back(new testLargeMatProds<T>());
+		vTests.push_back(new testHugeMatProds2<T>());
 
-		//actual[idx++] = new testCubes<T>();
-		//actual[idx++] = new testNextPowerOf2<T>();
-		//actual[idx++] = new testLargestFactor<T>();
+		vTests.push_back(new testCat<T>());
+		vTests.push_back(new testKmeans<T>());
+		vTests.push_back(new testSubmatrices<T>());
+		vTests.push_back(new testTranspose<T>());
+		vTests.push_back(new testLUdecomp<T>());
 
-		//actual[idx++] = new testBisection<T>();
+		vTests.push_back(new testCat<T>());
+		vTests.push_back(new testKmeans<T>());
+		vTests.push_back(new testSubmatrices<T>());
+		vTests.push_back(new testTranspose<T>());
 
-		//actual[idx++] = new testReduceRows<T>();
-
-		actual[idx++] = new testKmeans<T>();
-
-		actual[idx++] = new testCMap<T>();
-		actual[idx++] = new testAnomDet<T>();
-				//actual[idx++] = new testMVAnomDet<T>();
-		//actual[idx++] = new testBinCat<T>();
-
-		//actual[idx++] = new testEtoX<T>();
-		//actual[idx++] = new testFuncPtr<T>();
-
-		//actual[idx++] = new testRedux<T>();
-		//actual[idx++] = new testColumnRedux<T>();
-
-		//actual[idx++] = new testCdpSync1<T>();
-		//actual[idx++] = new testShufflet<T>();
-		//actual[idx++] = new testShuffle<T>();
-
-		//actual[idx++] = new testRandAsFnOfSize<T>();
-		//actual[idx++] = new testCdpRedux<T>();
-
-
-		//actual[idx++] = new testLastError<T>();
-		//actual[idx++] = new testRecCuMatAddition<T>();
-		//actual[idx++] = new testBounds<T>();
-
-
-		//actual[idx++] = new testClippedRowSubset<T>();
-		//actual[idx++] = new testCdpSum<T>();
-		//actual[idx++] = new testMeansFile<T>();
-		//actual[idx++] = new testFeatureMeans<T>();
-
-		//actual[idx++] = new testStrmOrNot<T>();
-		//actual[idx++] = new testUnimemThrupt1<T>();
-/*
-		actual[idx++] = new testAutodot<T>();
-		actual[idx++] = new testMultLoop<T>();
-		actual[idx++] = new testProductKernel3<T>();
-		actual[idx++] = new testProductShapes<T>();
-		actual[idx++] = new testProductShapesLoop<T>();
-
-		actual[idx++] = new testProductShapesTxB<T>();
-
-		actual[idx++] = new testSqrMatsMult<T>();
-		actual[idx++] = new testSqrMatsMultSmall<T>();
+		vTests.push_back(new testTinyXRFill<T>());
+		vTests.push_back(new testProductShapes<T>());
+		vTests.push_back(new testHugeMatProds<T>());
+		vTests.push_back(new testHugeMatProds2<T>());
 */
-		//actual[idx++] = new testNeural2l<T>();
-		//actual[idx++] = new testNeural2Loop<T>();
-		//actual[idx++] = new testSumSqrDiffsLoop<T>();
-		//actual[idx++] = new testRedWineCsv<T>();
-		//actual[idx++] = new testCsv<T>();
-		//actual[idx++] = new testMeansLoop<T>();
-		//actual[idx++] = new testDynamicParallelism<T>();
+		//vTests.push_back(new testCudaMemcpy2D<T>());
+		//vTests.push_back(new testProductShapesKernelPtr<T>());
+		//vTests.push_back(new testNormalize<T>());
+		//memset(vTests, 0, count * sizeof(Test<T>*));
+/*
+		vTests.push_back(new testNeural<T>());
+		vTests.push_back(new testCMap<T>());
+		vTests.push_back(new testCMap<T>());
+		vTests.push_back(new testCMap<T>());
+		vTests.push_back(new testCMap<T>());
+		vTests.push_back(new testCMap<T>());
+		vTests.push_back(new testCMap<T>());
+		vTests.push_back(new testCMap<T>());
+		vTests.push_back(new testCMap<T>());
 
-		//actual[idx++] = new testOglHelloworld<T>();
-		//actual[idx++] = new testOglAnim0<T>();
-		//actual[idx++] = new testFrag7Csv<T>();
-		//actual[idx++] = new testFastInvSqrt<T>();
-		//actual[idx++] = new testLUdecomp<T>();
+		vTests.push_back(new testKmeans<T>());
 
-		//actual[idx++] = new testMemcpyShared<T>();
-		//actual[idx++] = new testBinaryOpAmort<T>();
+		vTests.push_back(new testLUdecomp<T>());
 
-		//actual[idx++] = new testFillNsb<T>();
-		//actual[idx++] = new testParseOctave<T>();
-		//actual[idx++] = new testLogRegCostFunctionNoRegMapFeature<T>();
-		//testLogRegSuite(actual,idx);
+*/
+/*
+		vTests.push_back(new testLastError<T>());
+		vTests.push_back(new testBounds<T>());
 
-		//actual[idx++] = new testLinRegCostFunctionNoReg<T>();
+		vTests.push_back(new testSign<T>());
+		vTests.push_back(new testCubes<T>());
+		vTests.push_back(new testReduceRows<T>());
+
+
+		vTests.push_back(new testClippedRowSubset<T>());
+		vTests.push_back(new testCdpSum<T>());
+		vTests.push_back(new testMeansFile<T>());
+		vTests.push_back(new testFeatureMeans<T>());
+
+		vTests.push_back(new testStrmOrNot<T>());
+
+
+		vTests.push_back(new testBinCat<T>());
+		vTests.push_back(new testMatRowMath<T>());
+
+		vTests.push_back(new testNeural2l<T>());
+
+		//vTests.push_back(new testLogRegCostFunctionNoRegMapFeature<T>());
+
+		vTests.push_back(new testAnonMatrices<T>());
+		vTests.push_back(new testTranspose<T>());
+		vTests.push_back(new testKmeans<T>());
+
+		vTests.push_back(new testCopyFtor<T>());
+		//vTests.push_back(new testSign<T>());
+
+		vTests.push_back(new testSqrMatsMultSmall<T>());
+
+
+		vTests.push_back(new testProductShapesKernelPtr<T>());
+
+		vTests.push_back(new testCount<T>());
+
+		vTests.push_back(new testCopyVsCopyK<T>());
+
+		vTests.push_back(new testInc<T>());
+
+		vTests.push_back(new testCostFunction<T>());
+
+		vTests.push_back(new testHfreeDalloc<T>());
+		vTests.push_back(new testMod<T>());
+		vTests.push_back(new testMatRowMath<T>());
+		vTests.push_back(new testCountSpanrows<T>());
+
+		vTests.push_back(new testFillers<T>());
+
+		//vTests.push_back(new testCubes<T>());
+		vTests.push_back(new testNextPowerOf2<T>());
+		vTests.push_back(new testLargestFactor<T>());
+
+		vTests.push_back(new testBisection<T>());
+
+		//vTests.push_back(new testReduceRows<T>());
+
+		vTests.push_back(new testLargeMatProds<T>());
+
+		vTests.push_back(new testCMap<T>());
+		vTests.push_back(new testAnomDet<T>());
+
+		//vTests.push_back(new testMVAnomDet<T>());
+
+		vTests.push_back(new testEtoX<T>());
+
+		vTests.push_back(new testColumnRedux<T>());
+
+		vTests.push_back(new testCMap<T>());
+		vTests.push_back(new testShufflet<T>());
+		vTests.push_back(new testShuffle<T>());
+
+		//vTests.push_back(new testRandAsFnOfSize<T>());
+		vTests.push_back(new testCdpRedux<T>());
+		vTests.push_back(new testRedux<T>());
+
+
+		//vTests.push_back(new testLastError<T>());
+		//vTests.push_back(new testRecCuMatAddition<T>());
+		vTests.push_back(new testBounds<T>());
+
+
+		vTests.push_back(new testClippedRowSubset<T>());
+		vTests.push_back(new testCdpSum<T>());
+		vTests.push_back(new testMeansFile<T>());
+		vTests.push_back(new testFeatureMeans<T>());
+
+		vTests.push_back(new testStrmOrNot<T>());
+
+		vTests.push_back(new testAutodot<T>());
+		vTests.push_back(new testMultLoop<T>());
+		vTests.push_back(new testProductKernel3<T>());
+		vTests.push_back(new testProductShapes<T>());
+		vTests.push_back(new testProductShapesLoop<T>());
+
+		vTests.push_back(new testProductShapesTxB<T>());
+
+		vTests.push_back(new testSqrMatsMult<T>());
+		vTests.push_back(new testSqrMatsMultSmall<T>());
+
+		//vTests.push_back(new testNeural2l<T>());
+		//vTests.push_back(new testNeural2Loop<T>());
+		//vTests.push_back(new testSumSqrDiffsLoop<T>());
+		//vTests.push_back(new testRedWineCsv<T>());
+		//vTests.push_back(new testCsv<T>());
+		//vTests.push_back(new testMeansLoop<T>());
+		//vTests.push_back(new testDynamicParallelism<T>());
+
+		//vTests.push_back(new testOglHelloworld<T>());
+		//vTests.push_back(new testOglAnim0<T>());
+		//vTests.push_back(new testFrag7Csv<T>());
+		//vTests.push_back(new testFastInvSqrt<T>());
+		//vTests.push_back(new testLUdecomp<T>());
+
+		//vTests.push_back(new testMemcpyShared<T>());
+		//vTests.push_back(new testBinaryOpAmort<T>());
+
+		//vTests.push_back(new testFillNsb<T>());
+		//vTests.push_back(new testParseOctave<T>());
+		//vTests.push_back(new testLogRegCostFunctionNoRegMapFeature<T>());
+		vTests.push_back(new testProductShapesLoop<T>());
+*/
+		//testLogRegSuite(vTests,idx));
+
+		//vTests.push_back(new testLinRegCostFunctionNoReg<T>());
 
 		/*
 		 * testFnArgCount testShuffle testNeural2l testNeural2Loop testProductShapes testProductShapesTxB testSqrMatsMult
 		 testDynamicParallelism testMultiGPUMath testFileIO testProductShapes testMultiGPUMemcpy testSuite testAnomDet testProductShapesLoop testNeural2l testRandomizingCopyRows
 		 testMeans testMeansLoop
 		 */
-		outln("created " << actual);
+		outln("added " << vTests.size() << " vTests");
 		outln("using mat prod block of dims " << b_util::pd3(CuMatrix<T>::DefaultMatProdBlock));
 		b_util::usedDmem();
-		outln("launching " << actual);
 		outln("tests<T>::2timeTest starting argc " << argc <<" argv " << argv);
 		if(argv) for(int i =0; i < argc; i++) {
 			outln("tests<T>::2timeTest arg " <<i << ": " << argv[i]);
 		}
-		for(int i = 0; i < count; i++ ){
-			if(actual[i]) {
-				tests<T>::timeTest(*(actual[i]), argc, argv, &status);
+		// specific test
+
+		Tiler<T> gpuSwitcher(CuMatrix<T>::ZeroMatrix);
+		int devCount;
+		int currIdx =0;
+		checkCudaErrors(cudaGetDeviceCount(&devCount));
+#ifdef CuMatrix_NVML
+		uint gpuTemps[devCount];
+#endif
+		gpuSwitcher.setGpuMask( Tiler<T>::gpuMaskFromCount( devCount ));
+		outln("gpuSwitch mask");
+		Tiler<T>::dumpMask(gpuSwitcher.gpuMask);
+		if(specTest > 0 ) {
+			if(specTest < idx) {
+				tests<T>::timeTest(*(vTests[specTest]), argc, argv, &status);
+			} else {
+				outln("test must be [0," << idx << "); was " << specTest);
+			}
+		} else {
+			outln("want selected vTests");
+			auto itr = vTests.begin();
+			int dev;
+			while(itr != vTests.end()){
+				//
+#ifdef CuMatrix_NVML
+				// give coldest gpu next test
+				uint minTemp = util<uint>::maxValue();
+				for(uint i = 0; i < devCount; i++) {
+					nvmlDevice_t device;
+					chnerr(nvmlDeviceGetHandleByIndex(i,  &device));
+					chnerr(nvmlDeviceGetTemperature(device,NVML_TEMPERATURE_GPU, &gpuTemps[i] ));
+					if(gpuTemps[i] < minTemp) {
+						minTemp = gpuTemps[i];
+						currDev = i;
+					}
+					outln("gpu " << i << " temp " << gpuTemps[i]);
+				}
+#else
+				currDev = gpuSwitcher.nextGpu(currIdx );
+				currIdx ++;
+#endif
+				b_util::dumpGpuStats();
+				checkCudaError(cudaSetDevice(currDev));
+				outln("launching next test on device " << currDev << "\n\t\t" <<  gpuNames[dev]);
+				tests<T>::timeTest(*(*itr), argc, argv, &status);
+				itr++;
 			}
 		}
+    	outln("currDev: " << currDev);
 		checkCudaErrors(cudaSetDevice(currDev));
     	outln("before stopping main timer, curr dev: " << ExecCaps::currDev());
 		float exeTime = timer.stop();
-
 		b_util::announceDuration(exeTime);
 		//b_util::waitEnter();
 	}
+
     CuMatrix<T>::cleanup();
+    outln("CuDestructs " << CuDestructs);
     outln("all done, bye!");
 	return status;
 }
 
+int dmain(int argc, const char** argv);
+
 int main(int argc, const char** argv) {
+
+    int devID;
+
+    //cudaError_t error;
+    cudaDeviceProp deviceProp;
+
+    // This will pick the best possible CUDA capable device.
+    devID = findCudaDevice(argc, (const char **) argv);
+	outln("devID "<< devID);
+
+#ifdef CuMatrix_NVML
+	nvmlReturn_t nvmlRet = nvmlInit();
+#endif
+
+    checkCudaErrors(cudaGetDeviceProperties(&deviceProp, devID));
+
+	outln("deviceProp.memoryClockRate "<< deviceProp.memoryClockRate);
+
+	b_util::allDevices([]() { b_util::warmupL(); });
+
+
+	outln("calling b_util::usedDmem()...");
+   // b_util::usedDmem(true);
+    //dmain(argc,argv);
 	outln("starting argc " << argc <<" argv " << argv);
 	pthread_t currThread = pthread_self ();
 	outln("currThread " << currThread);
@@ -502,17 +688,17 @@ int main(int argc, const char** argv) {
 			return tests<float>::runTest(argc,argv);
 	}
 	//if(typeS.find("8") != string::npos)
-	return tests<float>::runTest(argc,argv);
+	return tests<double>::runTest(argc,argv);
 
 }
 
-template <typename T> void testLogRegSuite(Test<T>* actual[], int& idx) {
-	//actual[idx++] = new testParseOctave<T>();
+template <typename T> void testLogRegSuite(vector<Test<T>*> vTests, int& idx) {
+	//vTests.push_back(new testParseOctave<T>();
 
-	actual[idx++] = new testLinRegCostFunctionNoReg<T>();
-	//actual[idx++] = new testCostFunction<T>();
-	//actual[idx++] = new testCostFunction<T>();
-	//actual[idx++] = new testLogRegCostFunctionNoRegMapFeature<T>();
+	vTests.push_back(new testLinRegCostFunctionNoReg<T>());
+	//vTests.push_back(new testCostFunction<T>());
+	//vTests.push_back(new testCostFunction<T>());
+	//vTests.push_back(new testLogRegCostFunctionNoRegMapFeature<T>());
 
 }
 

@@ -19,11 +19,11 @@ __host__ __device__ inline bool ilIsPow2(uint x) {
 template<typename T, uint blockSize, bool nIsPow2, template <typename> class MatBinaryOp,
 template <typename> class BinaryOp>
 __global__ void combineReduceOpKernel2(const T* g_idata1, const T* g_idata2,
-		T* g_odata, ulong n, MatBinaryOp<T> mop, BinaryOp<T> op, T start, uint grow, uint gcol)
+		T* g_odata, long n, MatBinaryOp<T> mop, BinaryOp<T> op, T start, uint grow, uint gcol)
 #else
 template<typename T, uint blockSize, bool nIsPow2, int MopDim,int BopDim>
 __global__ void combineReduceOpKernel2(const T* g_idata1, const T* g_idata2,
-		T* g_odata, ulong n, BinaryOpF<T,MopDim> mop, BinaryOpF<T,BopDim> op, T start, uint grow, uint gcol)
+		T* g_odata, long n, BinaryOpF<T,MopDim> mop, BinaryOpF<T,BopDim> op, T start, uint grow, uint gcol)
 #endif
 {
 	T* sdata = SharedMemory<T>();
@@ -134,11 +134,11 @@ __global__ void combineReduceOpKernel2(const T* g_idata1, const T* g_idata2,
 
 #ifdef  CuMatrix_Enable_KTS
 template<typename T, uint blockSize, bool nIsPow2, template <typename> class BinaryOp>
-__global__ void reduceOpKernel2( T* g_odata, const T* g_idata, ulong n,
+__global__ void reduceOpKernel2( T* g_odata, const T* g_idata, long n,
 		BinaryOp<T> op, T start)
 #else
 template<typename T, uint blockSize, bool nIsPow2, int StateDim>
-__global__ void reduceOpKernel2( T* g_odata, const T* g_idata, ulong n,
+__global__ void reduceOpKernel2( T* g_odata, const T* g_idata, long n,
 		BinaryOpF<T,StateDim> op, T start)
 #endif
 {
@@ -258,6 +258,8 @@ template __global__ void matrixProductReductionTxdBKernel(DMatrix<double> C,
 		const DMatrix<double> A, const DMatrix<double> B, int stepsDummy);
 template __global__ void matrixProductReductionTxdBKernel(DMatrix<ulong> C,
 		const DMatrix<ulong> A, const DMatrix<ulong> B, int stepsDummy);
+template __global__ void matrixProductReductionTxdBKernel(DMatrix<long> C,
+		const DMatrix<long> A, const DMatrix<long> B, int stepsDummy);
 template __global__ void matrixProductReductionTxdBKernel(DMatrix<uint> C,
 		const DMatrix<uint> A, const DMatrix<uint> B, int stepsDummy);
 template __global__ void matrixProductReductionTxdBKernel(DMatrix<int> C,
@@ -283,9 +285,9 @@ template<typename T> __global__ void matrixProductReductionTxdBKernel(DMatrix<T>
 	DMatrix<T> Asub(&A.elements[A.p * grow], 1, A.n, A.p);
 	DMatrix<T> Bsub(&B.elements[B.p * gcol], 1, B.n, B.p);
 
-	ulong n = A.n;
-	uint threads;
-	uint blocks;
+	long n = A.n;
+	int threads;
+	int blocks;
 	getReductionExecContext(blocks,threads, n,256, 64);
 	const int resSize = blocks * sizeof(T);
 	T* d_res = null;
@@ -480,6 +482,7 @@ template<typename T> __global__ void matrixProductReductionTxdBKernel(DMatrix<T>
 				case 2:
 				reduceOpKernel2<T, 2, true, 1><<< dimGrid, dimBlock, smemSize >>>(d_res, d_res, n,op, start); break;
 				case 1:
+				reduceOpKernel2<T, 1, true, 1><<< dimGrid, dimBlock, smemSize >>>(d_res, d_res, n,op, start); break;
 #endif
 			}
 
@@ -534,13 +537,11 @@ template<typename T> __global__ void matrixProductReductionTxdBKernel(DMatrix<T>
 #endif
 			}
 		}
-		//cudaError_t ret = syncHappy ? cudaDeviceSynchronize() : cudaSuccess;
 		//cherr(cuda_error);
 		 //cudaDeviceSynchronize() ;
 		__syncthreads();
 		n = DIV_UP(n, 2*threads);
 	}
-	//if(checkDebug(syncHappy))cherr(cudaDeviceSynchronize());
 	// copy final sum from device to host
 	//outln("gpu_result " << gpu_result);
 	cudaDeviceSynchronize();

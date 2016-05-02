@@ -69,7 +69,7 @@ template <typename T> struct Funcs {
 	 void buildFunc1Array();
 };
 
-extern __managed__ void * funcPtres[MAX_FUNCS];
+extern __device__ void * funcPtres[MAX_FUNCS];
 template <typename T> __global__ void setDFarray() ;
 
 template <typename T> __global__ void buildIdxFuncArrays(typename idxfunc1<T>::inst * idxfunc1Arry);

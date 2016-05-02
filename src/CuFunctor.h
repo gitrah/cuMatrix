@@ -46,6 +46,7 @@ template<typename T> struct CuFunctor<T,2> {
 	inline __host__ __device__ T& operator[](ptrdiff_t ofs);
 	inline __host__ __device__ const T& operator[](ptrdiff_t ofs) const;
 };
+
 template <> struct CuFunctor<float, 2> {
 	float2 state;
 	inline __host__ __device__ float& operator[](ptrdiff_t ofs);
@@ -68,6 +69,12 @@ template <> struct CuFunctor<uint, 2> {
 	uint2 state;
 	inline __host__ __device__ uint& operator[](ptrdiff_t ofs);
 	inline __host__ __device__ const uint& operator[](ptrdiff_t ofs)const ;
+};
+
+template <> struct CuFunctor<long, 2> {
+	long2 state;
+	inline __host__ __device__ long& operator[](ptrdiff_t ofs);
+	inline __host__ __device__ const long& operator[](ptrdiff_t ofs)const ;
 };
 
 template <> struct CuFunctor<ulong, 2> {
@@ -98,6 +105,12 @@ template <> struct CuFunctor<uint, 3> {
 	uint3 state;
 	inline __host__ __device__ uint& operator[](ptrdiff_t ofs);
 	inline __host__ __device__ const uint& operator[](ptrdiff_t ofs)const ;
+};
+
+template <> struct CuFunctor<long, 3> {
+	long3 state;
+	inline __host__ __device__ long& operator[](ptrdiff_t ofs);
+	inline __host__ __device__ const long& operator[](ptrdiff_t ofs)const ;
 };
 
 template <> struct CuFunctor<ulong, 3> {

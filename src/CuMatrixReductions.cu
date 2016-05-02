@@ -19,43 +19,40 @@ template<typename T> template<int StateDim> __host__ CUDART_DEVICE
 T CuMatrix<T>::reduce(const DMatrix<T>& d_M, MonoidF<T,StateDim> op, T start, cudaStream_t stream  )
 #endif
 {
-	uint nP = d_M.m * d_M.n;
-	uint threads;
-	uint blocks;
+	long nP = d_M.m * d_M.n;
+	int threads;
+	int blocks;
+
 	::getReductionExecContext(blocks, threads, nP);
-	if(checkDebug(debugRedux | debugNoRedux))flprintf("CuMatrix<T>::reduce blocks %d threads %d np %d\n", blocks,threads, nP);
+	if(checkDebug(debugRedux ))flprintf("CuMatrix<T>::reduce blocks %d threads %d np %d\n", blocks,threads, nP);
 #ifdef CuMatrix_Enable_Cdp
 	cherr(cudaPeekAtLastError());
 #endif
-	if(checkDebug( debugNoRedux)) {
-		prlocf("early exit\n");
-		return start;
-	}
 	CuMatrix<T> res(blocks, 1, false, true);
 	if(checkDebug(debugRedux)) {
 		prlocf("res ");
 		res.printShortString();
 	}
 	DMatrix<T> d_Res;
-	res.asDmatrix(d_Res, false);
+	res.tile0(d_Res, false);
 
-	if(checkDebug(debugRedux| debugNoRedux)) {
-		prlocf("after res.asDmatrix(..)\n");
+	if(checkDebug(debugRedux)) {
+		prlocf("after res.tile0(..)\n");
 	}
 
 #ifndef __CUDA_ARCH__
 	checkCudaError(cudaDeviceSynchronize());
-	if(checkDebug(debugRedux| debugNoRedux)){ prlocf("host ");}
+
+	if(checkDebug(debugRedux)) prlocf("after tile0");
+
+	if(checkDebug(debugRedux)) prlocf("host \n");
 #else
-	if(checkDebug(debugRedux| debugNoRedux)){ prlocf("dev ");}
+	if(checkDebug(debugRedux)) prlocf("dev \n");
 #endif
 	T total = 0;
-	if(checkDebug(debugRedux| debugNoRedux)){ flprintf("&total %p\n",&total); }
-	if(!checkDebug(debugNoRedux)) {
-		reduceLauncher(&total, d_Res, nP, d_M, op, start, 1, 0, stream);
-	} else {
-		prlocf("skipping reducelauncher\n");
-	}
+	if(checkDebug(debugRedux)) flprintf("&total %p\n",&total);
+	if(checkDebug(debugRedux)) flprintf(",d_M.n %d d_M.p %d stride %d\n",d_M.n, d_M.p ,d_M.n != d_M.p ? d_M.p : 1);
+	reduceLauncher(&total, d_Res, nP, d_M, op, start, d_M.n != d_M.p ? d_M.p : 1, 0, stream);
 #ifndef __CUDA_ARCH__
 	cherr(cudaPeekAtLastError());
 	cherr(cudaStreamSynchronize(stream));
@@ -77,21 +74,24 @@ template __host__ CUDART_DEVICE double CuMatrix<double>::reduce<minBinaryOp>(DMa
 template __host__ CUDART_DEVICE ulong CuMatrix<ulong>::reduce<minBinaryOp>(DMatrix<ulong> const&, minBinaryOp<ulong>, ulong, CUstream_st*);
 template __host__ CUDART_DEVICE ulong CuMatrix<ulong>::reduce<maxBinaryOp>(DMatrix<ulong> const&, maxBinaryOp<ulong>, ulong, CUstream_st*);
 
-template  __host__ CUDART_DEVICE float CuMatrix<float>::reduce<plusBinaryOp>(DMatrix<float> const&, plusBinaryOp<float>, float, CUstream_st*);
-template  __host__ CUDART_DEVICE double CuMatrix<double>::reduce<plusBinaryOp>(DMatrix<double> const&, plusBinaryOp<double>, double, CUstream_st*);
-template  __host__ CUDART_DEVICE ulong CuMatrix<ulong>::reduce<plusBinaryOp>(DMatrix<ulong> const&, plusBinaryOp<ulong>, ulong, CUstream_st*);
+template __host__ CUDART_DEVICE float CuMatrix<float>::reduce<plusBinaryOp>(DMatrix<float> const&, plusBinaryOp<float>, float, CUstream_st*);
+template __host__ CUDART_DEVICE double CuMatrix<double>::reduce<plusBinaryOp>(DMatrix<double> const&, plusBinaryOp<double>, double, CUstream_st*);
+template __host__ CUDART_DEVICE ulong CuMatrix<ulong>::reduce<plusBinaryOp>(DMatrix<ulong> const&, plusBinaryOp<ulong>, ulong, CUstream_st*);
+template __host__ CUDART_DEVICE int CuMatrix<int>::reduce<plusBinaryOp>(DMatrix<int> const&, plusBinaryOp<int>, int, CUstream_st*);
+template __host__ CUDART_DEVICE unsigned int CuMatrix<unsigned int>::reduce<plusBinaryOp>(DMatrix<unsigned int> const&, plusBinaryOp<unsigned int>, unsigned int, CUstream_st*);
+template __host__ CUDART_DEVICE long CuMatrix<long>::reduce<plusBinaryOp>(DMatrix<long> const&, plusBinaryOp<long>, long, CUstream_st*);
 
-template  __host__ CUDART_DEVICE ulong CuMatrix<ulong>::reduce<sqrPlusBinaryOp>(DMatrix<ulong> const&, sqrPlusBinaryOp<ulong>, ulong, CUstream_st*);
-template  __host__ CUDART_DEVICE int CuMatrix<int>::reduce<maxBinaryOp>(DMatrix<int> const&, maxBinaryOp<int>, int, CUstream_st*);
-template  __host__ CUDART_DEVICE int CuMatrix<int>::reduce<minBinaryOp>(DMatrix<int> const&, minBinaryOp<int>, int, CUstream_st*);
+template __host__ CUDART_DEVICE int CuMatrix<int>::reduce<maxBinaryOp>(DMatrix<int> const&, maxBinaryOp<int>, int, CUstream_st*);
+template __host__ CUDART_DEVICE int CuMatrix<int>::reduce<minBinaryOp>(DMatrix<int> const&, minBinaryOp<int>, int, CUstream_st*);
 
-template  __host__ CUDART_DEVICE unsigned int CuMatrix<unsigned int>::reduce<maxBinaryOp>(DMatrix<unsigned int> const&, maxBinaryOp<unsigned int>, unsigned int, CUstream_st*);
-template  __host__ CUDART_DEVICE unsigned int CuMatrix<unsigned int>::reduce<minBinaryOp>(DMatrix<unsigned int> const&, minBinaryOp<unsigned int>, unsigned int, CUstream_st*);
+template __host__ CUDART_DEVICE unsigned int CuMatrix<unsigned int>::reduce<maxBinaryOp>(DMatrix<unsigned int> const&, maxBinaryOp<unsigned int>, unsigned int, CUstream_st*);
+template __host__ CUDART_DEVICE unsigned int CuMatrix<unsigned int>::reduce<minBinaryOp>(DMatrix<unsigned int> const&, minBinaryOp<unsigned int>, unsigned int, CUstream_st*);
 
 
 #else
 template __host__ CUDART_DEVICE float CuMatrix<float>::reduce(DMatrix<float> const&, MonoidF<float,1>, float, CUstream_st*);
 template __host__ CUDART_DEVICE double CuMatrix<double>::reduce(DMatrix<double> const&, MonoidF<double,1>, double, CUstream_st*);
+template __host__ CUDART_DEVICE long CuMatrix<long>::reduce(DMatrix<long> const&, MonoidF<long,1>, long, CUstream_st*);
 template __host__ CUDART_DEVICE ulong CuMatrix<ulong>::reduce(DMatrix<ulong> const&, MonoidF<ulong,1>, ulong, CUstream_st*);
 template __host__ CUDART_DEVICE int CuMatrix<int>::reduce(DMatrix<int> const&, MonoidF<int,1>, int, CUstream_st*);
 template __host__ CUDART_DEVICE uint CuMatrix<uint>::reduce(DMatrix<uint> const&, MonoidF<uint,1>, uint, CUstream_st*);
@@ -100,64 +100,60 @@ template __host__ CUDART_DEVICE uint CuMatrix<uint>::reduce(DMatrix<uint> const&
 
 #ifdef  CuMatrix_Enable_KTS
 template<typename T> template<template <typename> class BinaryOp> __host__ CUDART_DEVICE
-void CuMatrix<T>::reduceColumn(T* total, const DMatrix<T>& d_M, BinaryOp<T> op, T start, uint col, cudaStream_t stream  )
+void CuMatrix<T>::reduceColumn(T* total, const DMatrix<T>& d_M, BinaryOp<T> op, T start, int col, cudaStream_t stream  )
 #else
 template<typename T> template<int StateDim> __host__ CUDART_DEVICE
-void CuMatrix<T>::reduceColumn(T* total, const DMatrix<T>& d_M, MonoidF<T,StateDim> op, T start, uint col, cudaStream_t stream  )
+void CuMatrix<T>::reduceColumn(T* total, const DMatrix<T>& d_M, MonoidF<T,StateDim> op, T start, int col, cudaStream_t stream  )
 #endif
 {
-	uint nP = d_M.m;
-	uint threads;
-	uint blocks;
+	long nP = d_M.m;
+	int threads;
+	int blocks;
 	::getReductionExecContext(blocks, threads, nP);
-	if(checkDebug(debugRedux | debugNoRedux))flprintf("CuMatrix<T>::reduceColumn blocks %d threads %d np %d\n", blocks,threads, nP);
+	if(checkDebug(debugRedux))flprintf("CuMatrix<T>::reduceColumn blocks %d threads %d np %d\n", blocks,threads, nP);
 #ifdef CuMatrix_Enable_Cdp
 	cherr(cudaPeekAtLastError());
 #endif
-	if(checkDebug( debugNoRedux)) {
-		prlocf("early exit\n");
-		*total = start;
-	}
 	CuMatrix<T> res(blocks, 1, false, true);
 	if(checkDebug(debugRedux)) {
 		prlocf("res ");
 		res.printShortString();
 	}
 	DMatrix<T> d_Res;
-	res.asDmatrix(d_Res, false);
+	res.tile0(d_Res, false);
 
-	if(checkDebug(debugRedux| debugNoRedux)) {
-		prlocf("after res.asDmatrix(..)\n");
+	if(checkDebug(debugRedux)) {
+		prlocf("after res.tile0(..)\n");
 	}
 
 #ifndef __CUDA_ARCH__
 	checkCudaError(cudaDeviceSynchronize());
-	if(checkDebug(debugRedux| debugNoRedux)){ prlocf("host ");}
+	if(checkDebug(debugRedux)){ prlocf("host ");}
 #else
-	if(checkDebug(debugRedux| debugNoRedux)){ prlocf("dev ");}
+	if(checkDebug(debugRedux)){ prlocf("dev ");}
 #endif
-	if(checkDebug(debugRedux| debugNoRedux)){ flprintf("&total %p\n",&total); }
-	if(!checkDebug(debugNoRedux)) {
-		reduceLauncher(total, d_Res, nP, d_M, op, start, d_M.p, col, stream);
-	} else {
-		prlocf("skipping reducelauncher\n");
-	}
+	if(checkDebug(debugRedux)){ flprintf("&total %p\n",&total); }
+	reduceLauncher(total, d_Res, nP, d_M, op, start, d_M.p, col, stream);
 }
 #ifdef  CuMatrix_Enable_KTS
-template __host__ CUDART_DEVICE void CuMatrix<float>::reduceColumn<maxBinaryOp>(float*,DMatrix<float> const&, maxBinaryOp<float>, float, uint, CUstream_st*);
-template __host__ CUDART_DEVICE void CuMatrix<float>::reduceColumn<minBinaryOp>(float*,DMatrix<float> const&, minBinaryOp<float>, float, uint, CUstream_st*);
-template __host__ CUDART_DEVICE void CuMatrix<double>::reduceColumn<maxBinaryOp>(double*,DMatrix<double> const&, maxBinaryOp<double>, double, uint, CUstream_st*);
+template __host__ CUDART_DEVICE void CuMatrix<float>::reduceColumn<maxBinaryOp>(float*,DMatrix<float> const&, maxBinaryOp<float>, float, int, CUstream_st*);
+template __host__ CUDART_DEVICE void CuMatrix<float>::reduceColumn<minBinaryOp>(float*,DMatrix<float> const&, minBinaryOp<float>, float, int, CUstream_st*);
+template __host__ CUDART_DEVICE void CuMatrix<float>::reduceColumn<plusBinaryOp>(float*, DMatrix<float> const&, plusBinaryOp<float>, float, unsigned int, CUstream_st*);
+template __host__ CUDART_DEVICE void CuMatrix<double>::reduceColumn<maxBinaryOp>(double*,DMatrix<double> const&, maxBinaryOp<double>, double, int, CUstream_st*);
 template __host__ CUDART_DEVICE void CuMatrix<double>::reduceColumn<minBinaryOp>(double*,DMatrix<double> const&, minBinaryOp<double>, double, uint, CUstream_st*);
+template __host__ CUDART_DEVICE void CuMatrix<double>::reduceColumn<plusBinaryOp>(double*, DMatrix<double> const&, plusBinaryOp<double>, double, unsigned int, CUstream_st*);
 template __host__ CUDART_DEVICE void CuMatrix<int>::reduceColumn<plusBinaryOp>(int*, DMatrix<int> const&, plusBinaryOp<int>, int, unsigned int, CUstream_st*);
 template __host__ CUDART_DEVICE void CuMatrix<unsigned int>::reduceColumn<plusBinaryOp>(unsigned int*, DMatrix<unsigned int> const&, plusBinaryOp<unsigned int>, unsigned int, unsigned int, CUstream_st*);
 template __host__ CUDART_DEVICE void CuMatrix<unsigned long>::reduceColumn<plusBinaryOp>(unsigned long*, DMatrix<unsigned long> const&, plusBinaryOp<unsigned long>, unsigned long, unsigned int, CUstream_st*);
+template __host__ CUDART_DEVICE void CuMatrix<long>::reduceColumn<plusBinaryOp>(long*, DMatrix<long> const&, plusBinaryOp<long>, long, unsigned int, CUstream_st*);
 
 #else
-template __host__ CUDART_DEVICE void CuMatrix<float>::reduceColumn(float*, DMatrix<float> const&, MonoidF<float, 1>, float, unsigned int, CUstream_st*);
-template __host__ CUDART_DEVICE void CuMatrix<double>::reduceColumn(double*, DMatrix<double> const&, MonoidF<double, 1>, double, unsigned int, CUstream_st*);
-template __host__ CUDART_DEVICE void CuMatrix<int>::reduceColumn(int*, DMatrix<int> const&, MonoidF<int, 1>, int, unsigned int, CUstream_st*);
-template __host__ CUDART_DEVICE void CuMatrix<uint>::reduceColumn(uint*, DMatrix<uint> const&, MonoidF<uint, 1>, uint, unsigned int, CUstream_st*);
-template __host__ CUDART_DEVICE void CuMatrix<ulong>::reduceColumn(ulong*, DMatrix<ulong> const&, MonoidF<ulong, 1>, ulong, unsigned int, CUstream_st*);
+template __host__ CUDART_DEVICE void CuMatrix<float>::reduceColumn(float*, DMatrix<float> const&, MonoidF<float, 1>, float, int, CUstream_st*);
+template __host__ CUDART_DEVICE void CuMatrix<double>::reduceColumn(double*, DMatrix<double> const&, MonoidF<double, 1>, double, int, CUstream_st*);
+template __host__ CUDART_DEVICE void CuMatrix<int>::reduceColumn(int*, DMatrix<int> const&, MonoidF<int, 1>, int, int, CUstream_st*);
+template __host__ CUDART_DEVICE void CuMatrix<uint>::reduceColumn(uint*, DMatrix<uint> const&, MonoidF<uint, 1>, uint, int, CUstream_st*);
+template __host__ CUDART_DEVICE void CuMatrix<long>::reduceColumn(long*, DMatrix<long> const&, MonoidF<long, 1>, long, int, CUstream_st*);
+template __host__ CUDART_DEVICE void CuMatrix<ulong>::reduceColumn(ulong*, DMatrix<ulong> const&, MonoidF<ulong, 1>, ulong, int, CUstream_st*);
 #endif
 
 
@@ -169,14 +165,14 @@ template<typename T> template<int StateDim> __host__ CUDART_DEVICE void CuMatrix
 		T* result, const DMatrix<T>& d_M, MonoidF<T,StateDim> op, T start, cudaStream_t stream  )
 #endif
 {
-	uint nP = d_M.m * d_M.n;
-	uint threads;
-	uint blocks;
+	long nP = d_M.m * d_M.n;
+	int threads;
+	int blocks;
 	::getReductionExecContext(blocks, threads, nP);
 	if(checkDebug(debugExec)) flprintf("reduceAsync blocks %d\n", blocks);
 	CuMatrix<T> res(blocks, 1, true, true);
 	DMatrix<T> d_Res;
-	res.asDmatrix(d_Res, false);
+	res.tile0(d_Res, false);
 	reduceLauncher(result, d_Res, nP, d_M, op, start, 1, 0, stream);
 #ifndef __CUDA_ARCH__
 	checkCudaError(cudaStreamSynchronize(stream));
@@ -193,23 +189,24 @@ template __host__ CUDART_DEVICE void CuMatrix<ulong>::reduceAsync<maxBinaryOp>(u
 template __host__ CUDART_DEVICE void CuMatrix<ulong>::reduceAsync<minBinaryOp>(ulong*,DMatrix<ulong> const&, minBinaryOp<ulong>, ulong, CUstream_st*);
 template __host__ CUDART_DEVICE void CuMatrix<int>::reduceAsync<minBinaryOp>(int*, DMatrix<int> const&, minBinaryOp<int>, int, CUstream_st*);
 template __host__ CUDART_DEVICE void CuMatrix<int>::reduceAsync<maxBinaryOp>(int*, DMatrix<int> const&, maxBinaryOp<int>, int, CUstream_st*);
-template __host__ CUDART_DEVICE void CuMatrix<unsigned int>::reduceAsync<minBinaryOp>(unsigned int*, DMatrix<unsigned int> const&, minBinaryOp<unsigned int>, unsigned int, CUstream_st*);
-template __host__ CUDART_DEVICE void CuMatrix<unsigned int>::reduceAsync<maxBinaryOp>(unsigned int*, DMatrix<unsigned int> const&, maxBinaryOp<unsigned int>, unsigned int, CUstream_st*);
+template __host__ CUDART_DEVICE void CuMatrix<unsigned int>::reduceAsync<minBinaryOp>(unsigned int*, DMatrix<unsigned int> const&, minBinaryOp<unsigned int>, int, CUstream_st*);
+template __host__ CUDART_DEVICE void CuMatrix<unsigned int>::reduceAsync<maxBinaryOp>(unsigned int*, DMatrix<unsigned int> const&, maxBinaryOp<unsigned int>, int, CUstream_st*);
 
 #else
 template __host__ CUDART_DEVICE void CuMatrix<float>::reduceAsync<1>(float*,DMatrix<float> const&, MonoidF<float,1>, float, CUstream_st*);
 template __host__ CUDART_DEVICE void CuMatrix<double>::reduceAsync<1>(double*,DMatrix<double> const&, MonoidF<double,1>, double, CUstream_st*);
 template __host__ CUDART_DEVICE void CuMatrix<int>::reduceAsync<1>(int*,DMatrix<int> const&, MonoidF<int,1>, int, CUstream_st*);
 template __host__ CUDART_DEVICE void CuMatrix<uint>::reduceAsync<1>(uint*,DMatrix<uint> const&, MonoidF<uint,1>, uint, CUstream_st*);
+template __host__ CUDART_DEVICE void CuMatrix<long>::reduceAsync<1>(long*,DMatrix<long> const&, MonoidF<long,1>, long, CUstream_st*);
 template __host__ CUDART_DEVICE void CuMatrix<ulong>::reduceAsync<1>(ulong*,DMatrix<ulong> const&, MonoidF<ulong,1>, ulong, CUstream_st*);
 #endif
 
 #ifdef  CuMatrix_Enable_KTS
 template<typename T> template<template <typename> class BinaryOp> __host__ CUDART_DEVICE void CuMatrix<T>::reduceAsyncBuffer(
-		 T* result, DMatrix<T>& buffer, uint blocks, uint threads, ulong nP, const DMatrix<T>& d_M, BinaryOp<T> op, T start, cudaStream_t stream  )
+		 T* result, DMatrix<T>& buffer, int blocks, int threads, long nP, const DMatrix<T>& d_M, BinaryOp<T> op, T start, cudaStream_t stream  )
 #else
 template<typename T> template<int StateDim> __host__ CUDART_DEVICE void CuMatrix<T>::reduceAsyncBuffer(
-		 T* result, DMatrix<T>& buffer, uint blocks, uint threads, ulong nP, const DMatrix<T>& d_M, MonoidF<T,StateDim> op, T start, cudaStream_t stream  )
+		 T* result, DMatrix<T>& buffer, int blocks, int threads, long nP, const DMatrix<T>& d_M, MonoidF<T,StateDim> op, T start, cudaStream_t stream  )
 #endif
 {
 	if(checkDebug(debugExec)) flprintf("reduceAsyncBuffer blocks %d\n", blocks);
@@ -222,24 +219,25 @@ template<typename T> template<int StateDim> __host__ CUDART_DEVICE void CuMatrix
 }
 
 #ifdef  CuMatrix_Enable_KTS
-template __host__ CUDART_DEVICE void CuMatrix<float>::reduceAsyncBuffer<maxBinaryOp>( float*,DMatrix<float>&,uint, uint, ulong, DMatrix<float> const&, maxBinaryOp<float>, float, CUstream_st*);
-template __host__ CUDART_DEVICE void CuMatrix<float>::reduceAsyncBuffer<minBinaryOp>(float*,DMatrix<float>&,uint, uint, ulong, DMatrix<float> const&, minBinaryOp<float>, float, CUstream_st*);
-template __host__ CUDART_DEVICE void CuMatrix<double>::reduceAsyncBuffer<maxBinaryOp>(double*,DMatrix<double>&,uint, uint, ulong, DMatrix<double> const&, maxBinaryOp<double>, double, CUstream_st*);
-template __host__ CUDART_DEVICE void CuMatrix<double>::reduceAsyncBuffer<minBinaryOp>(double*,DMatrix<double>&,uint, uint, ulong, DMatrix<double> const&, minBinaryOp<double>, double, CUstream_st*);
-template __host__ CUDART_DEVICE void CuMatrix<ulong>::reduceAsyncBuffer<maxBinaryOp>(ulong*,DMatrix<ulong>&,uint, uint, ulong, DMatrix<ulong> const&, maxBinaryOp<ulong>, ulong, CUstream_st*);
-template __host__ CUDART_DEVICE void CuMatrix<ulong>::reduceAsyncBuffer<minBinaryOp>(ulong*,DMatrix<ulong>&,uint, uint, ulong, DMatrix<ulong> const&, minBinaryOp<ulong>, ulong, CUstream_st*);
+template __host__ CUDART_DEVICE void CuMatrix<float>::reduceAsyncBuffer<maxBinaryOp>( float*,DMatrix<float>&,int, int, long, DMatrix<float> const&, maxBinaryOp<float>, float, CUstream_st*);
+template __host__ CUDART_DEVICE void CuMatrix<float>::reduceAsyncBuffer<minBinaryOp>(float*,DMatrix<float>&,int, int, long, DMatrix<float> const&, minBinaryOp<float>, float, CUstream_st*);
+template __host__ CUDART_DEVICE void CuMatrix<double>::reduceAsyncBuffer<maxBinaryOp>(double*,DMatrix<double>&,int, int, long, DMatrix<double> const&, maxBinaryOp<double>, double, CUstream_st*);
+template __host__ CUDART_DEVICE void CuMatrix<double>::reduceAsyncBuffer<minBinaryOp>(double*,DMatrix<double>&,int, int, long, DMatrix<double> const&, minBinaryOp<double>, double, CUstream_st*);
+template __host__ CUDART_DEVICE void CuMatrix<ulong>::reduceAsyncBuffer<maxBinaryOp>(ulong*,DMatrix<ulong>&,int, int, long, DMatrix<ulong> const&, maxBinaryOp<ulong>, ulong, CUstream_st*);
+template __host__ CUDART_DEVICE void CuMatrix<ulong>::reduceAsyncBuffer<minBinaryOp>(ulong*,DMatrix<ulong>&,int, int, long, DMatrix<ulong> const&, minBinaryOp<ulong>, ulong, CUstream_st*);
 
-template __host__ CUDART_DEVICE void CuMatrix<int>::reduceAsyncBuffer<minBinaryOp>(int*, DMatrix<int>&, unsigned int, unsigned int, unsigned long, DMatrix<int> const&, minBinaryOp<int>, int, CUstream_st*);
-template __host__ CUDART_DEVICE void CuMatrix<int>::reduceAsyncBuffer<maxBinaryOp>(int*, DMatrix<int>&, unsigned int, unsigned int, unsigned long, DMatrix<int> const&, maxBinaryOp<int>, int, CUstream_st*);
-template __host__ CUDART_DEVICE void CuMatrix<unsigned int>::reduceAsyncBuffer<minBinaryOp>(unsigned int*, DMatrix<unsigned int>&, unsigned int, unsigned int, unsigned long, DMatrix<unsigned int> const&, minBinaryOp<unsigned int>, unsigned int, CUstream_st*);
-template __host__ CUDART_DEVICE void CuMatrix<unsigned int>::reduceAsyncBuffer<maxBinaryOp>(unsigned int*, DMatrix<unsigned int>&, unsigned int, unsigned int, unsigned long, DMatrix<unsigned int> const&, maxBinaryOp<unsigned int>, unsigned int, CUstream_st*);
+template __host__ CUDART_DEVICE void CuMatrix<int>::reduceAsyncBuffer<minBinaryOp>(int*, DMatrix<int>&, int, int, long, DMatrix<int> const&, minBinaryOp<int>, int, CUstream_st*);
+template __host__ CUDART_DEVICE void CuMatrix<int>::reduceAsyncBuffer<maxBinaryOp>(int*, DMatrix<int>&, int, int, long, DMatrix<int> const&, maxBinaryOp<int>, int, CUstream_st*);
+template __host__ CUDART_DEVICE void CuMatrix<unsigned int>::reduceAsyncBuffer<minBinaryOp>(unsigned int*, DMatrix<unsigned int>&, int, int, long, DMatrix<unsigned int> const&, minBinaryOp<unsigned int>, unsigned int, CUstream_st*);
+template __host__ CUDART_DEVICE void CuMatrix<unsigned int>::reduceAsyncBuffer<maxBinaryOp>(unsigned int*, DMatrix<unsigned int>&, int, int, long, DMatrix<unsigned int> const&, maxBinaryOp<unsigned int>, unsigned int, CUstream_st*);
 
 #else
-template __host__ CUDART_DEVICE void CuMatrix<float>::reduceAsyncBuffer(float*, DMatrix<float>&, unsigned int, unsigned int, unsigned long, DMatrix<float> const&, MonoidF<float, 1>, float, CUstream_st*);
-template __host__ CUDART_DEVICE void CuMatrix<double>::reduceAsyncBuffer(double*, DMatrix<double>&, unsigned int, unsigned int, unsigned long, DMatrix<double> const&, MonoidF<double, 1>, double, CUstream_st*);
-template __host__ CUDART_DEVICE void CuMatrix<int>::reduceAsyncBuffer(int*, DMatrix<int>&, unsigned int, unsigned int, unsigned long, DMatrix<int> const&, MonoidF<int, 1>, int, CUstream_st*);
-template __host__ CUDART_DEVICE void CuMatrix<uint>::reduceAsyncBuffer(uint*, DMatrix<uint>&, unsigned int, unsigned int, unsigned long, DMatrix<uint> const&, MonoidF<uint, 1>, uint, CUstream_st*);
-template __host__ CUDART_DEVICE void CuMatrix<ulong>::reduceAsyncBuffer(ulong*, DMatrix<ulong>&, unsigned int, unsigned int, unsigned long, DMatrix<ulong> const&, MonoidF<ulong, 1>, ulong, CUstream_st*);
+template __host__ CUDART_DEVICE void CuMatrix<float>::reduceAsyncBuffer(float*, DMatrix<float>&, int, int, long, DMatrix<float> const&, MonoidF<float, 1>, float, CUstream_st*);
+template __host__ CUDART_DEVICE void CuMatrix<double>::reduceAsyncBuffer(double*, DMatrix<double>&, int, int, long, DMatrix<double> const&, MonoidF<double, 1>, double, CUstream_st*);
+template __host__ CUDART_DEVICE void CuMatrix<int>::reduceAsyncBuffer(int*, DMatrix<int>&, int, int, long, DMatrix<int> const&, MonoidF<int, 1>, int, CUstream_st*);
+template __host__ CUDART_DEVICE void CuMatrix<uint>::reduceAsyncBuffer(uint*, DMatrix<uint>&, int, int, long, DMatrix<uint> const&, MonoidF<uint, 1>, uint, CUstream_st*);
+template __host__ CUDART_DEVICE void CuMatrix<long>::reduceAsyncBuffer(long*, DMatrix<long>&, int, int, long, DMatrix<long> const&, MonoidF<long, 1>, long, CUstream_st*);
+template __host__ CUDART_DEVICE void CuMatrix<ulong>::reduceAsyncBuffer(ulong*, DMatrix<ulong>&, int, int, long, DMatrix<ulong> const&, MonoidF<ulong, 1>, ulong, CUstream_st*);
 #endif
 
 #ifdef  CuMatrix_Enable_KTS
@@ -248,17 +246,86 @@ template<typename T> template<template <typename> class BinaryOp> __host__ CUDAR
 template<typename T> template<int StateDim> __host__ CUDART_DEVICE T CuMatrix<T>::reduce(MonoidF<T,StateDim> op, T start, cudaStream_t stream ) const
 #endif
 {
+	//assert(lastMod != mod_host);
+
 	DMatrix<T> d_A;
-	asDmatrix(d_A);
-	T res = reduce(d_A, op, start, stream);
+	if(checkDebug(debugRedux) ) flprintf("tiler.m_m %u, tiler.m_n %u, tiler.m_p %u\n",tiler.m_m,tiler.m_n,tiler.m_p);
+
+	uint roff=0, coff=0, tileM = 0, tileN = 0;
+	int tileCount  = tiler.getTileCount();
+	tiler.tileDims(tileM,tileN,tdRows);
+	tileCount = MAX(tileCount, DIV_UP(m,tileM));
+	T* resA;
+	T res;
+#ifndef __CUDA_ARCH__
+	cherr(cudaHostAlloc(&resA,tileCount*sizeof(T),0));
+#else
+	resA = (T*) malloc(tileCount*sizeof(T));
+#endif
+
+	int lastGpu = 0;
+	int orgDevice = ExecCaps::currDev();
+	int gpuCount = tiler.countGpus();
+	if(checkDebug(debugRedux) ) flprintf("orgDev %d gpuCount %d\n",orgDevice, gpuCount);
+	cudaStream_t* streams = null;
+
+	if(gpuCount > 1) {
+		assert(!stream);
+		cudaStream_t* streams = (cudaStream_t* ) malloc(gpuCount * sizeof(cudaStream_t));
+		for(int i =0 ; i < gpuCount; i++) {
+			lastGpu = tiler.nextGpu(lastGpu);
+			if(gpuCount> 1)
+				ExecCaps_setDevice(lastGpu);
+			//cherr(cudaSetDevice(lastGpu));
+			cherr(cudaStreamCreateWithFlags(&streams[i],cudaStreamNonBlocking));
+		}
+	}
+	lastGpu = tiler.nextGpu(0);
+	if(checkDebug(debugRedux) ) flprintf("m %u, n %u, p %u, tiler.getTileCount() %d\n",m,n,p,tileCount);
+	for(int tile = 0; tile < tileCount; tile++) {
+		if(gpuCount> 1)
+			ExecCaps_setDevice(lastGpu);
+		tiler.tile1D( d_A,roff,coff,tileM, tileN, tile, tdRows,lastMod == mod_host, lastGpu,gpuCount > 1 ? streams[tile] : stream);
+		resA[tile] = reduce(d_A, op, start, gpuCount > 1 ? streams[tile] : stream);
+	}
+	if(gpuCount > 1) {
+		for(int i =0 ; i < gpuCount; i++) {
+			cherr(cudaStreamDestroy(streams[i]));
+		}
+		free(streams);
+	}
+	if(tileCount > 1) {
+		if(checkDebug(debugRedux) ) flprintf("reduce tileCount %d\n",tileCount);
+		// reduce across tile reductions
+		T* dres = null;
+#ifndef __CUDA_ARCH__
+		cherr(cudaMalloc(&dres, tileCount *sizeof(T)));
+		cherr(cudaMemcpy(dres, resA, tileCount*sizeof(T), cudaMemcpyHostToDevice));
+#else
+		dres = resA;
+#endif
+		d_A.elements = dres;
+		d_A.m = tileCount;
+		d_A.n = 1; d_A.p = 1;
+		res = reduce(d_A, op, start, stream);
+#ifndef __CUDA_ARCH__
+		cudaFree(dres);
+#endif
+	} else {
+		if(checkDebug(debugRedux) ) flprintf("single tile reduction -> %f\n", (float) resA[0]);
+		res =  resA[0];
+	}
+#ifndef __CUDA_ARCH__
+	if(checkDebug(debugDestr))flprintf("freeing host resA %p\n", resA);
+	cherr(cudaFreeHost(resA));
+#else
+	free(resA);
+#endif
+
 	return res;
 }
+
 #ifdef  CuMatrix_Enable_KTS
-template __host__ CUDART_DEVICE float CuMatrix<float>::reduce<sqrPlusBinaryOp>(sqrPlusBinaryOp<float>, float, CUstream_st*) const;
-template __host__ CUDART_DEVICE double CuMatrix<double>::reduce<sqrPlusBinaryOp>(sqrPlusBinaryOp<double>, double, CUstream_st*) const;
-template __host__ CUDART_DEVICE ulong CuMatrix<ulong>::reduce<sqrPlusBinaryOp>(sqrPlusBinaryOp<ulong>, ulong, CUstream_st*) const;
-template  __host__ CUDART_DEVICE int CuMatrix<int>::reduce<sqrPlusBinaryOp>(sqrPlusBinaryOp<int>, int, CUstream_st*) const;
-template  __host__ CUDART_DEVICE unsigned int CuMatrix<unsigned int>::reduce<sqrPlusBinaryOp>(sqrPlusBinaryOp<unsigned int>, unsigned int, CUstream_st*) const;
 #else
 template __host__ CUDART_DEVICE float CuMatrix<float>::reduce(MonoidF<float,1>, float, CUstream_st*) const;
 template __host__ CUDART_DEVICE double CuMatrix<double>::reduce(MonoidF<double,1>, double, CUstream_st*) const;
@@ -268,30 +335,86 @@ template __host__ CUDART_DEVICE ulong CuMatrix<ulong>::reduce(MonoidF<ulong,1>, 
 #endif
 
 #ifdef  CuMatrix_Enable_KTS
-template<typename T> template<template <typename> class BinaryOp> __host__ CUDART_DEVICE T CuMatrix<T>::reduceColumn(BinaryOp<T> op, T start, uint col, cudaStream_t stream ) const
+template<typename T> template<template <typename> class BinaryOp> __host__ CUDART_DEVICE T CuMatrix<T>::reduceColumn(BinaryOp<T> op, T start, int col, cudaStream_t stream ) const
 #else
-template<typename T> template<int StateDim> __host__ CUDART_DEVICE T CuMatrix<T>::reduceColumn(MonoidF<T,StateDim> op, T start, uint col, cudaStream_t stream ) const
+template<typename T> template<int StateDim> __host__ CUDART_DEVICE T CuMatrix<T>::reduceColumn(MonoidF<T,StateDim> op, T start, int col, cudaStream_t stream ) const
 #endif
 {
 	DMatrix<T> d_A;
-	asDmatrix(d_A);
+
+	T* resA;
 	T res;
-	reduceColumn(&res, d_A, op, start, col, stream);
-	cherr(cudaDeviceSynchronize());
+	int lastGpu = 0;
+	int orgDevice = ExecCaps::currDev();
+	int gpuCount = tiler.countGpus();
+	int tileCount = tiler.getTileCount();
+	cudaStream_t* streams = null;
+
+	if(gpuCount > 1) {
+		assert(!stream);
+		streams = (cudaStream_t* ) malloc(gpuCount * sizeof(cudaStream_t));
+		for(int i =0 ; i < gpuCount; i++) {
+			lastGpu = tiler.nextGpu(lastGpu);
+#ifndef __CUDA_ARCH__
+			cherr(cudaSetDevice(lastGpu));
+#endif
+			cherr(cudaStreamCreateWithFlags(&streams[i],cudaStreamNonBlocking));
+		}
+	}
+	lastGpu = tiler.nextGpu(0);
+	uint roff, coff, tileM = 0, tileN = 0;
+#ifndef __CUDA_ARCH__
+	cherr(cudaHostAlloc(&resA,tileCount*sizeof(T),0));
+#else
+	resA = (T*) malloc(tileCount*sizeof(T));
+#endif
+
+	for(int tile = 0; tile < tileCount; tile++) {
+		tiler.tile1D(d_A, roff, coff, tileM, tileN, tile, tdRows, true);
+		reduceColumn(resA + tile, d_A, op, start, col, stream);
+	}
+	if(tileCount > 1) {
+		if(checkDebug(debugRedux) ) flprintf("reduce across %d tile reductions %d\n",tileCount);
+		// reduce across tile reductions
+		T* dres = null;
+#ifndef __CUDA_ARCH__
+		cherr(cudaMalloc(&dres, tileCount*sizeof(T)));
+		cherr(cudaMemcpy(dres, resA, tileCount*sizeof(T), cudaMemcpyHostToDevice));
+#else
+		dres = resA;
+#endif
+		d_A.elements = dres;
+		d_A.m = tileCount;
+		d_A.n = 1; d_A.p = 1;
+		res = reduce(d_A, op, start, stream);
+#ifndef __CUDA_ARCH__
+		cudaFree(dres);
+#endif
+	} else {
+		if(checkDebug(debugRedux) ) flprintf("single tile reduction -> %f\n", (float) resA[0]);
+		res =  resA[0];
+	}
+#ifndef __CUDA_ARCH__
+	if(checkDebug(debugDestr))flprintf("freeing host resA %p\n", resA);
+	cherr(cudaFreeHost(resA));
+#else
+	free(resA);
+#endif
+
 	return res;
 }
 #ifdef  CuMatrix_Enable_KTS
-template __host__ CUDART_DEVICE float CuMatrix<float>::reduceColumn<sqrPlusBinaryOp>(sqrPlusBinaryOp<float>, float, uint, CUstream_st*) const;
-template __host__ CUDART_DEVICE double CuMatrix<double>::reduceColumn<sqrPlusBinaryOp>(sqrPlusBinaryOp<double>, double, uint, CUstream_st*) const;
-template __host__ CUDART_DEVICE float CuMatrix<float>::reduceColumn<plusBinaryOp>(plusBinaryOp<float>, float, uint, CUstream_st*) const;
-template __host__ CUDART_DEVICE double CuMatrix<double>::reduceColumn<plusBinaryOp>(plusBinaryOp<double>, double, uint, CUstream_st*) const;
-template __host__ CUDART_DEVICE unsigned long CuMatrix<unsigned long>::reduceColumn<plusBinaryOp>(plusBinaryOp<unsigned long>, unsigned long, unsigned int, CUstream_st*) const;
+template __host__ CUDART_DEVICE float CuMatrix<float>::reduceColumn<plusBinaryOp>(plusBinaryOp<float>, float, int, CUstream_st*) const;
+template __host__ CUDART_DEVICE double CuMatrix<double>::reduceColumn<plusBinaryOp>(plusBinaryOp<double>, double, int, CUstream_st*) const;
+template __host__ CUDART_DEVICE unsigned long CuMatrix<unsigned long>::reduceColumn<plusBinaryOp>(plusBinaryOp<unsigned long>, unsigned long, int, CUstream_st*) const;
+
+
 #else
-template __host__ CUDART_DEVICE float CuMatrix<float>::reduceColumn<1>(MonoidF<float,1>, float, uint, CUstream_st*) const;
-template __host__ CUDART_DEVICE double CuMatrix<double>::reduceColumn<1>(MonoidF<double,1>, double, uint, CUstream_st*) const;
-template __host__ CUDART_DEVICE int CuMatrix<int>::reduceColumn<1>(MonoidF<int,1>, int, uint, CUstream_st*) const;
-template __host__ CUDART_DEVICE uint CuMatrix<uint>::reduceColumn<1>(MonoidF<uint,1>, uint, uint, CUstream_st*) const;
-template __host__ CUDART_DEVICE ulong CuMatrix<ulong>::reduceColumn<1>(MonoidF<ulong,1>, ulong, uint, CUstream_st*) const;
+template __host__ CUDART_DEVICE float CuMatrix<float>::reduceColumn<1>(MonoidF<float,1>, float, int, CUstream_st*) const;
+template __host__ CUDART_DEVICE double CuMatrix<double>::reduceColumn<1>(MonoidF<double,1>, double, int, CUstream_st*) const;
+template __host__ CUDART_DEVICE int CuMatrix<int>::reduceColumn<1>(MonoidF<int,1>, int, int, CUstream_st*) const;
+template __host__ CUDART_DEVICE uint CuMatrix<uint>::reduceColumn<1>(MonoidF<uint,1>, uint, int, CUstream_st*) const;
+template __host__ CUDART_DEVICE ulong CuMatrix<ulong>::reduceColumn<1>(MonoidF<ulong,1>, ulong, int, CUstream_st*) const;
 #endif
 
 #ifdef  CuMatrix_Enable_KTS
@@ -300,19 +423,36 @@ template<typename T> template<template <typename> class BinaryOp> __host__ CUDAR
 template<typename T> template<int StateDim> __host__ CUDART_DEVICE void CuMatrix<T>::reduceAsync(T* result, MonoidF<T,StateDim> op, T start, cudaStream_t stream ) const
 #endif
 {
-	DMatrix<T> d_A;
-	asDmatrix(d_A);
-	reduce(result, d_A, op, start, stream);
+	reduce(op, start, stream);
 }
+
+#ifdef  CuMatrix_Enable_KTS
+
+
+#else
+template __host__ CUDART_DEVICE void CuMatrix<float>::reduceAsync<1>(float*, MonoidF<float, 1>, float, CUstream_st*) const;
+template __host__ CUDART_DEVICE void CuMatrix<double>::reduceAsync<1>(double*, MonoidF<double, 1>, double, CUstream_st*) const;
+template __host__ CUDART_DEVICE void CuMatrix<int>::reduceAsync<1>(int*, MonoidF<int, 1>, int, CUstream_st*) const;
+template __host__ CUDART_DEVICE void CuMatrix<uint>::reduceAsync<1>(uint*, MonoidF<uint, 1>, uint, CUstream_st*) const;
+template __host__ CUDART_DEVICE void CuMatrix<ulong>::reduceAsync<1>(ulong*, MonoidF<ulong, 1>, ulong, CUstream_st*) const;
+#endif
+
 
 // reduction with addition (Σ)
 template<typename T> __host__ CUDART_DEVICE T CuMatrix<T>::sum(cudaStream_t stream ) const {
-	DMatrix<T> d_A;
-	asDmatrix(d_A);
+	//T res[factor];
+#ifndef __CUDA_ARCH__
+	if(checkDebug(debugRedux)){
+		flprintf("this %p %dx%dx%d elems %p dev %p lastMod %s\n", this, m,n,p,elements, tiler.buff(), b_util::modStr(lastMod));
+		printColoArray<T>(elements,20);
+		printDevArray<T>(tiler.buff(),"EVE",-1,20);
+	}
+
+#endif
 #ifdef  CuMatrix_Enable_KTS
-	T res = reduce(d_A, plusBinaryOp<T>(), 0 , stream);
+	T res = reduce( plusBinaryOp<T>(), 0 , stream);
 #else
-	T res = reduce(d_A, Functory<T,plusBinaryOp>::pinch(), 0 , stream);
+	T res = reduce(Functory<T,plusBinaryOp>::pinch(), 0 , stream);
 #endif
 	return res;
 }
@@ -325,28 +465,26 @@ template<typename T> __host__  T CuMatrix<T>::kahanSum() const {
 	T c = 0;
 	for(int i = 0; i < m * p ;i++) {
 		if(i == m * p -1 ){
-			if(checkDebug(debugRedux)) outln("last idx " << i << ", (d_elements + idx) = " << (d_elements + i));
+			if(checkDebug(debugRedux)) outln("last idx " << i << ", (elements + idx) = " << (elements + i));
 		}
 		if(i % p < n) { // verify idx inside meat
 			T y = elements[i] - c;
 			T t = sum + y;
 			c = (t - sum) - y;
 			sum = t;
-		}else {
+		}/*else {
 			if(checkDebug(debugRedux)) outln("skipping idx " << i << " ( i %p == ) " << (i %p));
-		}
+		}*/
 	}
 	return sum;
 }
 
 // reduction with multiplication (Π)
 template<typename T> __host__ CUDART_DEVICE T CuMatrix<T>::prod( cudaStream_t stream ) const {
-	DMatrix<T> d_A;
-	asDmatrix(d_A);
 #ifdef  CuMatrix_Enable_KTS
-	T res = reduce(d_A, multBinaryOp<T>(), 1.0, stream);
+	T res = reduce( multBinaryOp<T>(), 1.0, stream);
 #else
-	T res = reduce(d_A, Functory<T,multBinaryOp>::pinch(), 1.0, stream);
+	T res = reduce( Functory<T,multBinaryOp>::pinch(), 1.0, stream);
 #endif
 	return res;
 }
@@ -354,27 +492,51 @@ template<typename T> __host__ CUDART_DEVICE T CuMatrix<T>::prod( cudaStream_t st
 
 template<typename T> void CuMatrix<T>::featureMeans( CuMatrix<T>& means, bool lv) const {
 	DMatrix<T> d_Means, d_X;
-	asDmatrix(d_X);
-	means.asDmatrix(d_Means);
-	featureAvgKernelL(d_Means, d_X, lv);
+	uint tileM, tileN, roff, coff;
+
+	tiler.tileDims(tileM, tileN, tdCols);
+	int tileCount = DIV_UP(m,tileM);
+
+	for(int i = 0; i < tileCount; i++) {
+		tiler.tileLike(d_X, roff,coff, tileM, tileN, i, tdCols, true);
+		if(checkDebug(debugTiler))prlocf("means tiling");
+		means.tiler.tileLike(d_Means, roff,coff, tileM, tileN, i, tdCols, true);
+		if(vectorQ()) {
+			means.set(0, sum()/length());
+		} else {
+			featureAvgKernelL(d_Means, d_X, lv);
+		}
+		means.tiler.syncTile(d_Means, roff, coff);
+	}
 	means.invalidateHost();
 }
 
 template<typename T> void CuMatrix<T>::featureMeansTx( CuMatrix<T>& means) const {
 	DMatrix<T> d_Means, d_X;
-	asDmatrix(d_X);
-	means.asDmatrix(d_Means);
-	//outln("d_Means " << util<T>::pdm(d_Means));
-	featureAvgTxdKernelL(d_Means, d_X);
+	uint tileM, tileN, roff,coff;
+	tiler.tileDims(tileM, tileN, tdRows); // todo check this
+	int tileCount = DIV_UP(m,tileM);
+	for(int i = 0; i < tileCount; i++) {
+		tiler.tileLike(d_X, roff,coff, tileM, tileN, i, tdRows, true);
+		means.tiler.tileLike(d_Means, roff,coff, tileM, tileN, i, tdRows, true);
+		featureAvgTxdKernelL(d_Means, d_X);
+		means.tiler.syncTile(d_Means, roff, coff);
+	}
 	means.invalidateHost();
 }
 
 template<typename T> void CuMatrix<T>::featureMeansStreams( CuMatrix<T>& means, bool lv,int nstreams) const {
 	DMatrix<T> d_Means, d_X;
-	asDmatrix(d_X);
-	means.asDmatrix(d_Means);
-	//outln("d_Means " << util<T>::pdm(d_Means));
-	featureAvgMultiStreamL(d_Means, d_X, lv, nstreams);
+	uint tileM, tileN, roff, coff;
+	int tileCount = tiler.getTileCount();
+	tiler.tileDims(tileM, tileN, tdCols); // todo check this
+	for(int i = 0; i < tileCount; i++) {
+		tiler.tileLike(d_X, roff,coff, tileM, tileN, i, tdCols, true);
+		means.tiler.tileLike(d_Means, roff,coff, tileM, tileN, i, tdCols, true);
+		//outln("d_Means " << util<T>::pdm(d_Means));
+		featureAvgMultiStreamL(d_Means, d_X, lv, nstreams);
+		means.tiler.syncTile(d_Means, roff, coff);
+	}
 	means.invalidateHost();
 }
 
@@ -436,13 +598,13 @@ template<typename T> __host__ CUDART_DEVICE void CuMatrix<T>::rowSum(DMatrix<T>&
 	uint gridX = blockX >= d_x.m ? 1 : DIV_UP(d_x.m,blockX);
 	if(checkDebug(debugRedux)){
 		prlocf("rowSum on ");
-		::prdm(d_x);
+		util<T>::prdm(d_x);
 		flprintf(" with gridX %d and blockX %d\n",gridX,blockX);
 	}
 
 	//b_util::pFuncPtrAtts((T*)rowSumKernel2<T>);
 	bool valid = b_util::validLaunchQ((void*)rowSumKernel2<T>,dim3(gridX), dim3(blockX));
-	flprintf("valid %s\n", tOrF(valid));
+	if(checkDebug(debugRedux))flprintf("valid %s\n", tOrF(valid));
 	rowSumKernel2<<<gridX, blockX, 0, stream>>>(d_rowSums, d_x);
 #ifdef __CUDA_ARCH__
 	__syncthreads();
@@ -459,8 +621,8 @@ template<typename T> __host__ CUDART_DEVICE void CuMatrix<T>::rowSum(DMatrix<T>&
 template<typename T, int StateDim> __global__ void rowReductionKernelNlte64(DMatrix<T> resVec, MonoidF bop, const DMatrix<T> x, uint slice, uint slices) {
 	assert(x.n < 65);
 	// shared mem to relay partial sums of rows that span warps
-	uint col = threadIdx.x;
-	uint row = threadIdx.y + blockIdx.y * blockDim.y;
+	int col = threadIdx.x;
+	int row = threadIdx.y + blockIdx.y * blockDim.y;
 	if(row < x.m && col < x.n) {
 		// test for elements processed by by cols with laneid > WARP_SIZE
 		int2 laneid = b_util::laneId(threadIdx, blockIdx, blockDim);
@@ -518,8 +680,8 @@ void rowReductionKernelNlte64(DMatrix<T> resVec, MonoidF<T,StateDim> bop, const 
 {
 	assert(x.n < 65);
 	// shared mem to relay partial sums of rows that span warps
-	uint col = threadIdx.x;
-	uint row = threadIdx.y + blockIdx.y * blockDim.y;
+	int col = threadIdx.x;
+	int row = threadIdx.y + blockIdx.y * blockDim.y;
 	// thread in mat bounds
 	if(row < x.m && col < x.n) {
 		uint laneid;
@@ -574,8 +736,8 @@ template<typename T, template <typename> class BinaryOpF> __global__ void rowRed
 template<typename T, int StateDim> __global__ void rowReductionKernel(DMatrix<T> resVec, MonoidF<T,StateDim> bop, const DMatrix<T> x, uint slice, uint slices, uint stripes)
 #endif
 {
-	uint col = threadIdx.x;
-	uint row = threadIdx.y + blockIdx.y * blockDim.y;
+	int col = threadIdx.x;
+	int row = threadIdx.y + blockIdx.y * blockDim.y;
 	ulong soffset = slice * x.m * x.p;
 	uint toffset = slice * x.m * resVec.p;
 	for(int stripe = 0; stripe < stripes; stripe++) {
@@ -665,6 +827,7 @@ template <typename T> template <int StateDim> __host__ CUDART_DEVICE void CuMatr
 #ifdef  CuMatrix_Enable_KTS
 template __host__ CUDART_DEVICE void CuMatrix<float>::reduceRows<plusBinaryOp>(DMatrix<float>&, DMatrix<float> const&, plusBinaryOp<float>, CUstream_st*);
 template __host__ CUDART_DEVICE void CuMatrix<double>::reduceRows<plusBinaryOp>(DMatrix<double>&, DMatrix<double> const&, plusBinaryOp<double>, CUstream_st*);
+template __host__ CUDART_DEVICE void CuMatrix<long>::reduceRows<plusBinaryOp>(DMatrix<long>&, DMatrix<long> const&, plusBinaryOp<long>, CUstream_st*);
 template __host__ CUDART_DEVICE void CuMatrix<ulong>::reduceRows<plusBinaryOp>(DMatrix<ulong>&, DMatrix<ulong> const&, plusBinaryOp<ulong>, CUstream_st*);
 template __host__ CUDART_DEVICE void CuMatrix<int>::reduceRows<plusBinaryOp>(DMatrix<int>&, DMatrix<int> const&, plusBinaryOp<int>, CUstream_st*);
 template __host__ CUDART_DEVICE void CuMatrix<unsigned int>::reduceRows<plusBinaryOp>(DMatrix<unsigned int>&, DMatrix<unsigned int> const&, plusBinaryOp<unsigned int>, CUstream_st*);
@@ -672,6 +835,7 @@ template __host__ CUDART_DEVICE void CuMatrix<unsigned int>::reduceRows<plusBina
 #else
 template __host__ CUDART_DEVICE void CuMatrix<float>::reduceRows(DMatrix<float>&, DMatrix<float> const&, MonoidF<float,1>, CUstream_st*);
 template __host__ CUDART_DEVICE void CuMatrix<double>::reduceRows(DMatrix<double>&, DMatrix<double> const&, MonoidF<double,1>, CUstream_st*);
+template __host__ CUDART_DEVICE void CuMatrix<long>::reduceRows(DMatrix<long>&, DMatrix<long> const&, MonoidF<long,1>, CUstream_st*);
 template __host__ CUDART_DEVICE void CuMatrix<ulong>::reduceRows(DMatrix<ulong>&, DMatrix<ulong> const&, MonoidF<ulong,1>, CUstream_st*);
 template __host__ CUDART_DEVICE void CuMatrix<int>::reduceRows(DMatrix<int>&, DMatrix<int> const&, MonoidF<int,1>, CUstream_st*);
 template __host__ CUDART_DEVICE void CuMatrix<uint>::reduceRows(DMatrix<uint>&, DMatrix<uint> const&, MonoidF<uint,1>, CUstream_st*);

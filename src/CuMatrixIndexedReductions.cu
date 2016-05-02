@@ -15,11 +15,11 @@
  */
 #ifdef  CuMatrix_Enable_KTS
 template<typename T, uint blockSize, bool nIsPow2, template <typename> class IndexUnaryOp, template <typename> class BinaryOp>
-__global__ void indexReduceOpKernel( T* g_odata, ulong n,
+__global__ void indexReduceOpKernel( T* g_odata, long n,
 		IndexUnaryOp<T> idxOp, BinaryOp<T> op, T start)
 #else
 template<typename T, uint blockSize, bool nIsPow2, int IopDim, int BopDim>
-__global__ void indexReduceOpKernel( T* g_odata, ulong n,
+__global__ void indexReduceOpKernel( T* g_odata, long n,
 		UnaryOpIndexF<T,IopDim> idxOp, MonoidF<T,BopDim> op, T start)
 #endif
 {
@@ -128,15 +128,15 @@ __global__ void indexReduceOpKernel( T* g_odata, ulong n,
 
 #ifdef  CuMatrix_Enable_KTS
 template<typename T> template<template <typename> class IndexUnaryOp,template <typename> class BinaryOp> __host__ CUDART_DEVICE
-T CuMatrix<T>::indexReduceLauncher(T* d_odata, ulong n, IndexUnaryOp<T> idxOp, BinaryOp<T> op, T start, cudaStream_t stream)
+T CuMatrix<T>::indexReduceLauncher(T* d_odata, long n, IndexUnaryOp<T> idxOp, BinaryOp<T> op, T start, cudaStream_t stream)
 #else
 template<typename T> template<int IopDim, int BopDim> __host__ CUDART_DEVICE
-T CuMatrix<T>::indexReduceLauncher(T* d_odata, ulong n, UnaryOpIndexF<T,IopDim> idxOp, MonoidF<T,BopDim> op, T start, cudaStream_t stream)
+T CuMatrix<T>::indexReduceLauncher(T* d_odata, long n, UnaryOpIndexF<T,IopDim> idxOp, MonoidF<T,BopDim> op, T start, cudaStream_t stream)
 #endif
 {
 	T gpu_result = 0;
 	gpu_result = 0;
-	uint blocks,threads;
+	int blocks,threads;
 	getReductionExecContext(blocks,threads,n);
 	// sum partial block sums on GPU
 	dim3 dimBlock(threads, 1, 1);
@@ -281,29 +281,28 @@ template __host__ CUDART_DEVICE double CuMatrix<double>::indexReduceLauncher<seq
 #else
 #endif
 
-template<typename T> __host__ CUDART_DEVICE T CuMatrix<T>::factorial(uint val) {
+template<typename T> __host__ CUDART_DEVICE T CuMatrix<T>::factorial(int val) {
 	if(val < 3) {
 		return val;
 	}
-	uint threads;
-	uint blocks;
+	int threads;
+	int blocks;
 	getReductionExecContext(blocks,threads, val);
 	CuMatrix<T> res(blocks, 1, false, true);
 	DMatrix<T> d_Res;
-	res.asDmatrix(d_Res, false);
+	res.tile0(d_Res,false);
 	sequenceFiller<T> seq = Functory<T, sequenceFiller>::pinch(1);
-	T total = indexReduceLauncher( res.d_elements, val, seq, Functory<T,multBinaryOp>::pinch(), 1.0);
-	//if(checkDebug(syncHappy))cudaDeviceSynchronize();
+	T total = indexReduceLauncher( res.tiler.currBuffer(), val, seq, Functory<T,multBinaryOp>::pinch(), 1.0);
 	return total;
 }
 
 #ifdef  CuMatrix_Enable_KTS
 template<typename T, uint blockSize, bool nIsPow2, typename IndexBoolUnaryOp, template <typename> class BinaryOp>
-__global__ void indexedReduceOpKernel(T* g_odata, const T* g_idata, ulong n,
+__global__ void indexedReduceOpKernel(T* g_odata, const T* g_idata, long n,
 		IndexBoolUnaryOp idxOp, BinaryOp<T> op, T start)
 #else
 template<typename T, uint blockSize, bool nIsPow2, int IopDim, int BopDim>
-__global__ void indexedReduceOpKernel(T* g_odata, const T* g_idata, ulong n,
+__global__ void indexedReduceOpKernel(T* g_odata, const T* g_idata, long n,
 		UnaryOpIndexF<T,IopDim> idxOp, BinaryOpF<T,BopDim> op, T start)
 #endif
 {
@@ -414,13 +413,13 @@ __global__ void indexedReduceOpKernel(T* g_odata, const T* g_idata, ulong n,
 
 #ifdef  CuMatrix_Enable_KTS
 template<typename T> template<typename IndexBoolUnaryOp,template <typename> class BinaryOp> __host__ CUDART_DEVICE
-T CuMatrix<T>::indexedReduceLauncher(DMatrix<T> res, const T* d_idata, ulong n,	IndexBoolUnaryOp idxOp, BinaryOp<T> op, T start, cudaStream_t stream)
+T CuMatrix<T>::indexedReduceLauncher(DMatrix<T> res, const T* d_idata, long n,	IndexBoolUnaryOp idxOp, BinaryOp<T> op, T start, cudaStream_t stream)
 #else
 template<typename T> template<int IopDim, int BopDim> __host__ CUDART_DEVICE
-T CuMatrix<T>::indexedReduceLauncher(DMatrix<T> res, const T* d_idata, ulong n,	UnaryOpIndexF<T,IopDim> idxOp, MonoidF<T,BopDim> op, T start, cudaStream_t stream)
+T CuMatrix<T>::indexedReduceLauncher(DMatrix<T> res, const T* d_idata, long n,	UnaryOpIndexF<T,IopDim> idxOp, MonoidF<T,BopDim> op, T start, cudaStream_t stream)
 #endif
 {
-	uint blocks,threads;
+	int blocks,threads;
 	getReductionExecContext(blocks,threads,n);
 	// sum partial block sums on GPU
 	dim3 dimBlock(threads, 1, 1);
@@ -548,7 +547,7 @@ T CuMatrix<T>::indexedReduceLauncher(DMatrix<T> res, const T* d_idata, ulong n,	
 	n = DIV_UP(n, 2*threads);
 	if(checkDebug(debugRedux)){
 		prlocf("now reducing indexReduceOpKernel results\n");
-		util<T>::prdm(res);
+		util<T>::prdmln(res);
 	}
 
 	return CuMatrix<T>::reduce(res, op, start, stream  );
@@ -566,11 +565,11 @@ template double CuMatrix<double>::indexedReduceLauncher<isRowFiller<float>, plus
 template<typename T, uint blockSize, bool nIsPow2, typename IndexBoolUnaryOp, typename UnaryOp,
 		typename BinaryOp>
 __global__ void indexedGloloReduceOpKernel(const T* g_idata, T* g_odata,
-		ulong n, IndexBoolUnaryOp idxOp, UnaryOp gop, BinaryOp lop, T start)
+		long n, IndexBoolUnaryOp idxOp, UnaryOp gop, BinaryOp lop, T start)
 #else
 template<typename T, uint blockSize, bool nIsPow2, int IopDim, int UopDim, int BopDim>
 __global__ void indexedGloloReduceOpKernel(const T* g_idata, T* g_odata,
-		ulong n, UnaryOpIndexF<T,IopDim> idxOp, UnaryOpF<T,UopDim> gop, BinaryOpF<T,BopDim> lop, T start)
+		long n, UnaryOpIndexF<T,IopDim> idxOp, UnaryOpF<T,UopDim> gop, BinaryOpF<T,BopDim> lop, T start)
 #endif
 {
 	T* sdata = SharedMemory<T>();
@@ -683,7 +682,7 @@ template <typename T> inline __device__ bool tabs(T val) {
 	return val < 0 ? -val : val;
 }
 
-template<typename T> __global__ void onesColumnQRowMajorKernel(const T* g_idata, T* g_odata, uint rows, uint pitch, T epsilon) {
+template<typename T> __global__ void onesColumnQRowMajorKernel(const T* g_idata, T* g_odata, int rows, int pitch, T epsilon) {
     ulong i = blockIdx.x * blockDim.x + threadIdx.x;
     if(i < rows && tabs(1 - g_idata[i * pitch]) < epsilon) {
     	g_odata[0] = 1;
@@ -698,13 +697,13 @@ template<typename T> template<int IopDim, int BopDim> __host__ CUDART_DEVICE
 T CuMatrix<T>::indexedReduceL(const DMatrix<T>& d_M, UnaryOpIndexF<T, IopDim> idxOp, MonoidF<T, BopDim> op, T start, cudaStream_t stream) const
 #endif
 {
-	unsigned int nP = d_M.m * d_M.n;
-	uint threads;
-	uint blocks;
+	long nP = d_M.m * d_M.n;
+	int threads;
+	int blocks;
 	getReductionExecContext(blocks,threads, nP);
 	CuMatrix<T> res(blocks, 1, false, true);
 	DMatrix<T> d_Res;
-	res.asDmatrix(d_Res, false);
+	res.tile0(d_Res,false);
 	T total = indexedReduceLauncher( d_Res, d_M.elements, nP, idxOp, op, start, stream);
 	return total;
 }
@@ -718,7 +717,7 @@ T CuMatrix<T>::indexedReduce(UnaryOpIndexF<T, IopDim> idxOp, MonoidF<T, BopDim> 
 #endif
 {
 	DMatrix<T> d_A;
-	asDmatrix(d_A);
+	tiler.tile0(d_A,true);
 	T res = indexedReduceL(d_A, idxOp, op, start, stream);
 	return res;
 }
@@ -726,10 +725,10 @@ T CuMatrix<T>::indexedReduce(UnaryOpIndexF<T, IopDim> idxOp, MonoidF<T, BopDim> 
 
 #ifdef  CuMatrix_Enable_KTS
 template<typename T> template<template <typename> class BinaryOp> __host__ CUDART_DEVICE
-T CuMatrix<T>::columnReduceIndexed(BinaryOp<T> op, uint column, T start, cudaStream_t stream ) const
+T CuMatrix<T>::columnReduceIndexed(BinaryOp<T> op, int column, T start, cudaStream_t stream ) const
 #else
 template<typename T> template<int StateDim> __host__ CUDART_DEVICE
-T CuMatrix<T>::columnReduceIndexed(MonoidF<T,StateDim> op, uint column, T start, cudaStream_t stream ) const
+T CuMatrix<T>::columnReduceIndexed(MonoidF<T,StateDim> op, int column, T start, cudaStream_t stream ) const
 #endif
 {
 	if(!validColQ(column)) {
@@ -747,16 +746,16 @@ T CuMatrix<T>::columnReduceIndexed(MonoidF<T,StateDim> op, uint column, T start,
 	return indexedReduce(idxOp, op, 0,stream);
 }
 
-template<typename T> __host__ CUDART_DEVICE T CuMatrix<T>::columnSum(uint column, cudaStream_t stream ) const {
+template<typename T> __host__ CUDART_DEVICE T CuMatrix<T>::columnSum(int column, cudaStream_t stream ) const {
 	return columnReduceIndexed( Functory<T,plusBinaryOp>::pinch(), column, 0, stream);
 }
 
 #ifdef  CuMatrix_Enable_KTS
 template<typename T> template<template <typename> class BinaryOp> __host__ CUDART_DEVICE
-T CuMatrix<T>::rowReduce(BinaryOp<T> op, uint row, T start , cudaStream_t stream) const
+T CuMatrix<T>::rowReduce(BinaryOp<T> op, int row, T start , cudaStream_t stream) const
 #else
 template<typename T> template<int StateDim> __host__ CUDART_DEVICE
-T CuMatrix<T>::rowReduce(MonoidF<T,StateDim> op, uint row, T start , cudaStream_t stream) const
+T CuMatrix<T>::rowReduce(MonoidF<T,StateDim> op, int row, T start , cudaStream_t stream) const
 #endif
 {
 	if(!validRowQ(row)) {
@@ -766,7 +765,7 @@ T CuMatrix<T>::rowReduce(MonoidF<T,StateDim> op, uint row, T start , cudaStream_
 	return indexedReduce(idxOp, op, 0, stream);
 }
 
-template<typename T> __host__ CUDART_DEVICE T CuMatrix<T>::rowSum(uint row, cudaStream_t stream) const {
+template<typename T> __host__ CUDART_DEVICE T CuMatrix<T>::rowSum(int row, cudaStream_t stream) const {
 #ifdef  CuMatrix_Enable_KTS
 	return rowReduce(plusBinaryOp<T>(), row, 0, stream);
 #else

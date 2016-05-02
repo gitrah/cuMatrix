@@ -15,8 +15,8 @@ template <typename T> long CuMatrix<T>::MemDhCopied = 0;
 template <typename T> long CuMatrix<T>::MemHhCopied = 0;
 template <typename T> const T CuMatrix<T>::MinValue = util<T>::minValue();
 template <typename T> const T CuMatrix<T>::MaxValue = util<T>::maxValue();
-template <typename T> uint CuMatrix<T>::MaxRowsDisplayed = 0;
-template <typename T> uint CuMatrix<T>::MaxColsDisplayed = 0;
+template <typename T> int CuMatrix<T>::MaxRowsDisplayed = 0;
+template <typename T> int CuMatrix<T>::MaxColsDisplayed = 0;
 template <typename T> dim3 CuMatrix<T>::DefaultMatProdBlock = dim3(32,32);
 template <typename T> CuMatrix<T>* CuMatrix<T>::Identities[1024];
 
@@ -29,5 +29,13 @@ template <typename T> CuMatrix<T> CuMatrix<T>::ZeroMatrix(0,0,false,false);
 template class CuMatrix<float>;
 template class CuMatrix<double>;
 template class CuMatrix<int>;
+template class CuMatrix<long>;
 template class CuMatrix<uint>;
 template class CuMatrix<ulong>;
+
+template class PackedMat<float>;
+template class PackedMat<double>;
+template class PackedMat<int>;
+template class PackedMat<long>;
+template class PackedMat<uint>;
+template class PackedMat<ulong>;

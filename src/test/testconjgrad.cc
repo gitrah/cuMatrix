@@ -9,14 +9,11 @@
 #include "../AnomalyDetection.h"
 
 template <typename T> int testConjGrad(int argc, char** args) {
-	std::map<std::string, CuMatrix<T>*> f= util<T>::parseOctaveDataFile("ex4data1.txt",false, true);
-	std::map<std::string, CuMatrix<T>*> fw= util<T>::parseOctaveDataFile("ex4weights.txt",false, true);
+	std::map<std::string, CuMatrix<T>*> f= CuMatrix<T>::parseOctaveDataFile("ex4data1.txt",false, true);
+	std::map<std::string, CuMatrix<T>*> fw= CuMatrix<T>::parseOctaveDataFile("ex4weights.txt",false, true);
 
 
 	std::cout << "found " << f.size() << " octave objects\n";
-	typedef typename std::map<std::string, CuMatrix<T>*>::iterator iterator;
-	iterator it;
-	it = f.begin();
 
 	CuMatrix<T>& x = *f["X"];
 	outln("load x of " << x.m << "x" << x.n);

@@ -137,10 +137,10 @@ template <typename T> __global__ void useConstFillerTyped( constFiller<T>* fil) 
 
 
 
-template int testCopyFtor<float>::operator()(int argc, char const ** args) const;
-template int testCopyFtor<double>::operator()(int argc, char const ** args) const;
-template int testCopyFtor<ulong>::operator()(int argc, char const ** args) const;
-template <typename T> int testCopyFtor<T>::operator()(int argc, const char** args) const {
+template int testCopyFtor<float>::operator()(int argc, const char **argv) const;
+template int testCopyFtor<double>::operator()(int argc, const char **argv) const;
+template int testCopyFtor<ulong>::operator()(int argc, const char **argv) const;
+template <typename T> int testCopyFtor<T>::operator()(int argc, const char **argv) const {
 	outln("testCopyFtor() enter");
 	constFiller<T>* pf;
 	cherr(cudaMalloc(&pf, sizeof(constFiller<T>)));
@@ -158,10 +158,10 @@ template <typename T> int testCopyFtor<T>::operator()(int argc, const char** arg
 	return 0;
 }
 
-template int testFastInvSqrt<float>::operator()(int argc, char const ** args) const;
-template int testFastInvSqrt<double>::operator()(int argc, char const ** args) const;
-template <typename T> int testFastInvSqrt<T>::operator()(int argc, const char** args) const {
-	int count = b_util::getCount(argc,args,100);
+template int testFastInvSqrt<float>::operator()(int argc, const char **argv) const;
+template int testFastInvSqrt<double>::operator()(int argc, const char **argv) const;
+template <typename T> int testFastInvSqrt<T>::operator()(int argc, const char **argv) const {
+	int count = b_util::getCount(argc,argv,100);
     CuTimer timer;
 	setCurrGpuDebugFlags( debugVerbose,true,false);
 	slowInvSqrtUnaryOp<T> slow = Functory<T, slowInvSqrtUnaryOp>::pinch();

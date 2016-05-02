@@ -6,15 +6,8 @@
  */
 
 #include <list>
-#include <algorithm>
-#include <iostream>
-
 #include <iostream>
 #include <string>
-#include "debug.h"
-#include "util.h"
-#include "caps.h"
-#include "CuMatrix.h"
 #include <algorithm>
 #include <iterator>
 #include <assert.h>
@@ -24,11 +17,27 @@
 #include <ctime>
 #include <sys/time.h>
 
+#include "debug.h"
+#include "util.h"
+#include "caps.h"
+#include "CuMatrix.h"
+
+#ifdef CuMatrix_UseOmp
+#include <omp.h>
+#endif
+#include <cstdarg>
+
+using std::cin;
+using std::istringstream;
+using std::istream_iterator;
+
 #define DEBUG = true
 //#define UTLTYTMPLT
 
 extern ulong totalThreads;
 extern ulong totalElements;
+
+const char* GpuCriteriaNames[] = { "gcCoolest", "gcFreeest", "gcFastest" };
 
 
 template<typename T, typename U> string pp(pair<T, U>& p) {
@@ -47,6 +56,36 @@ template string pp<float, float>(pair<float, float>&);
 template string pp<double, double>(pair<double, double>&);
 template string pp<ulong, ulong>(pair<ulong, ulong>&);
 
+void tprintf(const char *__restrict __format, ...) {
+#ifdef CuMatrix_UseOmp
+	uint tid = omp_get_thread_num();
+	char buff[1024];
+	va_list args;
+	va_start(args, __format);
+	vsprintf(buff, __format, args);
+	va_end(args);
+	printf("thread %u: %s", tid, buff);
+#endif
+}
+
+void b_util::deCap(char* s) {
+	s[0] = (char) tolower(s[0]);
+}
+
+string b_util::deCap(const string& s) {
+	char first = s[0];
+	first = (char) tolower(first);
+	string r(s);
+	r[0] = first;
+	return r;
+}
+string b_util::cap(const string& s) {
+	char first = s[0];
+	first = (char) toupper(first);
+	string r(s);
+	r[0] = first;
+	return r;
+}
 
 template<typename T> string b_util::pvec(vector<T>& v) {
 	stringstream ss;
@@ -62,7 +101,7 @@ template<typename T> string b_util::pvec(vector<T>& v) {
 	ss << "}";
 	return ss.str();
 }
-template string b_util::pvec(vector<uint>&);
+template string b_util::pvec(vector<int>&);
 
 
 string b_util::pd3(const dim3& d3) {
@@ -154,26 +193,6 @@ string b_util::pexec(const dim3& grid, const dim3& block, uint smem) {
 }
 
 
-inline string trim_right_copy(const string& s, const string& delimiters =
-		" \f\n\r\t\v") {
-	return s.substr(0, s.find_last_not_of(delimiters) + 1);
-}
-
-inline string trim_left_copy(const string& s, const string& delimiters =
-		" \f\n\r\t\v") {
-	return s.substr(s.find_first_not_of(delimiters));
-}
-
-inline string trim_copy(const string& s, const string& delimiters =
-		" \f\n\r\t\v") {
-	return trim_left_copy(trim_right_copy(s, delimiters), delimiters);
-}
-
-int b_util::currDevice() {
-	int dev;
-	checkCudaErrors(cudaGetDevice(&dev));
-	return dev;
-}
 
 int b_util::countLines(const char* path, int headerLength) {
 	ifstream f;
@@ -213,7 +232,7 @@ vector<string> b_util::readLines(const char * path) {
 	while (!f.eof()) {
 		getline(fi, currLine);
 		lc++;
-		if (lc % 1000 == 0) {
+		if (lc % 10000 == 0) {
 			cout << dg;
 			dg = (dg + 1) % 10;
 		}
@@ -246,7 +265,9 @@ vector<string> b_util::split(string s) {
 
 
 template<typename T> bool util<T>::almostEquals(T t1, T t2, T epsilon) {
-	return ::abs(t2 - t1) < epsilon;
+	if(checkDebug(debugVerbose))flprintf("t2 %f - t1 %f < epsilon %f ::abs(t2 - t1) %f (%d)\n",
+			(double)t2, (double) t1, (double) epsilon,(double) ::fabs(t2 - t1),  ::fabs(t2 - t1) < epsilon);
+	return ::fabs(t2 - t1) < epsilon;
 }
 
 template<typename T> string util<T>::pdm(const DMatrix<T>& md) {
@@ -270,140 +291,48 @@ template<typename T> string util<T>::pdm(const DMatrix<T>& md) {
 	return res.str();
 }
 
-enum OctaveType {
-	unknown, matrix, scalar
-};
-const string otUnknown("unknown");
-const string otMatrix("matrix");
-const string otScalar("scalar");
-
-string ot2str(OctaveType t) {
-	switch (t) {
-	case matrix:
-		return (otMatrix);
-	case scalar:
-		return (otScalar);
-	default:
-		return (otUnknown);
+template<typename T> bool util<T>::onDevice(T* ptr, int dev) {
+	assert(ptr);
+	struct cudaPointerAttributes ptrAtts;
+	int orgDev = ExecCaps::currDev();
+	if(orgDev != dev) {
+		ExecCaps_visitDevice(dev);
 	}
+	//ptrAtts.memoryType = dev ? cudaMemoryTypeDevice : cudaMemoryTypeHost;
+	cudaError_t ret = cudaPointerGetAttributes(&ptrAtts, ptr);
+	if(checkDebug(debugCheckValid))outln(b_util::caller() << " ptr " << ptr << " on dev " << dev << ": " << ret << " atts.dev " << ptrAtts.device);
+
+	bool succ = false;
+	if (ret == cudaSuccess) {
+		succ= dev == ptrAtts.device;
+	}
+	if(orgDev != dev) {
+		ExecCaps_restoreDevice(orgDev);
+	}
+
+	return succ;
 }
 
-OctaveType str2OctaveType(string str) {
-	if ("matrix" == str) {
-		return (matrix);
-	} else if ("scalar" == str) {
-		return (scalar);
-	}
-	return (unknown);
+template<typename T> bool util<T>::onCurrentDevice(T* ptr) {
+	return onDevice(ptr, ExecCaps::currDev());
 }
 
-template<typename T> int util<T>::release(map<string, CuMatrix<T>*>& theMap) {
-//	map
-	outln("map release");
-	int cnt = 0;
-	typedef typename map<string, CuMatrix<T>*>::iterator iterator;
-	iterator it = theMap.begin();
-	while (it != theMap.end()) {
-		CuMatrix<T>* m = (*it).second;
-		delete m;
-		it++;
-		cnt++;
-	}
-	return (cnt);
-}
-
-template<typename T> void addOctaveObject(map<string, CuMatrix<T>*>& theMap,
-		typename map<string, CuMatrix<T>*>::iterator& it, string name,
-		OctaveType elementType, CuMatrix<T>* currMat, bool matrixOwnsBuffer) {
-	switch (elementType) {
-	case scalar:
-	case matrix: {
-		currMat->invalidateDevice();
-		currMat->syncBuffers();
-		outln(
-				"adding " << ot2str(elementType).c_str() << " '" << name.c_str() << "' of dims " << currMat->m << ", " << currMat->n);
-		outln("first elem " << currMat->get(0,0));
-		outln("first h elem " << currMat->elements[0]);
-		outln("last,0 elem " << currMat->get(currMat->m-1,0));
-		//outln( "created matrix of dims " << m.getRows() << ", " << m.getCols());
-		theMap.insert(it, pair<string, CuMatrix<T>*>(name, currMat));
-		break;
-	}
-	default: {
-		outln("received unknown type for " << name.c_str());
-		break;
-	}
-	}
-}
-
-template<typename T> void util<T>::parseDataLine(string line, T* elementData,
-		uint currRow, uint rows, uint cols, bool colMajor) {
-	//outln(line);
-	//outln("elementData " << elementData << ", startIdx " << startIdx);
-	vector<string> tokens = b_util::split(line);
-	int len = tokens.size();
-	//outln(currRow <<" has " << len << " tokens");
-
-	int idx = 0;
-	const uint l = cols * rows - 1;
-	T next;
-	const uint startIdx = colMajor ? currRow * rows : currRow * cols;
-	while (idx < len) {
-		stringstream(tokens[idx]) >> next;
-		//outln("token " << idx << ": " << next);
-		if (colMajor) {
-			elementData[(idx + startIdx) * rows % l] = next;
-		} else {
-			elementData[startIdx + idx] = next;
-		}
-		//outln("input " << spl[idx]);
-		//outln("output " << elementData[startIdx + idx]);
-		idx++;
-	}
-}
-
-#define MAX_COLS 4096
-double lastRow[MAX_COLS];
-bool warnedAlready[MAX_COLS];
-template<typename T> void util<T>::parseCsvDataLine(const CuMatrix<T>* x,
-		int currLine, string line, const char* sepChars) {
-	//outln("parseCsvDataLine " << line);
-	if(currLine ==0) {
-		memset(lastRow,0,4096*sizeof(double));
-		memset(warnedAlready,0,4096*sizeof(bool));
-	}
-	const char* cline = line.c_str();
-	char * pch;
-	int idx = 0;
-	double dblNext;
-	T next;
-	char* copy = (char*) malloc(line.size() + 1);
-	char* lcopy = copy;
-	strcpy(lcopy, cline);
-	pch = strtok(lcopy, sepChars);
-	while (pch != null) {
-		dblNext = atof(pch);
-		if(currLine > 0 && idx < MAX_COLS && sizeof(T) < 8) {
-			double diff = fabs(lastRow[idx] - dblNext);
-			next = dblNext;
-			T tdiff = (T) lastRow[idx] - next;
-			if(diff != 0 && !warnedAlready[idx] &&
-					( ::isinf(diff/tdiff) ||  fabs( 1- fabs(diff/tdiff)) > .05 )) {
-				outln("\n\n!!!!!!!!!!!!!!!!!!!!!!!!!!!\n\n" <<
-						"WARNING (once per column) current type parameter results in loss of precision at " <<
-						currLine << ", " << idx << ": " << (diff/tdiff) <<
-						"\n\n!!!!!!!!!!!!!!!!!!!!!!!!\n\n") ;
-				warnedAlready[idx] = true;
+template<typename T> int util<T>::getDevice(T* ptr) {
+	assert(ptr);
+	int onDeviceRes = -1;
+	for(int i = 0; i < ExecCaps::deviceCount; i++) {
+		if(onDevice(ptr,i)) {
+			//outln("ptr " << ptr << " on device " << i );
+			if(onDeviceRes != -1) {
+				outln("but ptr " << ptr << " already on device " << onDeviceRes );
+			} else {
+				onDeviceRes = i;
 			}
-		} else {
-			next=atof(pch);
 		}
-		lastRow[idx] = dblNext;
-		x->elements[currLine * x->p + idx++] = next;
-		pch = strtok(null, sepChars);
 	}
-	free(copy);
+	return onDeviceRes;
 }
+
 
 template<typename T> inline string pv1_3(T v) {
 	char buff[5];
@@ -468,6 +397,151 @@ void b_util::announceDuration(float exeTime) {
 	outln("Gpu: " << exeTime/1000. << "s");
 }
 
+int b_util::allDevices(function<void()>ftor) {
+//int b_util::allDevices(void (*ftor)()) {
+	int orgDev = ExecCaps::currDev();
+	int dCount;
+	cherr(cudaGetDeviceCount(&dCount));
+	for(int i = 0; i < dCount; i++) {
+		ExecCaps_visitDevice(i);
+		outln("calling ftor for dev " << i);
+		ftor();
+	}
+	if(ExecCaps::currDev() != orgDev) {
+		ExecCaps_restoreDevice(orgDev);
+	}
+	return dCount;
+}
+
+bool b_util::anyDevice(function<bool()>ftor) {
+//int b_util::allDevices(void (*ftor)()) {
+	int orgDev = ExecCaps::currDev();
+	int dCount;
+	cherr(cudaGetDeviceCount(&dCount));
+	bool res = false;
+	for(int i = 0; i < dCount && res; i++) {
+		ExecCaps_visitDevice(i);
+		outln("calling ftor for dev " << i);
+		res |= ftor();
+	}
+	if(ExecCaps::currDev() != orgDev) {
+		ExecCaps_restoreDevice(orgDev);
+	}
+	return res;
+}
+uint b_util::getDeviceTemp(int dev) {
+#ifdef CuMatrix_NVML
+	// give coldest gpu next test
+	nvmlDevice_t device;
+	uint temp = UINT_MAX;
+	chnerr(nvmlDeviceGetHandleByIndex(dev,  &device));
+	chnerr(nvmlDeviceGetTemperature(device,NVML_TEMPERATURE_GPU, &temp ));
+	outln("gpu " << dev << " temp " << temp);
+	return temp;
+#else
+	return 0;
+#endif
+}
+
+GpuCriteria operator++(GpuCriteria& x) { return x = (GpuCriteria)(std::underlying_type<GpuCriteria>::type(x) + 1); }
+GpuCriteria operator*(GpuCriteria c) {return c;}
+GpuCriteria begin(GpuCriteria r) {return GpuCriteria::gcCoolest;}
+GpuCriteria end(GpuCriteria r)   {GpuCriteria l=GpuCriteria::gcFastest; return ++l;}
+
+int b_util::getDeviceThatIs(GpuCriteria criteria) {
+	size_t maxFree = 0;
+	int minTemp = INT_MAX;
+	int selDevice=-1;
+	switch(criteria) {
+	case gcFreeest:
+		b_util::allDevices([&maxFree,&selDevice] () {
+			size_t currFree, dummy;
+			int dev= ExecCaps::currDev();
+			checkCudaError(cudaMemGetInfo(&currFree, &dummy));
+			if(currFree > maxFree) {
+				selDevice = dev;
+				maxFree = currFree;
+			};
+		});
+		break;
+	case gcCoolest:
+		b_util::allDevices([&minTemp,&selDevice] () {
+			int dev= ExecCaps::currDev();
+			int currTemp = b_util::getDeviceTemp(dev);
+			if(currTemp < minTemp) {
+				selDevice = dev;
+				minTemp = currTemp;
+			};
+		});
+		break;
+	}
+	flprintf("device that is %d: %d\n", criteria, selDevice);
+	return selDevice;
+}
+
+
+
+template<typename T> bool b_util::onCurrDeviceQ(T& m) {
+	int currDev = ExecCaps::currDev();
+	bool ret = m.tiler.deviceOfResidence() == currDev;
+	if(!ret) {
+		outln("not on currDev " << currDev << ": " << m.tiler);
+
+	}
+	return ret;
+}
+template bool b_util::onCurrDeviceQ<CuMatrix<float>>(CuMatrix<float>&);
+template bool b_util::onCurrDeviceQ<CuMatrix<float> const>(CuMatrix<float> const&);
+template bool b_util::onCurrDeviceQ<CuMatrix<double>>(CuMatrix<double>&);
+template bool b_util::onCurrDeviceQ<CuMatrix<double> const>(CuMatrix<double> const&);
+template bool b_util::onCurrDeviceQ<CuMatrix<ulong>>(CuMatrix<ulong>&);
+template bool b_util::onCurrDeviceQ<CuMatrix<ulong> const>(CuMatrix<ulong> const&);
+
+template<typename T> int b_util::deviceOfResidence(T& m) {
+	return m.tiler.deviceOfResidence();
+}
+template int b_util::deviceOfResidence<CuMatrix<float>>(CuMatrix<float>&);
+template int b_util::deviceOfResidence<CuMatrix<float> const>(CuMatrix<float> const&);
+template int b_util::deviceOfResidence<CuMatrix<double>>(CuMatrix<double>&);
+template int b_util::deviceOfResidence<CuMatrix<double> const>(CuMatrix<double> const&);
+template int b_util::deviceOfResidence<CuMatrix<ulong>>(CuMatrix<ulong>&);
+template int b_util::deviceOfResidence<CuMatrix<ulong> const>(CuMatrix<ulong> const&);
+
+template<typename T> bool b_util::onDeviceQ(int dev, T& m) {
+	bool ret = m.tiler.deviceOfResidence() == dev;
+	if(!ret) {
+		outln("not on dev " << dev << ": " << m.tiler);
+	}
+	return ret;
+}
+template bool b_util::onDeviceQ<CuMatrix<float>>(int, CuMatrix<float>&);
+template bool b_util::onDeviceQ<CuMatrix<float> const>(int, CuMatrix<float> const&);
+template bool b_util::onDeviceQ<CuMatrix<double>>(int, CuMatrix<double>&);
+template bool b_util::onDeviceQ<CuMatrix<double> const>(int, CuMatrix<double> const&);
+template bool b_util::onDeviceQ<CuMatrix<ulong>>(int, CuMatrix<ulong>&);
+template bool b_util::onDeviceQ<CuMatrix<ulong> const>(int, CuMatrix<ulong> const&);
+
+
+template<typename T> int b_util::devByMaxOccupancy( map<int,long>& devOx, T& m) {
+	outln("m " << m.toShortString() << "\n\tm.size " << m.size);
+	for(const auto &m : devOx)  {
+		outln("dev " << m.first <<", ox " << m.second);
+	}
+	devOx[m.tiler.deviceOfResidence()] += m.size;
+	return 0;
+}
+template int b_util::devByMaxOccupancy<CuMatrix<float>>(map<int,long>&, CuMatrix<float>&);
+template int b_util::devByMaxOccupancy<CuMatrix<float> const>(map<int,long>&, CuMatrix<float> const&);
+template int b_util::devByMaxOccupancy<CuMatrix<double>>(map<int,long>&, CuMatrix<double>&);
+template int b_util::devByMaxOccupancy<CuMatrix<double> const>(map<int,long>&, CuMatrix<double> const&);
+template int b_util::devByMaxOccupancy<CuMatrix<ulong>>(map<int,long>&, CuMatrix<ulong>&);
+template int b_util::devByMaxOccupancy<CuMatrix<ulong> const>(map<int,long>&, CuMatrix<ulong> const&);
+
+void b_util::dumpGpuStats() {
+	for(const auto& crit : GpuCriteria())  {
+		flprintf("%s device is %d\n", GpuCriteriaNames[crit], getDeviceThatIs(crit));
+	}
+}
 void b_util::abortDumper(int level) {
 	dumpStack("SIGABORT");
 	exit(-1);
@@ -541,13 +615,13 @@ time_t b_util::timeReps(void (*fn)(), int reps) {
 	return time(0) - nowt;
 }
 
-void b_util::randSequence(vector<uint>& ret, uint count, uint start) {
+void b_util::randSequence(vector<int>& ret, int count, int start) {
 	uint* arry = new uint[count];
-	for (uint i = 0; i < count; i++) {
+	for (int i = 0; i < count; i++) {
 		arry[i] = start + i;
 	}
 	vector<uint> st(arry, arry + count);
-	uint idx;
+	int idx;
 	while (!st.empty()) {
 		idx = rand() % st.size();
 		ret.insert(ret.end(), st[idx]);
@@ -558,7 +632,7 @@ void b_util::randSequence(vector<uint>& ret, uint count, uint start) {
 
 template<typename T> void b_util::toArray(T* arry, const vector<T>& v, int start,
 		int count) {
-	outln("toArray start " << start << ", count " << count);
+//	outln("toArray start " << start << ", count " << count);
 	typedef typename vector<T>::const_iterator iterator;
 	int idx = 0;
 	for (iterator i = v.begin() + start; i < v.end() && idx < count; i++) {
@@ -567,7 +641,8 @@ template<typename T> void b_util::toArray(T* arry, const vector<T>& v, int start
 	}
 }
 
-template void b_util::toArray(uint* arry, const vector<uint>& v, int, int);
+template void b_util::toArray<uint>(uint* arry, const vector<uint>& v, int, int);
+template void b_util::toArray<int>(int* arry, const vector<int>& v, int, int);
 
 double b_util::diffclock(clock_t clock1, clock_t clock2) {
 	double diffticks = clock1 - clock2;
@@ -575,209 +650,7 @@ double b_util::diffclock(clock_t clock1, clock_t clock2) {
 	return diffms;
 }
 
-const string Name("name:");
-const string Type("type:");
-const string Rows("rows:");
-const string Columns("columns:");
-
-template<typename T> map<string, CuMatrix<T>*> util<T>::parseOctaveDataFile(
-		const char * path, bool colMajor, bool matrixOwnsBuffer) {
-	map<string, CuMatrix<T>*> dataMap;
-	typedef typename map<string, CuMatrix<T>*>::iterator iterator;
-	iterator it = dataMap.begin();
-	OctaveType elementType = unknown;
-	unsigned long idx = string::npos;
-	uint rows = 0, cols = 0, currRow = 0;
-	clock_t lastChunk = 0, lastTime = 0;
-	string name = "";
-	double deltaMs = 0;
-	CuMatrix<T>* currMat = null;
-	bool colsSet = false, rowsSet = false;
-	vector<string> lines = b_util::readLines(path);
-	vector<string>::iterator itLines = lines.begin();
-	while (itLines != lines.end()) {
-		string line = trim_copy(*itLines);
-		if (line.find("#") == 0) { // start of var declaration
-			idx = line.find(Name);
-			if (idx != string::npos) {
-				if (name.length() > 0 && elementType != unknown) {
-					// add previous object
-					addOctaveObject(dataMap, it, name, elementType, currMat,
-							matrixOwnsBuffer);
-					outln(
-							"adding " << name.c_str() << " took " << b_util::diffclock(clock(),lastTime) << "s");
-					outln("now " << dataMap.size() << " elements in dataMap");
-					currRow = 0;
-				}
-				name = trim_copy(line.substr(idx + Name.size()));
-				outln("found " << name.c_str());
-				lastTime = clock();
-				rows = cols = 0;
-				colsSet = rowsSet = false;
-				elementType = unknown;
-				currMat = null;
-			} else {
-				idx = line.find(Type);
-				if (idx != string::npos) {
-					elementType = str2OctaveType(
-							trim_copy(line.substr(idx + Type.size())));
-					outln(
-							name.c_str() << " has type " << ot2str(elementType).c_str());
-					if (elementType == scalar) {
-						currMat = new CuMatrix<T>(1, 1, matrixOwnsBuffer,true);
-						currMat->invalidateDevice();
-						rows = cols = 1;
-					}
-				} else {
-					idx = line.find(Rows);
-					if (idx != string::npos) {
-						stringstream(trim_copy(line.substr(idx + Rows.size())))
-								>> rows;
-						outln(name.c_str() << " has rows " << rows);
-						rowsSet = true;
-					} else {
-						idx = line.find(Columns);
-						if (idx != string::npos) {
-							stringstream(
-									trim_copy(
-											line.substr(idx + Columns.size())))
-									>> cols;
-							outln(name.c_str() << " has cols " << cols);
-							colsSet = true;
-						}
-					}
-					if (rowsSet && colsSet) {
-						outln(
-								"creating buffer for " << name.c_str() << " of size " << (rows * cols));
-						currMat = new CuMatrix<T>(rows, cols, matrixOwnsBuffer,true);
-						currMat->invalidateDevice();
-						outln("got currMat " << currMat->toShortString());
-						outln("got buffer " << currMat->elements);
-					}
-				}
-			}
-		} else if (!line.empty()) {
-			//outln("expected data line");
-			switch (elementType) {
-			case matrix: {
-				assert(
-						!name.empty() && elementType != unknown && rowsSet
-								&& colsSet);
-				// it's a data line (row)
-				util::parseDataLine(line, currMat->elements, currRow, rows,
-						cols, colMajor);
-				currRow++;
-				if ((currRow % 100) == 0) {
-					clock_t now = clock();
-					if (lastChunk != 0) {
-						deltaMs = b_util::diffclock(now, lastChunk);
-						outln(
-								"on " << currRow << "/" << rows << " at " << (deltaMs / 100) << " ms/row");
-					} else {
-						outln("on " << currRow << "/" << rows);
-					}
-					lastChunk = now;
-				}
-				break;
-			}
-			case scalar: {
-				stringstream(trim_copy(line)) >> currMat->elements[0];
-				break;
-			}
-
-			default:
-				outln("unknown type " << elementType);
-				break;
-			}
-		}
-		//outln("next");
-		itLines++;
-	}
-
-	// add last obj
-	if (!name.empty() && elementType != unknown) {
-		addOctaveObject(dataMap, it, name, elementType, currMat,
-				matrixOwnsBuffer);
-	}
-
-	return dataMap;
-}
-
-template<typename T> map<string, CuMatrix<T>*> util<T>::parseCsvDataFile(
-		const char * path, const char* sepChars, bool colMajor,
-		bool matrixOwnsBuffer, bool hasXandY) {
-	CuTimer timer;
-	timer.start();
-	map<string, CuMatrix<T>*> dataMap;
-	typedef typename map<string, CuMatrix<T>*>::iterator iterator;
-	iterator it = dataMap.begin();
-	OctaveType elementType = unknown;
-	//unsigned long idx = string::npos;
-	int currLine = 0;
-	uint cols = 0;//uint rows = 0, cols = 0, currRow = 0;
-
-	//clock_t lastChunk = 0, lastTime = 0;
-	string name = "";
-	//double deltaMs = 0;
-	//bool colsSet = false, rowsSet = false;
-	outln("reading " << path);
-	vector<string> lines = b_util::readLines(path);
-	int lineCount = lines.size();
-	outln(
-			"reading " << lineCount << " lines from " << path << " took " << timer.stop()/1000 << "s");
-
-	vector<string>::iterator itLines = lines.begin();
-	// skip header
-
-	string line = trim_copy(*itLines);
-	const char* cline = line.c_str();
-	char * pch;
-	char lcopy[line.size() + 10];
-	strcpy(lcopy, cline);
-	printf("lcopy %s\n", lcopy);
-	pch = strtok(lcopy, sepChars);
-	while (pch != null) {
-		printf("%s\n", pch);
-		pch = strtok(null, sepChars);
-		cols++;
-	}
-	elementType = matrix;
-	itLines++;
-	CuMatrix<T>* mat = new CuMatrix<T>(lineCount - 1, cols, matrixOwnsBuffer, true);
-	outln("mat " << mat->toShortString());
-	while (itLines != lines.end()) {
-
-		string line = trim_copy(*itLines);
-		//const char* cline = line.c_str();
-		if (!line.empty()) {
-			//outln("expected data line");
-			switch (elementType) {
-			case matrix: {
-				// it's a data line (row)
-				util::parseCsvDataLine(mat, currLine, line, sepChars);
-				lineCount++;
-				break;
-			}
-			default:
-				outln("unknown type " << elementType);
-				break;
-			}
-		}
-		//outln("next");
-		itLines++;
-		currLine++;
-	}
-	if (hasXandY) {
-		addOctaveObject(dataMap, it, "xAndY", elementType, mat,
-				matrixOwnsBuffer);
-	} else {
-		addOctaveObject(dataMap, it, "x", elementType, mat, matrixOwnsBuffer);
-	}
-
-	return dataMap;
-}
-
-string b_util::toStr(const uintPair& p) {
+string b_util::toStr(const intPair& p) {
 	stringstream s1, s2;
 	s1 << p.first;
 	s2 << p.second;
@@ -800,23 +673,9 @@ template bool Math<ulong>::aboutEq(ulong x1, ulong x2, ulong epsilon);
 
 string b_util::expNotation(long val) {
 	char buff[256];
-	double factor = 1.;
-	string units = "";
-	if (val >= Giga) {
-		factor = 1. / Giga;
-		units = "G";
-	} else if (val >= Mega) {
-		factor = 1. / Mega;
-		units = "M";
-	} else if (val >= Kilo) {
-		factor = 1. / Kilo;
-		units = "K";
-	} else {
-		units = " bytes";
-	}
-	sprintf(buff, "%2.3g", val * factor);
+	b_util::expNotation(buff, val);
 	stringstream ss;
-	ss << buff << units;
+	ss << buff;
 	return ss.str();
 }
 
@@ -1035,7 +894,7 @@ void b_util::dumpStack(int start, int depth) {
 	cout << stackString(start, depth) << endl;
 }
 void b_util::dumpStack(int depth) {
-	cout << stackString(4, depth) << endl;
+	cout << stackString(3, depth) << endl;
 }
 void b_util::dumpStack(const char * msg, int depth) {
 	cout << msg << endl << stackString(4, depth) << endl;
@@ -1058,18 +917,18 @@ void b_util::waitEnter() {
 //template <> float ConjugateGradient<float>::MinPositiveValue = 1.4E-45;
 
 
-void b_util::execContext(uint threads, uint count, uint spacePerThread,
+void b_util::vectorExecContext(int threads, uint count, uint spacePerThread,
 		dim3& dBlocks, dim3& dThreads, uint& smem) {
 	if (threads % WARP_SIZE != 0) {
 		outln(
 				"WARN: " << threads << " is not a multiple of the warp size (32)");
 	}
 	ExecCaps* currCaps;
-	checkCudaError(ExecCaps::currCaps(&currCaps));
+	ExecCaps::currCaps(&currCaps);
 	uint limitSmemThreads = currCaps->memSharedPerBlock / spacePerThread;
 	threads = (int) MIN((uint)threads, limitSmemThreads);
 	smem = MIN(currCaps->memSharedPerBlock, threads * spacePerThread);
-	uint blocks = (count + threads - 1) / threads;
+	int blocks = (count + threads - 1) / threads;
 
 	dBlocks.y = dBlocks.z = 1;
 	dBlocks.x = blocks;
@@ -1099,17 +958,6 @@ void b_util::dumpError(cudaError_t err) {
 	if (err != cudaSuccess) {
 		cout << __cudaGetErrorEnum(err) << endl;
 	}
-}
-double b_util::usedMemRatio() {
-	size_t freeMemory, totalMemory;
-	cudaMemGetInfo(&freeMemory, &totalMemory);
-	if (debugMem)
-		outln("freeMemory " << freeMemory << ", total " << totalMemory);
-	return 100 * (1 - freeMemory * 1. / totalMemory);
-}
-
-void b_util::usedDmem() {
-	cout << "Memory " << usedMemRatio() << "% used\n";
 }
 
 
@@ -1144,6 +992,7 @@ template<typename T> template<typename K> int util<T>::deletePtrMap(
 
 template void util<float>::deletePtrArray<ExecCaps>(ExecCaps**,int);
 template void util<double>::deletePtrArray<ExecCaps>(ExecCaps**,int);
+template void util<long>::deletePtrArray<ExecCaps>(ExecCaps**,int);
 template void util<ulong>::deletePtrArray<ExecCaps>(ExecCaps**,int);
 template void util<uint>::deletePtrArray<ExecCaps>(ExecCaps**,int);
 template void util<int>::deletePtrArray<ExecCaps>(ExecCaps**,int);
@@ -1156,6 +1005,7 @@ template<typename T> template<typename K> void util<T>::deletePtrArray(
 
 template void util<float>::deleteDevPtrArray<ExecCaps>(ExecCaps**,int);
 template void util<double>::deleteDevPtrArray<ExecCaps>(ExecCaps**,int);
+template void util<long>::deleteDevPtrArray<ExecCaps>(ExecCaps**,int);
 template void util<ulong>::deleteDevPtrArray<ExecCaps>(ExecCaps**,int);
 template void util<uint>::deleteDevPtrArray<ExecCaps>(ExecCaps**,int);
 template void util<int>::deleteDevPtrArray<ExecCaps>(ExecCaps**,int);
@@ -1200,6 +1050,7 @@ void b_util::syncGpu(const char * msg) {
 	checkCudaError(cudaDeviceSynchronize());
 }
 
+
 template<typename T> cudaError_t util<T>::copyRange(T* targ, ulong targOff,
 		T* src, ulong srcOff, ulong count) {
 	cudaError_t err = cudaMemcpy(targ + targOff, src + srcOff,
@@ -1219,7 +1070,7 @@ template<typename T> T util<T>::sumCPU(T* vals, ulong count) {
 	return sum;
 }
 
-CuTimer::CuTimer(cudaStream_t stream) : evt_start(0), evt_stop(0), stream(0), status(ready) {
+CuTimer::CuTimer(cudaStream_t stream) : evt_start(0), evt_stop(0), stream(0), status(ready), device(ExecCaps::currDev()) {
 	checkCudaError(cudaEventCreate(&evt_start));
 	checkCudaError(cudaEventCreate(&evt_stop));
 	this->stream = stream;
@@ -1228,17 +1079,32 @@ CuTimer::CuTimer(cudaStream_t stream) : evt_start(0), evt_stop(0), stream(0), st
 
 CuTimer::~CuTimer() {
 	//outln("~CuTimer " << this);
-	checkCudaError(cudaEventDestroy(evt_start));
-	checkCudaError(cudaEventDestroy(evt_stop));
+/*
+	if(evt_start) {
+		checkCudaError(cudaEventDestroy(evt_start));
+		evt_start = 0;
+	}
+	if(evt_stop) {
+		checkCudaError(cudaEventDestroy(evt_stop));
+		evt_stop = 0;
+	}
+*/
 }
 
 void CuTimer::start() {
-	//outln("starting CuTimer " << this << " (stream " << stream << ")");
+	if(checkDebug(debugExec))outln("starting CuTimer " << this << " (stream " << stream << ")");
 	if (status != ready) {
 		dthrow(timerAlreadyStarted());
 	}
+	int currDev = ExecCaps::currDev();
+	if(device != currDev) {
+		ExecCaps_visitDevice(device);
+	}
 	status = started;
 	checkCudaError(cudaEventRecord(evt_start, stream));
+	if(device != currDev) {
+		ExecCaps_restoreDevice(currDev);
+	}
 }
 
 float CuTimer::stop() {
@@ -1247,17 +1113,65 @@ float CuTimer::stop() {
 	if (status != started) {
 		dthrow(timerNotStarted());
 	}
+	int currDev = ExecCaps::currDev();
+	if(device != currDev) {
+		ExecCaps_visitDevice(device);
+	}
 	status = ready;
 	checkCudaError(cudaEventRecord(evt_stop, stream));
 	//checkCudaError(cudaGetLastError());
 	checkCudaError(cudaEventSynchronize(evt_stop));
 	float exeTimeMs;
 	checkCudaError(cudaEventElapsedTime(&exeTimeMs, evt_start, evt_stop));
+	if(device != currDev) {
+		ExecCaps_restoreDevice(currDev);
+	}
 	return exeTimeMs;
+}
+
+
+CuMethodTimer::CuMethodTimer(void (*funcPtr)(), cudaStream_t stream) : CuTimer(stream), funcPtr(funcPtr), count(0), total(0) {
+	if(checkDebug(debugExec))outln("created CuMethodTimer " << this << " (stream " << stream << ", evt_start " << evt_start << ", evt_stop " << evt_stop << ")");
+}
+CuMethodTimer::CuMethodTimer(const char* name, cudaStream_t stream) : CuTimer(stream), funcName(name), count(0), total(0) {
+	if(checkDebug(debugExec))outln("created CuMethodTimer " << this << " (stream " << stream << ", evt_start " << evt_start << ", evt_stop " << evt_stop << ")");
+}
+CuMethodTimer::~CuMethodTimer() {
+//	summary();
+/*
+	if(evt_start) {
+		checkCudaError(cudaEventDestroy(evt_start));
+		evt_start = 0;
+	}
+	if(evt_stop) {
+		checkCudaError(cudaEventDestroy(evt_stop));
+		evt_stop = 0;
+	}
+*/
+}
+
+
+void CuMethodTimer::enter() {
+	start();
+}
+void CuMethodTimer::exit() {
+	total+=stop();
+	count++;
+}
+
+void CuMethodTimer::summary() {
+	outln("~CuMethodTimer " << this);
+	if(funcPtr) {
+		outln(b_util::unmangl(typeid(funcPtr).name()) << " called " << count << " total exec time " << (total/1000.0) << "s");
+	}else {
+		outln(funcName << " called " << count << " total exec time " << (total/1000.0) << "s");
+	}
+	outln("\tper exec " << (total/count)*1000.0 << "μs/c");
 }
 
 template struct util<float> ;
 template struct util<double> ;
+template struct util<long> ;
 template struct util<ulong> ;
 template struct util<int> ;
 template struct util<uint> ;
@@ -1265,7 +1179,6 @@ auto is_odd = [](int n) {return n%2==1;};
 
 
 void testLambada() {
-	   using namespace std;
 
 	   // Create a list of integers with a few initial elements.
 	   list<int> numbers;
@@ -1328,3 +1241,4 @@ int somethd() {
 	doSumpin<double, phoo, 55>();
 	return 0;
 }
+

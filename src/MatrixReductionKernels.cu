@@ -21,11 +21,11 @@
 template<typename T, uint blockSize, bool nIsPow2, template <typename> class BinaryOp1,
 template <typename> class  BinaryOp2>
 __global__ void combineReduceOpKernel(const T* g_idata1, const T* g_idata2,
-		T* g_odata, ulong n, BinaryOp1<T> mop, BinaryOp2<T> bop, T start)
+		T* g_odata, long n, BinaryOp1<T> mop, BinaryOp2<T> bop, T start)
 #else
 template<typename T, uint blockSize, bool nIsPow2, int MopDim, int BopDim>
 __global__ void combineReduceOpKernel(const T* g_idata1, const T* g_idata2,
-		T* g_odata, ulong n, BinaryOpF<T, MopDim> mop, BinaryOpF<T,BopDim> bop, T start)
+		T* g_odata, long n, BinaryOpF<T, MopDim> mop, BinaryOpF<T,BopDim> bop, T start)
 #endif
 {
 	T* sdata = SharedMemory<T>();
@@ -131,17 +131,17 @@ __global__ void combineReduceOpKernel(const T* g_idata1, const T* g_idata2,
 // input pass works across two matrices via BinaryOp1 'mop' (global to local), subsequent passes are regular self-reductions using binaryop 'op'
 #ifdef  CuMatrix_Enable_KTS
 template<typename T, template <typename> class BinaryOp1, template <typename> class BinaryOp2>
-__host__ CUDART_DEVICE T combineReduceOpLauncher(T* d_odata, const T* d_idata1, const T* d_idata2, ulong n, BinaryOp1<T> mop, BinaryOp2<T> bop, T start, cudaStream_t stream )
+__host__ CUDART_DEVICE T combineReduceOpLauncher(T* d_odata, const T* d_idata1, const T* d_idata2, long n, BinaryOp1<T> mop, BinaryOp2<T> bop, T start, cudaStream_t stream )
 #else
 template<typename T, int MopDim, int BopDim>
-__host__ CUDART_DEVICE T combineReduceOpLauncher(T* d_odata, const T* d_idata1, const T* d_idata2, ulong n, BinaryOpF<T,MopDim> mop, BinaryOpF<T,BopDim> bop, T start, cudaStream_t stream )
+__host__ CUDART_DEVICE T combineReduceOpLauncher(T* d_odata, const T* d_idata1, const T* d_idata2, long n, BinaryOpF<T,MopDim> mop, BinaryOpF<T,BopDim> bop, T start, cudaStream_t stream )
 #endif
 {
 #ifndef CuMatrix_Enable_KTS
 	#ifdef CuMatrix_StatFunc
-		flprintf("mop.fn %p, bop.fn %p\n", mop.fn, bop.fn);
+		if( checkDebug(debugRedux)) flprintf("mop.fn %p, bop.fn %p\n", mop.fn, bop.fn);
 	#else
-		flprintf("mop.operation %p, bop.operation %p\n", mop.operation, bop.operation);
+		if( checkDebug(debugRedux)) flprintf("mop.operation %p, bop.operation %p\n", mop.operation, bop.operation);
 	#endif
 #endif
 
@@ -152,7 +152,7 @@ __host__ CUDART_DEVICE T combineReduceOpLauncher(T* d_odata, const T* d_idata1, 
 	//printf("combineReduceOpLauncher\n");
 
 	// sum partial block sums on GPU
-	uint blocks,threads;
+	int blocks,threads;
 	bool powOf2Q;
 	bool firstRedux = true;
 	dim3 dimBlock;
@@ -283,7 +283,7 @@ __host__ CUDART_DEVICE T combineReduceOpLauncher(T* d_odata, const T* d_idata1, 
 				switch (threads) {
 #ifdef  CuMatrix_Enable_KTS
 				case 1024:
-					//reduceOpKernel(DMatrix<T> out, const DMatrix<T> src, T* g_odata, ulong n, BinaryOp2 op, T start)
+					//reduceOpKernel(DMatrix<T> out, const DMatrix<T> src, T* g_odata, long n, BinaryOp2 op, T start)
 					reduceOpKernel<T, 1024, true, BinaryOp2> <<< dimGrid, dimBlock, smemSize, stream >>>(d_odata, d_odata, n,bop, start); break;
 				case 512:
 					reduceOpKernel<T, 512, true, BinaryOp2> <<< dimGrid, dimBlock, smemSize, stream >>>(d_odata,d_odata, n,bop, start); break;
@@ -307,7 +307,7 @@ __host__ CUDART_DEVICE T combineReduceOpLauncher(T* d_odata, const T* d_idata1, 
 					reduceOpKernel<T, 1, true,BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(d_odata,d_odata, n,bop, start); break;
 #else
 				case 1024:
-					//reduceOpKernel(DMatrix<T> out, const DMatrix<T> src, T* g_odata, ulong n, BinaryOp2 op, T start)
+					//reduceOpKernel(DMatrix<T> out, const DMatrix<T> src, T* g_odata, long n, BinaryOp2 op, T start)
 					reduceOpKernel<T, 1024, true, BopDim> <<< dimGrid, dimBlock, smemSize, stream >>>(d_odata, d_odata, n,bop, start); break;
 				case 512:
 					reduceOpKernel<T, 512, true, BopDim> <<< dimGrid, dimBlock, smemSize, stream >>>(d_odata,d_odata, n,bop, start); break;
@@ -331,7 +331,7 @@ __host__ CUDART_DEVICE T combineReduceOpLauncher(T* d_odata, const T* d_idata1, 
 					reduceOpKernel<T, 1, true,BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(d_odata,d_odata, n,bop, start); break;
 #endif
 					}
-				prlocf("launched power-of-2 reduceOpKernel\n");
+				if(checkDebug(debugRedux))prlocf("launched power-of-2 reduceOpKernel\n");
 			} else {
 				switch (threads) {
 #ifdef  CuMatrix_Enable_KTS
@@ -420,54 +420,61 @@ __host__ CUDART_DEVICE T combineReduceOpLauncher(T* d_odata, const T* d_idata1, 
 
 template __host__ CUDART_DEVICE float combineReduceOpLauncher<float, multBinaryOp, plusBinaryOp >(float*, const float*, const float*,ulong, multBinaryOp<float>, plusBinaryOp<float>, float,cudaStream_t);
 template __host__ CUDART_DEVICE double combineReduceOpLauncher<double,multBinaryOp , plusBinaryOp >(double*, const double*, const double*, ulong, multBinaryOp<double>, plusBinaryOp<double>, double,cudaStream_t);
+template __host__ CUDART_DEVICE long combineReduceOpLauncher<long,multBinaryOp , plusBinaryOp  >(long*, const long*, const long*, ulong, multBinaryOp<long>, plusBinaryOp<long>, long,cudaStream_t);
 template __host__ CUDART_DEVICE ulong combineReduceOpLauncher<ulong,multBinaryOp , plusBinaryOp  >(ulong*, const ulong*, const ulong*, ulong, multBinaryOp<ulong>, plusBinaryOp<ulong>, ulong,cudaStream_t);
 template __host__ CUDART_DEVICE float combineReduceOpLauncher<float, diffSquaredBinaryOp, plusBinaryOp>(float*, const float*, const float*,ulong, diffSquaredBinaryOp<float>, plusBinaryOp<float>, float,cudaStream_t);
 template __host__ CUDART_DEVICE double combineReduceOpLauncher<double,diffSquaredBinaryOp, plusBinaryOp>(double*, const double*, const double*, ulong, diffSquaredBinaryOp<double>, plusBinaryOp<double>, double,cudaStream_t);
+template __host__ CUDART_DEVICE long combineReduceOpLauncher<long,diffSquaredBinaryOp, plusBinaryOp>(long*, const long*, const long*, ulong, diffSquaredBinaryOp<long>, plusBinaryOp<long>, long,cudaStream_t);
 template __host__ CUDART_DEVICE ulong combineReduceOpLauncher<ulong,diffSquaredBinaryOp, plusBinaryOp>(ulong*, const ulong*, const ulong*, ulong, diffSquaredBinaryOp<ulong>, plusBinaryOp<ulong>, ulong,cudaStream_t);
 template __host__ CUDART_DEVICE float combineReduceOpLauncher<float, equalsBinaryOp, plusBinaryOp>(float*, const float*, const float*,ulong, equalsBinaryOp<float>, plusBinaryOp<float>, float,cudaStream_t);
 template __host__ CUDART_DEVICE double combineReduceOpLauncher<double,equalsBinaryOp, plusBinaryOp>(double*, const double*, const double*, ulong, equalsBinaryOp<double>, plusBinaryOp<double>, double,cudaStream_t);
+template __host__ CUDART_DEVICE long combineReduceOpLauncher<long,equalsBinaryOp, plusBinaryOp>(long*, const long*, const long*, ulong, equalsBinaryOp<long>, plusBinaryOp<long>, long,cudaStream_t);
 template __host__ CUDART_DEVICE ulong combineReduceOpLauncher<ulong,equalsBinaryOp, plusBinaryOp>(ulong*, const ulong*, const ulong*, ulong, equalsBinaryOp<ulong>, plusBinaryOp<ulong>, ulong,cudaStream_t);
 template __host__ CUDART_DEVICE float combineReduceOpLauncher<float,almostEqualsBinaryOp,andBinaryOp>(float*, const float*, const float*,ulong, almostEqualsBinaryOp<float>, andBinaryOp<float>, float,cudaStream_t);
 template __host__ CUDART_DEVICE double combineReduceOpLauncher<double,almostEqualsBinaryOp, andBinaryOp>(double*, const double*, const double*, ulong, almostEqualsBinaryOp<double>, andBinaryOp<double>, double,cudaStream_t);
+template __host__ CUDART_DEVICE long combineReduceOpLauncher<long,almostEqualsBinaryOp, andBinaryOp>(long*, const long*, const long*, ulong, almostEqualsBinaryOp<long>, andBinaryOp<long>, long,cudaStream_t);
 template __host__ CUDART_DEVICE ulong combineReduceOpLauncher<ulong,almostEqualsBinaryOp, andBinaryOp>(ulong*, const ulong*, const ulong*, ulong, almostEqualsBinaryOp<ulong>, andBinaryOp<ulong>, ulong,cudaStream_t);
 template __host__ CUDART_DEVICE float combineReduceOpLauncher<float, equalsBinaryOp, andBinaryOp>(float*, const float*, const float*,ulong, equalsBinaryOp<float>, andBinaryOp<float>, float,cudaStream_t);
 template __host__ CUDART_DEVICE double combineReduceOpLauncher<double,equalsBinaryOp, andBinaryOp>(double*, const double*, const double*, ulong,  equalsBinaryOp<double>, andBinaryOp<double>, double,cudaStream_t);
+template __host__ CUDART_DEVICE long combineReduceOpLauncher<long,equalsBinaryOp, andBinaryOp>(long*, const long*, const long*, ulong,  equalsBinaryOp<long>, andBinaryOp<long>, long,cudaStream_t);
 template __host__ CUDART_DEVICE ulong combineReduceOpLauncher<ulong,equalsBinaryOp, andBinaryOp>(ulong*, const ulong*, const ulong*, ulong,  equalsBinaryOp<ulong>, andBinaryOp<ulong>, ulong,cudaStream_t);
 
 
 
-template __host__ CUDART_DEVICE int combineReduceOpLauncher<int, multBinaryOp, plusBinaryOp>(int*, int const*, int const*, unsigned long, multBinaryOp<int>, plusBinaryOp<int>, int, CUstream_st*);
-template __host__ CUDART_DEVICE int combineReduceOpLauncher<int, diffSquaredBinaryOp, plusBinaryOp>(int*, int const*, int const*, unsigned long, diffSquaredBinaryOp<int>, plusBinaryOp<int>, int, CUstream_st*);
-template __host__ CUDART_DEVICE int combineReduceOpLauncher<int, equalsBinaryOp, plusBinaryOp>(int*, int const*, int const*, unsigned long, equalsBinaryOp<int>, plusBinaryOp<int>, int, CUstream_st*);
-template __host__ CUDART_DEVICE int combineReduceOpLauncher<int, equalsBinaryOp, andBinaryOp>(int*, int const*, int const*, unsigned long, equalsBinaryOp<int>, andBinaryOp<int>, int, CUstream_st*);
-template __host__ CUDART_DEVICE int combineReduceOpLauncher<int, almostEqualsBinaryOp, andBinaryOp>(int*, int const*, int const*, unsigned long, almostEqualsBinaryOp<int>, andBinaryOp<int>, int, CUstream_st*);
-template __host__ CUDART_DEVICE unsigned int combineReduceOpLauncher<unsigned int, multBinaryOp, plusBinaryOp>(unsigned int*, unsigned int const*, unsigned int const*, unsigned long, multBinaryOp<unsigned int>, plusBinaryOp<unsigned int>, unsigned int, CUstream_st*);
-template __host__ CUDART_DEVICE unsigned int combineReduceOpLauncher<unsigned int, diffSquaredBinaryOp, plusBinaryOp>(unsigned int*, unsigned int const*, unsigned int const*, unsigned long, diffSquaredBinaryOp<unsigned int>, plusBinaryOp<unsigned int>, unsigned int, CUstream_st*);
-template __host__ CUDART_DEVICE unsigned int combineReduceOpLauncher<unsigned int, equalsBinaryOp, plusBinaryOp>(unsigned int*, unsigned int const*, unsigned int const*, unsigned long, equalsBinaryOp<unsigned int>, plusBinaryOp<unsigned int>, unsigned int, CUstream_st*);
-template __host__ CUDART_DEVICE unsigned int combineReduceOpLauncher<unsigned int, equalsBinaryOp, andBinaryOp>(unsigned int*, unsigned int const*, unsigned int const*, unsigned long, equalsBinaryOp<unsigned int>, andBinaryOp<unsigned int>, unsigned int, CUstream_st*);
-template __host__ CUDART_DEVICE unsigned int combineReduceOpLauncher<unsigned int, almostEqualsBinaryOp, andBinaryOp>(unsigned int*, unsigned int const*, unsigned int const*, unsigned long, almostEqualsBinaryOp<unsigned int>, andBinaryOp<unsigned int>, unsigned int, CUstream_st*);
+template __host__ CUDART_DEVICE int combineReduceOpLauncher<int, multBinaryOp, plusBinaryOp>(int*, int const*, int const*, long, multBinaryOp<int>, plusBinaryOp<int>, int, CUstream_st*);
+template __host__ CUDART_DEVICE int combineReduceOpLauncher<int, diffSquaredBinaryOp, plusBinaryOp>(int*, int const*, int const*, long, diffSquaredBinaryOp<int>, plusBinaryOp<int>, int, CUstream_st*);
+template __host__ CUDART_DEVICE int combineReduceOpLauncher<int, equalsBinaryOp, plusBinaryOp>(int*, int const*, int const*, long, equalsBinaryOp<int>, plusBinaryOp<int>, int, CUstream_st*);
+template __host__ CUDART_DEVICE int combineReduceOpLauncher<int, equalsBinaryOp, andBinaryOp>(int*, int const*, int const*, long, equalsBinaryOp<int>, andBinaryOp<int>, int, CUstream_st*);
+template __host__ CUDART_DEVICE int combineReduceOpLauncher<int, almostEqualsBinaryOp, andBinaryOp>(int*, int const*, int const*, long, almostEqualsBinaryOp<int>, andBinaryOp<int>, int, CUstream_st*);
+template __host__ CUDART_DEVICE unsigned int combineReduceOpLauncher<unsigned int, multBinaryOp, plusBinaryOp>(unsigned int*, unsigned int const*, unsigned int const*, long, multBinaryOp<unsigned int>, plusBinaryOp<unsigned int>, unsigned int, CUstream_st*);
+template __host__ CUDART_DEVICE unsigned int combineReduceOpLauncher<unsigned int, diffSquaredBinaryOp, plusBinaryOp>(unsigned int*, unsigned int const*, unsigned int const*, long, diffSquaredBinaryOp<unsigned int>, plusBinaryOp<unsigned int>, unsigned int, CUstream_st*);
+template __host__ CUDART_DEVICE unsigned int combineReduceOpLauncher<unsigned int, equalsBinaryOp, plusBinaryOp>(unsigned int*, unsigned int const*, unsigned int const*, long, equalsBinaryOp<unsigned int>, plusBinaryOp<unsigned int>, unsigned int, CUstream_st*);
+template __host__ CUDART_DEVICE unsigned int combineReduceOpLauncher<unsigned int, equalsBinaryOp, andBinaryOp>(unsigned int*, unsigned int const*, unsigned int const*, long, equalsBinaryOp<unsigned int>, andBinaryOp<unsigned int>, unsigned int, CUstream_st*);
+template __host__ CUDART_DEVICE unsigned int combineReduceOpLauncher<unsigned int, almostEqualsBinaryOp, andBinaryOp>(unsigned int*, unsigned int const*, unsigned int const*, long, almostEqualsBinaryOp<unsigned int>, andBinaryOp<unsigned int>, unsigned int, CUstream_st*);
 
 #else
-template __host__ CUDART_DEVICE float combineReduceOpLauncher<float, 0, 1>(float*, float const*, float const*, unsigned long, BinaryOpF<float, 0>, BinaryOpF<float, 1>, float, CUstream_st*);
-template __host__ CUDART_DEVICE float combineReduceOpLauncher<float, 1, 1>(float*, float const*, float const*, unsigned long, BinaryOpF<float, 1>, BinaryOpF<float, 1>, float, CUstream_st*);
-template __host__ CUDART_DEVICE double combineReduceOpLauncher<double, 0, 1>(double*, double const*, double const*, unsigned long, BinaryOpF<double, 0>, BinaryOpF<double, 1>, double, CUstream_st*);
-template __host__ CUDART_DEVICE double combineReduceOpLauncher<double, 1, 1>(double*, double const*, double const*, unsigned long, BinaryOpF<double, 1>, BinaryOpF<double, 1>, double, CUstream_st*);
-template __host__ CUDART_DEVICE int combineReduceOpLauncher<int, 0, 1>(int*, int const*, int const*, unsigned long, BinaryOpF<int, 0>, BinaryOpF<int, 1>, int, CUstream_st*);
-template __host__ CUDART_DEVICE int combineReduceOpLauncher<int, 1, 1>(int*, int const*, int const*, unsigned long, BinaryOpF<int, 1>, BinaryOpF<int, 1>, int, CUstream_st*);
-template __host__ CUDART_DEVICE uint combineReduceOpLauncher<uint, 0, 1>(uint*, uint const*, uint const*, unsigned long, BinaryOpF<uint, 0>, BinaryOpF<uint, 1>, uint, CUstream_st*);
-template __host__ CUDART_DEVICE uint combineReduceOpLauncher<uint, 1, 1>(uint*, uint const*, uint const*, unsigned long, BinaryOpF<uint, 1>, BinaryOpF<uint, 1>, uint, CUstream_st*);
-template __host__ CUDART_DEVICE ulong combineReduceOpLauncher<ulong, 0, 1>(ulong*, ulong const*, ulong const*, unsigned long, BinaryOpF<ulong, 0>, BinaryOpF<ulong, 1>, ulong, CUstream_st*);
-template __host__ CUDART_DEVICE ulong combineReduceOpLauncher<ulong, 1, 1>(ulong*, ulong const*, ulong const*, unsigned long, BinaryOpF<ulong, 1>, BinaryOpF<ulong, 1>, ulong, CUstream_st*);
+template __host__ CUDART_DEVICE float combineReduceOpLauncher<float, 0, 1>(float*, float const*, float const*, long, BinaryOpF<float, 0>, BinaryOpF<float, 1>, float, CUstream_st*);
+template __host__ CUDART_DEVICE float combineReduceOpLauncher<float, 1, 1>(float*, float const*, float const*, long, BinaryOpF<float, 1>, BinaryOpF<float, 1>, float, CUstream_st*);
+template __host__ CUDART_DEVICE double combineReduceOpLauncher<double, 0, 1>(double*, double const*, double const*, long, BinaryOpF<double, 0>, BinaryOpF<double, 1>, double, CUstream_st*);
+template __host__ CUDART_DEVICE double combineReduceOpLauncher<double, 1, 1>(double*, double const*, double const*, long, BinaryOpF<double, 1>, BinaryOpF<double, 1>, double, CUstream_st*);
+template __host__ CUDART_DEVICE int combineReduceOpLauncher<int, 0, 1>(int*, int const*, int const*, long, BinaryOpF<int, 0>, BinaryOpF<int, 1>, int, CUstream_st*);
+template __host__ CUDART_DEVICE int combineReduceOpLauncher<int, 1, 1>(int*, int const*, int const*, long, BinaryOpF<int, 1>, BinaryOpF<int, 1>, int, CUstream_st*);
+template __host__ CUDART_DEVICE uint combineReduceOpLauncher<uint, 0, 1>(uint*, uint const*, uint const*, long, BinaryOpF<uint, 0>, BinaryOpF<uint, 1>, uint, CUstream_st*);
+template __host__ CUDART_DEVICE uint combineReduceOpLauncher<uint, 1, 1>(uint*, uint const*, uint const*, long, BinaryOpF<uint, 1>, BinaryOpF<uint, 1>, uint, CUstream_st*);
+template __host__ CUDART_DEVICE long combineReduceOpLauncher<long, 0, 1>(long*, long const*, long const*, long, BinaryOpF<long, 0>, BinaryOpF<long, 1>, long, CUstream_st*);
+template __host__ CUDART_DEVICE long combineReduceOpLauncher<long, 1, 1>(long*, long const*, long const*, long, BinaryOpF<long, 1>, BinaryOpF<long, 1>, long, CUstream_st*);
+template __host__ CUDART_DEVICE ulong combineReduceOpLauncher<ulong, 0, 1>(ulong*, ulong const*, ulong const*, long, BinaryOpF<ulong, 0>, BinaryOpF<ulong, 1>, ulong, CUstream_st*);
+template __host__ CUDART_DEVICE ulong combineReduceOpLauncher<ulong, 1, 1>(ulong*, ulong const*, ulong const*, long, BinaryOpF<ulong, 1>, BinaryOpF<ulong, 1>, ulong, CUstream_st*);
 #endif
 
 
 #ifdef  CuMatrix_Enable_KTS
 template<typename T, uint blockSize, bool nIsPow2, template <typename> class BinaryOp>
-__global__ void reduceOpKernel( T* g_odata, const T* g_idata, ulong n,
+__global__ void reduceOpKernel( T* g_odata, const T* g_idata, long n,
 		BinaryOp<T> op, T start, uint stride, uint offset)
 #else
 template<typename T, uint blockSize, bool nIsPow2, int StateDim>
-__global__ void reduceOpKernel( T* g_odata, const T* g_idata, ulong n,
+__global__ void reduceOpKernel( T* g_odata, const T* g_idata, long n,
 		BinaryOpF<T,StateDim> op, T start, uint stride, uint offset)
 #endif
 {
@@ -567,10 +574,10 @@ __global__ void reduceOpKernel( T* g_odata, const T* g_idata, ulong n,
 
 #ifdef  CuMatrix_Enable_KTS
 template<typename T, uint blockSize, bool nIsPow2, template <typename> class BinaryOp>
-__global__ void reduceOpKernel(DMatrix<T> out, const DMatrix<T> src, ulong n, BinaryOp<T> op, T start, uint stride, uint offset)
+__global__ void reduceOpKernel(DMatrix<T> out, const DMatrix<T> src, long n, BinaryOp<T> op, T start, uint stride, uint offset)
 #else
 template<typename T, uint blockSize, bool nIsPow2, int StateDim>
-__global__ void reduceOpKernel(DMatrix<T> out, const DMatrix<T> src, ulong n, BinaryOpF<T,StateDim> op, T start, uint stride, uint offset)
+__global__ void reduceOpKernel(DMatrix<T> out, const DMatrix<T> src, long n, BinaryOpF<T,StateDim> op, T start, uint stride, uint offset)
 #endif
 {
 
@@ -579,7 +586,7 @@ __global__ void reduceOpKernel(DMatrix<T> out, const DMatrix<T> src, ulong n, Bi
 	// perform first level of reduction,
 	// reading from global memory, writing to shared memory
 	uint tid = threadIdx.x;
-	ulong i = blockIdx.x * blockSize * 2 + threadIdx.x;
+	ulong i = blockIdx.x * blockSize * 2 + threadIdx.x ;
 	uint gridSize = blockSize * 2 * gridDim.x;
 
 	T myReduction = start;
@@ -593,14 +600,14 @@ __global__ void reduceOpKernel(DMatrix<T> out, const DMatrix<T> src, ulong n, Bi
 	// number of active thread blocks (via gridDim).  More blocks will result
 	// in a larger gridSize and therefore fewer elements per thread
 	while (i < n) {
-		myReduction = op(myReduction, get(src, offset + i * stride)); // in effect, there may be two pitches; one for matrix itself, and the other for the column if stride > 1
+		myReduction = op(myReduction, get(src, offset + i )); // in effect, there may be two pitches; one for matrix itself, and the other for the column if stride > 1
 		if(checkDebug(debugRedux) && i == n - 1 )
-				flprintf("i == n - 1!, i %lu reading src(%p)\n", i, src.elements + i);
+	 			flprintf("i == n - 1!, i %lu reading src(%p)\n", i, src.elements + i);
 		//if(tid==0)printf("reduceOpKernel i %d op(%f, %f) \n", i, myReduction,get(src,i));
 		//printf("%f\n", myReduction  );
 		// ensure we don'float read out of bounds -- this is optimized away for powerOf2 sized arrays
-		if (nIsPow2 || i + blockSize < n)
-			myReduction = op(myReduction, get(src,offset + (i + blockSize) * stride));
+		if (nIsPow2 ||i + blockSize < n)
+			myReduction = op(myReduction, get(src,offset + (i + blockSize)));
 		if(checkDebug(debugRedux) && i + blockSize== n - 1 )
 			flprintf("i + blockSize== n - 1!, i %lu reading src(%p)\n", i, src.elements + offset + (i + blockSize) * stride);
 		i += gridSize;
@@ -678,11 +685,11 @@ __global__ void reduceOpKernel(DMatrix<T> out, const DMatrix<T> src, ulong n, Bi
 }
 
 #ifdef  CuMatrix_Enable_KTS
-template<typename T, template <typename> class BinaryOp> __host__ CUDART_DEVICE void reduceLauncher(T* result, DMatrix<T> buff, ulong n, const DMatrix<T> src,
-		BinaryOp<T> op, T start, uint stride, uint offset, cudaStream_t stream)
+template<typename T, template <typename> class BinaryOp> __host__ CUDART_DEVICE void reduceLauncher(T* result, DMatrix<T> buff, long n, const DMatrix<T> src,
+		BinaryOp<T> op, T start, int stride, int offset, cudaStream_t stream)
 #else
-template<typename T, int StateDim> __host__ CUDART_DEVICE void reduceLauncher(T* result, DMatrix<T> buff, ulong n, const DMatrix<T> src,
-		MonoidF<T,StateDim> op, T start, uint stride, uint offset, cudaStream_t stream)
+template<typename T, int StateDim> __host__ CUDART_DEVICE void reduceLauncher(T* result, DMatrix<T> buff, long n, const DMatrix<T> src,
+		MonoidF<T,StateDim> op, T start, int stride, int offset, cudaStream_t stream)
 #endif
 {
  	if(!result) {
@@ -695,9 +702,10 @@ template<typename T, int StateDim> __host__ CUDART_DEVICE void reduceLauncher(T*
 	bool firstRedux = true;
 	dim3 dimBlock;
 	dim3 dimGrid;
-	uint threads, blocks;
+	int threads, blocks;
 	while ( n > 1 ) {
 		powOf2Q = b_util::isPow2(n);
+		if(checkDebug(debugRedux)) flprintf("n %d b_util::isPow2(n) %s\n", n, tOrF(b_util::isPow2(n) ));
 		getReductionExecContext(blocks,threads, n);
 		int smemSize =
 				(threads <= 32) ? 2 * threads * sizeof(T) : threads * sizeof(T);
@@ -710,18 +718,13 @@ template<typename T, int StateDim> __host__ CUDART_DEVICE void reduceLauncher(T*
 #ifndef __CUDA_ARCH__
 		checkCudaError(cudaGetLastError());
 		flush(cout);
-#else
-		if(checkDebug(debugNoRedux)) {
-			prlocf("spoofiness\n");
-			return;
-		}
 #endif
 		if (powOf2Q) {
 			if(checkDebug(debugRedux)) {prlocf("power of 2\n");}
 			switch (threads) {
 #ifdef  CuMatrix_Enable_KTS
 			case 1024:
-				//reduceOpKernel(DMatrix<T> out, const DMatrix<T> src, T* g_odata, ulong n, BinaryOp op, T start)
+				//reduceOpKernel(DMatrix<T> out, const DMatrix<T> src, T* g_odata, long n, BinaryOp op, T start)
 				reduceOpKernel<T, 1024, true, BinaryOp> <<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start,stride, offset); break;
 			case 512:
 				reduceOpKernel<T, 512, true, BinaryOp> <<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start,stride, offset); break;
@@ -735,7 +738,7 @@ template<typename T, int StateDim> __host__ CUDART_DEVICE void reduceLauncher(T*
 				reduceOpKernel<T, 32, true,BinaryOp><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start,stride, offset); break;
 #else
 			case 1024:
-				//reduceOpKernel(DMatrix<T> out, const DMatrix<T> src, T* g_odata, ulong n, BinaryOp op, T start)
+				//reduceOpKernel(DMatrix<T> out, const DMatrix<T> src, T* g_odata, long n, BinaryOp op, T start)
 				reduceOpKernel<T, 1024, true, StateDim> <<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start,stride, offset); break;
 			case 512:
 				reduceOpKernel<T, 512, true, StateDim> <<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start,stride, offset); break;
@@ -847,7 +850,6 @@ template<typename T, int StateDim> __host__ CUDART_DEVICE void reduceLauncher(T*
 		if(stream!=null){
 			checkCudaError(cudaStreamSynchronize(stream));
 		} else  {
-			checkCudaError(cudaGetLastError());
 			checkCudaError(cudaDeviceSynchronize());
 		}
 #else
@@ -855,7 +857,9 @@ template<typename T, int StateDim> __host__ CUDART_DEVICE void reduceLauncher(T*
 #endif
 		if(firstRedux) {
 			if(checkDebug(debugRedux))prlocf("reduceLauncher after first redux, setting input to output\n");
+			if(checkDebug(debugRedux)) printArray(buff.elements,20);
 			rSrc.elements  = buff.elements;
+
 			rSrc.m = buff.m;
 			rSrc.p = buff.p;
 			rSrc.n = buff.n;
@@ -908,64 +912,62 @@ template<typename T, int StateDim> __host__ CUDART_DEVICE void reduceLauncher(T*
 }
 
 #ifdef  CuMatrix_Enable_KTS
-template __host__ CUDART_DEVICE void reduceLauncher<float,sqrPlusBinaryOp>(float*, DMatrix<float>,  ulong, const DMatrix<float>, sqrPlusBinaryOp<float>, float, uint,uint,cudaStream_t);
-template __host__ CUDART_DEVICE void reduceLauncher<double,sqrPlusBinaryOp>(double*, DMatrix<double>,  ulong, const DMatrix<double>, sqrPlusBinaryOp<double>, double,uint,uint,cudaStream_t);
-template __host__ CUDART_DEVICE void reduceLauncher<ulong,sqrPlusBinaryOp>(ulong*, DMatrix<ulong>,  ulong, const DMatrix<ulong>, sqrPlusBinaryOp<ulong>, ulong,uint,uint,cudaStream_t);
 
-template __host__ CUDART_DEVICE void reduceLauncher<float,plusBinaryOp>( float*, DMatrix<float>,  ulong, const DMatrix<float>, plusBinaryOp<float>, float, uint,uint,cudaStream_t);
-template __host__ CUDART_DEVICE void reduceLauncher<double,plusBinaryOp>(double*, DMatrix<double>,  ulong, const DMatrix<double>, plusBinaryOp<double>, double,uint,uint,cudaStream_t);
-template __host__ CUDART_DEVICE void reduceLauncher<ulong,plusBinaryOp>(ulong*, DMatrix<ulong>,  ulong, const DMatrix<ulong>, plusBinaryOp<ulong>, ulong,uint,uint,cudaStream_t);
+template __host__ CUDART_DEVICE void reduceLauncher<float,plusBinaryOp>( float*, DMatrix<float>,  long, const DMatrix<float>, plusBinaryOp<float>, float, int,int,cudaStream_t);
+template __host__ CUDART_DEVICE void reduceLauncher<double,plusBinaryOp>(double*, DMatrix<double>,  long, const DMatrix<double>, plusBinaryOp<double>, double,int,int,cudaStream_t);
+template __host__ CUDART_DEVICE void reduceLauncher<ulong,plusBinaryOp>(ulong*, DMatrix<ulong>,  long, const DMatrix<ulong>, plusBinaryOp<ulong>, ulong,int,int,cudaStream_t);
+template __host__ CUDART_DEVICE void reduceLauncher<long, plusBinaryOp>(long*, DMatrix<long>, long, DMatrix<long>, plusBinaryOp<long>, long, int,int, CUstream_st*);
 
-template __host__ CUDART_DEVICE void reduceLauncher<float,multBinaryOp>(float*, DMatrix<float>,  ulong, const DMatrix<float>,multBinaryOp<float>,float, uint,uint,cudaStream_t);
-template __host__ CUDART_DEVICE void reduceLauncher<double,multBinaryOp>(double*, DMatrix<double>,  ulong, const DMatrix<double>, multBinaryOp<double>, double,uint,uint,cudaStream_t);
-template __host__ CUDART_DEVICE void reduceLauncher<ulong, multBinaryOp>(ulong*, DMatrix<ulong>, ulong, DMatrix<ulong>, multBinaryOp<ulong>, ulong, unsigned int, unsigned int, CUstream_st*);
+template __host__ CUDART_DEVICE void reduceLauncher<float,multBinaryOp>(float*, DMatrix<float>,  long, const DMatrix<float>,multBinaryOp<float>,float, int,int,cudaStream_t);
+template __host__ CUDART_DEVICE void reduceLauncher<double,multBinaryOp>(double*, DMatrix<double>,  long, const DMatrix<double>, multBinaryOp<double>, double,int,int,cudaStream_t);
+template __host__ CUDART_DEVICE void reduceLauncher<ulong, multBinaryOp>(ulong*, DMatrix<ulong>, long, DMatrix<ulong>, multBinaryOp<ulong>, ulong, int,int, CUstream_st*);
+template __host__ CUDART_DEVICE void reduceLauncher<long, multBinaryOp>(long*, DMatrix<long>, long, DMatrix<long>, multBinaryOp<long>, long, int,int, CUstream_st*);
 
-template __host__ CUDART_DEVICE void reduceLauncher<float,maxBinaryOp>(float*, DMatrix<float>,  ulong, const DMatrix<float>, maxBinaryOp<float>,float, uint,uint,cudaStream_t);
-template __host__ CUDART_DEVICE void reduceLauncher<double,maxBinaryOp>(double*, DMatrix<double>,  ulong, const DMatrix<double>, maxBinaryOp<double>, double,uint,uint,cudaStream_t);
-template __host__ CUDART_DEVICE void reduceLauncher<ulong,maxBinaryOp>(ulong*, DMatrix<ulong>,  ulong, const DMatrix<ulong>, maxBinaryOp<ulong>, ulong,uint,uint,cudaStream_t);
+template __host__ CUDART_DEVICE void reduceLauncher<float,maxBinaryOp>(float*, DMatrix<float>,  long, const DMatrix<float>, maxBinaryOp<float>,float, int,int,cudaStream_t);
+template __host__ CUDART_DEVICE void reduceLauncher<double,maxBinaryOp>(double*, DMatrix<double>,  long, const DMatrix<double>, maxBinaryOp<double>, double,int,int,cudaStream_t);
+template __host__ CUDART_DEVICE void reduceLauncher<ulong,maxBinaryOp>(ulong*, DMatrix<ulong>,  long, const DMatrix<ulong>, maxBinaryOp<ulong>, ulong,int,int,cudaStream_t);
 
-template __host__ CUDART_DEVICE void reduceLauncher<float,minBinaryOp>(float*, DMatrix<float>,  ulong, const DMatrix<float>, minBinaryOp<float>,float, uint,uint,cudaStream_t);
-template __host__ CUDART_DEVICE void reduceLauncher<double,minBinaryOp>(double*, DMatrix<double>,  ulong, const DMatrix<double>, minBinaryOp<double>, double,uint,uint,cudaStream_t);
-template __host__ CUDART_DEVICE void reduceLauncher<ulong,minBinaryOp>(ulong*, DMatrix<ulong>,  ulong, const DMatrix<ulong>, minBinaryOp<ulong>, ulong,uint,uint,cudaStream_t);
+template __host__ CUDART_DEVICE void reduceLauncher<float,minBinaryOp>(float*, DMatrix<float>,  long, const DMatrix<float>, minBinaryOp<float>,float, int,int,cudaStream_t);
+template __host__ CUDART_DEVICE void reduceLauncher<double,minBinaryOp>(double*, DMatrix<double>,  long, const DMatrix<double>, minBinaryOp<double>, double,int,int,cudaStream_t);
+template __host__ CUDART_DEVICE void reduceLauncher<ulong,minBinaryOp>(ulong*, DMatrix<ulong>,  long, const DMatrix<ulong>, minBinaryOp<ulong>, ulong,int,int,cudaStream_t);
 
-template __host__ CUDART_DEVICE void reduceLauncher<float, andBinaryOp>(float*, DMatrix<float>, unsigned long, DMatrix<float>, andBinaryOp<float>, float, uint, uint, CUstream_st*);
-template __host__ CUDART_DEVICE void reduceLauncher<double, andBinaryOp>(double*, DMatrix<double>, unsigned long, DMatrix<double>, andBinaryOp<double>, double,uint, uint, CUstream_st*);
-template __host__ CUDART_DEVICE void reduceLauncher<ulong, andBinaryOp>(ulong*, DMatrix<ulong>, unsigned long, DMatrix<ulong>, andBinaryOp<ulong>, ulong,uint, uint, CUstream_st*);
+template __host__ CUDART_DEVICE void reduceLauncher<float, andBinaryOp>(float*, DMatrix<float>, long, DMatrix<float>, andBinaryOp<float>, float, int,int, CUstream_st*);
+template __host__ CUDART_DEVICE void reduceLauncher<double, andBinaryOp>(double*, DMatrix<double>, long, DMatrix<double>, andBinaryOp<double>, double,int,int, CUstream_st*);
+template __host__ CUDART_DEVICE void reduceLauncher<ulong, andBinaryOp>(ulong*, DMatrix<ulong>, long, DMatrix<ulong>, andBinaryOp<ulong>, ulong,int,int, CUstream_st*);
 
-template __host__ CUDART_DEVICE void reduceLauncher<float, orBinaryOp>(float*, DMatrix<float>, unsigned long, DMatrix<float>, orBinaryOp<float>, float, uint, uint, CUstream_st*);
-template __host__ CUDART_DEVICE void reduceLauncher<double, orBinaryOp>(double*, DMatrix<double>, unsigned long, DMatrix<double>, orBinaryOp<double>, double,uint, uint, CUstream_st*);
-template __host__ CUDART_DEVICE void reduceLauncher<ulong, orBinaryOp>(ulong*, DMatrix<ulong>, unsigned long, DMatrix<ulong>, orBinaryOp<ulong>, ulong,uint, uint, CUstream_st*);
+template __host__ CUDART_DEVICE void reduceLauncher<float, orBinaryOp>(float*, DMatrix<float>, long, DMatrix<float>, orBinaryOp<float>, float, int,int, CUstream_st*);
+template __host__ CUDART_DEVICE void reduceLauncher<double, orBinaryOp>(double*, DMatrix<double>, long, DMatrix<double>, orBinaryOp<double>, double,int,int, CUstream_st*);
+template __host__ CUDART_DEVICE void reduceLauncher<ulong, orBinaryOp>(ulong*, DMatrix<ulong>, long, DMatrix<ulong>, orBinaryOp<ulong>, ulong,int,int, CUstream_st*);
 
-template __host__ CUDART_DEVICE void reduceLauncher<int, maxBinaryOp>(int*, DMatrix<int>, unsigned long, DMatrix<int>, maxBinaryOp<int>, int, unsigned int, unsigned int, CUstream_st*);
-template __host__ CUDART_DEVICE void reduceLauncher<int, minNotZeroBinaryOp>(int*, DMatrix<int>, unsigned long, DMatrix<int>, minNotZeroBinaryOp<int>, int, unsigned int, unsigned int, CUstream_st*);
+template __host__ CUDART_DEVICE void reduceLauncher<int, maxBinaryOp>(int*, DMatrix<int>, long, DMatrix<int>, maxBinaryOp<int>, int, int,int, CUstream_st*);
+template __host__ CUDART_DEVICE void reduceLauncher<int, minNotZeroBinaryOp>(int*, DMatrix<int>, long, DMatrix<int>, minNotZeroBinaryOp<int>, int, int,int, CUstream_st*);
 
-template __host__ CUDART_DEVICE void reduceLauncher<int, plusBinaryOp>(int*, DMatrix<int>, unsigned long, DMatrix<int>, plusBinaryOp<int>, int, unsigned int, unsigned int, CUstream_st*);
-template __host__ CUDART_DEVICE void reduceLauncher<unsigned int, plusBinaryOp>(unsigned int*, DMatrix<unsigned int>, unsigned long, DMatrix<unsigned int>, plusBinaryOp<unsigned int>, unsigned int, unsigned int, unsigned int, CUstream_st*);
-template __host__ CUDART_DEVICE void reduceLauncher<int, multBinaryOp>(int*, DMatrix<int>, unsigned long, DMatrix<int>, multBinaryOp<int>, int, unsigned int, unsigned int, CUstream_st*);
-template __host__ CUDART_DEVICE void reduceLauncher<unsigned int, multBinaryOp>(unsigned int*, DMatrix<unsigned int>, unsigned long, DMatrix<unsigned int>, multBinaryOp<unsigned int>, unsigned int, unsigned int, unsigned int, CUstream_st*);
+template __host__ CUDART_DEVICE void reduceLauncher<int, plusBinaryOp>(int*, DMatrix<int>, long, DMatrix<int>, plusBinaryOp<int>, int, int,int, CUstream_st*);
+template __host__ CUDART_DEVICE void reduceLauncher<unsigned int, plusBinaryOp>(unsigned int*, DMatrix<unsigned int>, long, DMatrix<unsigned int>, plusBinaryOp<unsigned int>, uint,int, int, CUstream_st*);
+template __host__ CUDART_DEVICE void reduceLauncher<int, multBinaryOp>(int*, DMatrix<int>, long, DMatrix<int>, multBinaryOp<int>, int, int,int, CUstream_st*);
+template __host__ CUDART_DEVICE void reduceLauncher<unsigned int, multBinaryOp>(unsigned int*, DMatrix<unsigned int>, long, DMatrix<unsigned int>, multBinaryOp<unsigned int>, uint,int, int, CUstream_st*);
 
-template __host__ CUDART_DEVICE void reduceLauncher<int, andBinaryOp>(int*, DMatrix<int>, unsigned long, DMatrix<int>, andBinaryOp<int>, int, unsigned int, unsigned int, CUstream_st*);
-template __host__ CUDART_DEVICE void reduceLauncher<unsigned int, andBinaryOp>(unsigned int*, DMatrix<unsigned int>, unsigned long, DMatrix<unsigned int>, andBinaryOp<unsigned int>, unsigned int, unsigned int, unsigned int, CUstream_st*);
-template __host__ CUDART_DEVICE void reduceLauncher<int, sqrPlusBinaryOp>(int*, DMatrix<int>, unsigned long, DMatrix<int>, sqrPlusBinaryOp<int>, int, unsigned int, unsigned int, CUstream_st*);
-template __host__ CUDART_DEVICE void reduceLauncher<unsigned int, sqrPlusBinaryOp>(unsigned int*, DMatrix<unsigned int>, unsigned long, DMatrix<unsigned int>, sqrPlusBinaryOp<unsigned int>, unsigned int, unsigned int, unsigned int, CUstream_st*);
-template __host__ CUDART_DEVICE void reduceLauncher<int, minBinaryOp>(int*, DMatrix<int>, unsigned long, DMatrix<int>, minBinaryOp<int>, int, unsigned int, unsigned int, CUstream_st*);
-template __host__ CUDART_DEVICE void reduceLauncher<unsigned int, maxBinaryOp>(unsigned int*, DMatrix<unsigned int>, unsigned long, DMatrix<unsigned int>, maxBinaryOp<unsigned int>, unsigned int, unsigned int, unsigned int, CUstream_st*);
-template __host__ CUDART_DEVICE void reduceLauncher<unsigned int, minBinaryOp>(unsigned int*, DMatrix<unsigned int>, unsigned long, DMatrix<unsigned int>, minBinaryOp<unsigned int>, unsigned int, unsigned int, unsigned int, CUstream_st*);
+template __host__ CUDART_DEVICE void reduceLauncher<int, andBinaryOp>(int*, DMatrix<int>, long, DMatrix<int>, andBinaryOp<int>, int, int,int, CUstream_st*);
+template __host__ CUDART_DEVICE void reduceLauncher<unsigned int, andBinaryOp>(unsigned int*, DMatrix<unsigned int>, long, DMatrix<unsigned int>, andBinaryOp<unsigned int>, uint,int, int, CUstream_st*);
+template __host__ CUDART_DEVICE void reduceLauncher<int, minBinaryOp>(int*, DMatrix<int>, long, DMatrix<int>, minBinaryOp<int>, int, int,int, CUstream_st*);
+template __host__ CUDART_DEVICE void reduceLauncher<unsigned int, maxBinaryOp>(unsigned int*, DMatrix<unsigned int>, long, DMatrix<unsigned int>, maxBinaryOp<unsigned int>, uint,int, int, CUstream_st*);
+template __host__ CUDART_DEVICE void reduceLauncher<unsigned int, minBinaryOp>(unsigned int*, DMatrix<unsigned int>, long, DMatrix<unsigned int>, minBinaryOp<unsigned int>, uint,int, int, CUstream_st*);
 
 
 #else
-template __host__ CUDART_DEVICE void reduceLauncher<float,1>(float*, DMatrix<float>,  ulong, const DMatrix<float>, MonoidF<float,1>, float, uint,uint,cudaStream_t);
-template __host__ CUDART_DEVICE void reduceLauncher<double,1>(double*, DMatrix<double>,  ulong, const DMatrix<double>, MonoidF<double,1>, double, uint,uint,cudaStream_t);
-template __host__ CUDART_DEVICE void reduceLauncher<ulong,1>(ulong*, DMatrix<ulong>,  ulong, const DMatrix<ulong>, MonoidF<ulong,1>, ulong, uint,uint,cudaStream_t);
-template __host__ CUDART_DEVICE void reduceLauncher<int,1>(int*, DMatrix<int>,  ulong, const DMatrix<int>, MonoidF<int,1>, int, uint,uint,cudaStream_t);
-template __host__ CUDART_DEVICE void reduceLauncher<uint,1>(uint*, DMatrix<uint>,  ulong, const DMatrix<uint>, MonoidF<uint,1>, uint, uint,uint,cudaStream_t);
+template __host__ CUDART_DEVICE void reduceLauncher<float,1>(float*, DMatrix<float>,  long, const DMatrix<float>, MonoidF<float,1>, float, int,int,cudaStream_t);
+template __host__ CUDART_DEVICE void reduceLauncher<double,1>(double*, DMatrix<double>,  long, const DMatrix<double>, MonoidF<double,1>, double, int,int,cudaStream_t);
+template __host__ CUDART_DEVICE void reduceLauncher<long,1>(long*, DMatrix<long>,  long, const DMatrix<long>, MonoidF<long,1>, long, int,int,cudaStream_t);
+template __host__ CUDART_DEVICE void reduceLauncher<ulong,1>(ulong*, DMatrix<ulong>,  long, const DMatrix<ulong>, MonoidF<ulong,1>, ulong, int,int,cudaStream_t);
+template __host__ CUDART_DEVICE void reduceLauncher<int,1>(int*, DMatrix<int>,  long, const DMatrix<int>, MonoidF<int,1>, int, int,int,cudaStream_t);
+template __host__ CUDART_DEVICE void reduceLauncher<uint,1>(uint*, DMatrix<uint>,  long, const DMatrix<uint>, MonoidF<uint,1>, uint, int,int,cudaStream_t);
 #endif
 
 #ifdef  CuMatrix_Enable_KTS
-template<typename T, template <typename> class BinaryOp> __global__ void reduceLauncherG(T* result, DMatrix<T> buff, ulong n, const DMatrix<T> src,
+template<typename T, template <typename> class BinaryOp> __global__ void reduceLauncherG(T* result, DMatrix<T> buff, long n, const DMatrix<T> src,
 		BinaryOp<T> op, T start, uint stride, cudaStream_t stream)
 #else
-template<typename T, int StateDim> __global__ void reduceLauncherG(T* result, DMatrix<T> buff, ulong n, const DMatrix<T> src,
+template<typename T, int StateDim> __global__ void reduceLauncherG(T* result, DMatrix<T> buff, long n, const DMatrix<T> src,
 		BinaryOpF<T,StateDim> op, T start, uint stride, cudaStream_t stream)
 #endif
 {
@@ -974,9 +976,9 @@ template<typename T, int StateDim> __global__ void reduceLauncherG(T* result, DM
 
 #ifdef CuMatrix_Enable_Cdp
 	#ifdef  CuMatrix_Enable_KTS
-	template<typename T, template <typename> class BinaryOp>  __global__ void  reduceLauncherCount(T* result, DMatrix<T> buff, ulong nP, const DMatrix<T> src, BinaryOp<T> op, T start, int count)
+	template<typename T, template <typename> class BinaryOp>  __global__ void  reduceLauncherCount(T* result, DMatrix<T> buff, long nP, const DMatrix<T> src, BinaryOp<T> op, T start, int count)
 	#else
-	template<typename T, int StateDim>  __global__ void  reduceLauncherCount(T* result, DMatrix<T> buff, ulong nP, const DMatrix<T> src, MonoidF<T,StateDim> op, T start, int count)
+	template<typename T, int StateDim>  __global__ void  reduceLauncherCount(T* result, DMatrix<T> buff, long nP, const DMatrix<T> src, MonoidF<T,StateDim> op, T start, int count)
 	#endif
 	{
 		if(threadIdx.x == 0 && blockIdx.x == 0)
@@ -987,11 +989,12 @@ template<typename T, int StateDim> __global__ void reduceLauncherG(T* result, DM
 		}
 	}
 	#ifdef  CuMatrix_Enable_KTS
-		template __global__ void reduceLauncherCount<float, plusBinaryOp>(float*, DMatrix<float>, unsigned long, DMatrix<float>, plusBinaryOp<float>, float, int);
-		template __global__ void reduceLauncherCount<double, plusBinaryOp>(double*, DMatrix<double>, unsigned long, DMatrix<double>, plusBinaryOp<double>, double, int);
+		template __global__ void reduceLauncherCount<float, plusBinaryOp>(float*, DMatrix<float>, long, DMatrix<float>, plusBinaryOp<float>, float, int);
+		template __global__ void reduceLauncherCount<double, plusBinaryOp>(double*, DMatrix<double>, long, DMatrix<double>, plusBinaryOp<double>, double, int);
 	#else
-		template __global__ void reduceLauncherCount<float, 1>(float*, DMatrix<float>, unsigned long, DMatrix<float>, MonoidF<float,1>, float, int);
-		template __global__ void reduceLauncherCount<double, 1>(double*, DMatrix<double>, unsigned long, DMatrix<double>, MonoidF<double,1>, double, int);
+		template __global__ void reduceLauncherCount<float, 1>(float*, DMatrix<float>, long, DMatrix<float>, MonoidF<float,1>, float, int);
+		template __global__ void reduceLauncherCount<double, 1>(double*, DMatrix<double>, long, DMatrix<double>, MonoidF<double,1>, double, int);
+		template __global__ void reduceLauncherCount<ulong, 1>(ulong*, DMatrix<ulong>, long, DMatrix<ulong>, MonoidF<ulong, 1>, ulong, int);
 	#endif
 #endif
 

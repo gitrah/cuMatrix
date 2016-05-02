@@ -16,7 +16,8 @@
 #include "LookAt.h"
 #include "Path.h"
 
-using namespace std;
+using std::string;
+using std::stringstream;
 
 template<typename T> struct Bbox {
 	T x0, x1;

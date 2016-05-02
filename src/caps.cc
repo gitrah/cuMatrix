@@ -15,18 +15,22 @@
 #include "MatrixExceptions.h"
 
 ExecCaps** g_devCaps;
-int g_devCount = 0;
 
 unsigned long totalThreads;
 unsigned long totalElements;
 int MaxThreads = 512;
 int MaxBlocks = 128;
+int ExecCaps::deviceCount = 0;
+int ExecCaps::deviceCounter = 0;
 
 template <> int getTypeEnum<float>() {
 	return dtFloat;
 }
 template <> int getTypeEnum<double>() {
 	return dtDouble;
+}
+template <> int getTypeEnum<long>() {
+	return dtLong;
 }
 template <> int getTypeEnum<ulong>() {
 	return dtUlong;
@@ -48,13 +52,15 @@ template <> const char* getTypeName<double>() {
 template <> const char* getTypeName<ulong>() {
 	return "dtUlong";
 }
+template <> const char* getTypeName<long>() {
+	return "dtLong";
+}
 template <> const char* getTypeName<int>() {
 	return "dtInt";
 }
 template <> const char* getTypeName<uint>() {
 	return "dtUint";
 }
-
 
 //ulong ExecCaps::streams[MAX_GPUS];
 //int ExecCaps::refCount[MAX_GPUS];
@@ -95,10 +101,14 @@ string ExecCaps::toString()
 }
 
 
+
+
 void ExecCaps::getExecCaps(ExecCaps& execCaps, int dev)
 {
-	outln("&execCaps " << &execCaps);
-    checkCudaError(cudaSetDevice(dev));
+	int orgDev = currDev();
+	if(orgDev != dev) {
+		ExecCaps_visitDevice(dev);
+	}
     execCaps.devNumber = dev;
     checkCudaError(cudaGetDeviceProperties(&execCaps.deviceProp, dev));
     if(dev < MAX_GPUS) {
@@ -106,8 +116,6 @@ void ExecCaps::getExecCaps(ExecCaps& execCaps, int dev)
     }
    // checkCudaError(cudaStreamCreate(&execCaps.stream));
     //outln("getExecCaps for dev " << dev << " created stream " << execCaps.stream);
-    outln("major/minor "<< execCaps.deviceProp.major << "/" << execCaps.deviceProp.minor);
-    outln("asyncEngineCount " << execCaps.deviceProp.asyncEngineCount);
     execCaps.smCount = execCaps.deviceProp.multiProcessorCount;
     execCaps.maxBlock.x = execCaps.deviceProp.maxThreadsDim[0];
     execCaps.maxBlock.y = execCaps.deviceProp.maxThreadsDim[1];
@@ -127,15 +135,11 @@ void ExecCaps::getExecCaps(ExecCaps& execCaps, int dev)
     execCaps.dynamicPism = execCaps.deviceProp.major + .1 * execCaps.deviceProp.minor >= 3.5;
     execCaps.cores = execCaps.smCount * _ConvertSMVer2Cores(execCaps.deviceProp.major, execCaps.deviceProp.minor);
 
+    if(orgDev != dev) {
+    	ExecCaps_restoreDevice(dev);
+    }
+
 }
-
-int ExecCaps::currDev() {
-	int dev;
-	checkCudaError(cudaGetDevice(&dev));
-	return dev;
-}
-
-
 
 KernelCaps KernelCaps::forArray(ExecCaps& caps, dim3& arrayDim) {
 	KernelCaps kcaps;
@@ -169,7 +173,6 @@ KernelCaps KernelCaps::forArray(ExecCaps& caps, dim3& arrayDim) {
 
 	return (kcaps);
 }
-
 
 
 /*

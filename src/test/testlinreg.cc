@@ -11,24 +11,21 @@
 #include "tests.h"
 
 
-template int testLinRegCostFunctionNoReg<float>::operator()(int argc, char const ** args) const;
-template int testLinRegCostFunctionNoReg<double>::operator()(int argc, char const ** args) const;
-template int testLinRegCostFunctionNoReg<ulong>::operator()(int argc, char const ** args) const;
-template <typename T> int testLinRegCostFunctionNoReg<T>::operator()(int argc, char const ** args) const{
+template int testLinRegCostFunctionNoReg<float>::operator()(int argc, const char **argv) const;
+template int testLinRegCostFunctionNoReg<double>::operator()(int argc, const char **argv) const;
+template int testLinRegCostFunctionNoReg<ulong>::operator()(int argc, const char **argv) const;
+template <typename T> int testLinRegCostFunctionNoReg<T>::operator()(int argc, const char **argv) const{
 
 	if (argc < 2) {
-		std::cout << "usage: " << args[0] << " <<filename>> " << std::endl;
+		std::cout << "usage: " << argv[0] << " <<filename>> " << std::endl;
 		exit(-1);
 	}
 
-	std::cout << "opening " << args[1] << std::endl;
-	std::map<std::string, CuMatrix<T>*> results = util<T>::parseOctaveDataFile(args[1],
+	std::cout << "opening " << argv[1] << std::endl;
+	std::map<std::string, CuMatrix<T>*> results = CuMatrix<T>::parseOctaveDataFile(argv[1],
 			false, true);
 
 	std::cout << "found " << results.size() << " octave objects\n";
-	typedef typename std::map<std::string, CuMatrix<T>*>::iterator iterator;
-	iterator it;
-	it = results.begin();
 
 	CuMatrix<T>& x = *results["X"];
 	outln("x " << x.toShortString());
@@ -79,30 +76,28 @@ template <typename T> int testLinRegCostFunctionNoReg<T>::operator()(int argc, c
 	return (0);
 }
 
-template int testLinRegCostFunction<float>::operator()(int argc, char const ** args) const;
-template int testLinRegCostFunction<double>::operator()(int argc, char const ** args) const;
-template int testLinRegCostFunction<ulong>::operator()(int argc, char const ** args) const;
-template <typename T> int testLinRegCostFunction<T>::operator()(int argc, char const ** args) const{
+template int testLinRegCostFunction<float>::operator()(int argc, const char **argv) const;
+template int testLinRegCostFunction<double>::operator()(int argc, const char **argv) const;
+template int testLinRegCostFunction<ulong>::operator()(int argc, const char **argv) const;
+template <typename T> int testLinRegCostFunction<T>::operator()(int argc, const char **argv) const{
 
 	outln( "starting testLinRegCostFunction");
 	const char* filename = "ex2data2m.txt";
 
 	outln( "opening " << filename);
-	std::map<std::string, CuMatrix<T>*> results = util<T>::parseOctaveDataFile(
+	std::map<std::string, CuMatrix<T>*> results = CuMatrix<T>::parseOctaveDataFile(
 			filename, false, true);
 
 	outln( "found " << results.size() << " octave objects");
-	typedef typename std::map<std::string, CuMatrix<T>*>::iterator iterator;
-	iterator it;
-	it = results.begin();
 
 	CuMatrix<T>& x = *results["X"];
 	outln("x " << x.sum());
 
 	CuMatrix<T>& y = *results["y"];
-	outln("y\n" <<y.toString();
+	outln("y\n" <<y.toString());
 	CuMatrix<T> xm = CuMatrix<T>::mapFeature(x.columnVector(0), x.columnVector(1));
-	outln("xm " << xm.toShortString()));
+
+	outln("xm " << xm.toShortString());
 
 	CuMatrix<T> init_theta = CuMatrix<T>::zeros(xm.n, 1);
 

@@ -5,13 +5,13 @@
 #include "../MatrixExceptions.h"
 #include "testKernels.h"
 
-template int testRedux<float>::operator()(int argc, char const ** args) const;
-template int testRedux<double>::operator()(int argc, char const ** args) const;
-template int testRedux<ulong>::operator()(int argc, char const ** args) const;
-template <typename T> int testRedux<T>::operator()(int argc, const char** args) const {
-	outln("testRedux start " );
+template int testRedux<float>::operator()(int argc, const char **argv) const;
+template int testRedux<double>::operator()(int argc, const char **argv) const;
+template int testRedux<ulong>::operator()(int argc, const char **argv) const;
+template <typename T> int testRedux<T>::operator()(int argc, const char **argv) const {
+/*	outln("testRedux start " );
 	checkCudaError(cudaGetLastError());
-	for(ulong i =  128* Mega ; i < 128* Mega + 9; i += 1) {
+	for(ulong i = 16777215l; i < 128* Mega + 9; i += 1) {
 		CuMatrix<T> onz = CuMatrix<T>::ones(i, 1);
 		ulong sum = onz.sum();
 		ulong ksum = onz.syncBuffers().kahanSum();
@@ -55,13 +55,51 @@ template <typename T> int testRedux<T>::operator()(int argc, const char** args) 
 	outln("bcol3Sum sum " << bcol3Sum);
 
 	return 0;
+	*/
+	outln("testRedux start " );
+	checkCudaError(cudaGetLastError());
+	CuMatrix<T> incrRows = CuMatrix<T>::increasingRows(0, 200, 100);
+	CuMatrix<T> onez = CuMatrix<T>::ones(200, 100);
+	outln("incrRows " << incrRows.syncBuffers());
+	outln("onez " << onez.syncBuffers());
+	T incrRowsSum = incrRows.sum();
+	T onezSum = onez.sum();
+	outln("incrRows sum " << incrRowsSum);
+	outln("onez sum " << onezSum);
+	CuMatrix<T> longy = CuMatrix<T>::randn(1,33554432/16, 10);
+	outln("longy " << longy.syncBuffers());
+	CuMatrix<T> col1, col3;
+	incrRows.submatrix(col1,incrRows.m,1,0,0);
+	incrRows.submatrix(col3,incrRows.m,1,0,2);
+	T col1Sum = col1.sum();
+	T col3Sum = col3.sum();
+	T longySum  = longy.sum();
+	outln("col1Sum sum " << col1Sum);
+	outln("col3Sum sum " << col3Sum);
+	outln("longy sum " << longySum);
+
+	CuMatrix<T> b = CuMatrix<T>::zeros(60,1);
+	for(int i = 1; i < 60; i++) {
+		b = b |= (CuMatrix<T>::ones(60,1) * i);
+	}
+	outln("b " << b.syncBuffers());
+	CuMatrix<T> bcol1, bcol3;
+	b.submatrix(bcol1,b.m,1,0,0);
+	b.submatrix(bcol3,b.m,1,0,2);
+	T bcol1Sum = bcol1.sum();
+	T bcol3Sum = bcol3.sum();
+	outln("bcol1Sum sum " << bcol1Sum);
+	outln("bcol3Sum sum " << bcol3Sum);
+
+	return 0;
+
 }
 
 
-template int testColumnRedux<float>::operator()(int argc, char const ** args) const;
-template int testColumnRedux<double>::operator()(int argc, char const ** args) const;
-template int testColumnRedux<ulong>::operator()(int argc, char const ** args) const;
-template <typename T> int testColumnRedux<T>::operator()(int argc, const char** args) const {
+template int testColumnRedux<float>::operator()(int argc, const char **argv) const;
+template int testColumnRedux<double>::operator()(int argc, const char **argv) const;
+template int testColumnRedux<ulong>::operator()(int argc, const char **argv) const;
+template <typename T> int testColumnRedux<T>::operator()(int argc, const char **argv) const {
 	outln("testColumnRedux start " );
 
 	//plusBinaryOp<T> pbo = Functory<T,plusBinaryOp>::pinch();
@@ -118,7 +156,7 @@ template <typename T> int testColumnRedux<T>::operator()(int argc, const char** 
 	CuMatrix<T> oneTwoThrees = oneTwos |= (ones * 3);
 	checkCudaError(cudaGetLastError());
 
-	uint count = b_util::getCount(argc,args,10);
+	uint count = b_util::getCount(argc,argv,10);
     CuTimer timer;
     float colSumTime, reduceColTime;
 
@@ -150,9 +188,10 @@ template <typename T> int testColumnRedux<T>::operator()(int argc, const char** 
 }
 
 
-template int testShuffle<float>::operator()(int argc, char const ** args) const;
-template int testShuffle<double>::operator()(int argc, char const ** args) const;
-template <typename T> int testShuffle<T>::operator()(int argc, const char** args) const {
+template int testShuffle<float>::operator()(int argc, const char **argv) const;
+template int testShuffle<double>::operator()(int argc, const char **argv) const;
+template int testShuffle<ulong>::operator()(int argc, const char **argv) const;
+template <typename T> int testShuffle<T>::operator()(int argc, const char **argv) const {
 	int len = 32;
 	//size_t size = len * sizeof(T);
 	T ary[len];
@@ -162,8 +201,8 @@ template <typename T> int testShuffle<T>::operator()(int argc, const char** args
 		total += 2 * i;
 	}
 	outln("total " << total << ", ary " << util<T>::parry( ary,len));
-	plusBinaryOp<T> plus;
-	multBinaryOp<T> mult;
+	plusBinaryOp<T> plus = Functory<T,plusBinaryOp>::pinch();
+	multBinaryOp<T> mult = Functory<T,multBinaryOp>::pinch();
 
 	outln("shuffln len " << len << " bop " << typeid(plus).name() << " nice " << nicen(plus));
 	outln("nice " << nicen(util<T>));
@@ -201,11 +240,11 @@ template <typename T> int testShuffle<T>::operator()(int argc, const char** args
 	return 0;
 }
 
-template int testColumnAndRowSum<float>::operator()(int argc, char const ** args) const;
-template int testColumnAndRowSum<double>::operator()(int argc, char const ** args) const;
-template <typename T> int testColumnAndRowSum<T>::operator()(int argc, const char** args) const {
+template int testColumnAndRowSum<float>::operator()(int argc, const char **argv) const;
+template int testColumnAndRowSum<double>::operator()(int argc, const char **argv) const;
+template <typename T> int testColumnAndRowSum<T>::operator()(int argc, const char **argv) const {
 	CuMatrix<T> incrRows = CuMatrix<T>::increasingRows(0, 200, 100);
-	uint count = b_util::getCount(argc,args,1000);
+	uint count = b_util::getCount(argc,argv,1000);
     CuTimer timer;
     float exeTime;
 
@@ -252,9 +291,9 @@ template <typename T> int testColumnAndRowSum<T>::operator()(int argc, const cha
 	return 0;
 }
 
-template int testSumLoop<float>::operator()(int argc, char const ** args) const;
-template int testSumLoop<double>::operator()(int argc, char const ** args) const;
-template <typename T> int testSumLoop<T>::operator()(int argc, const char** args) const {
+template int testSumLoop<float>::operator()(int argc, const char **argv) const;
+template int testSumLoop<double>::operator()(int argc, const char **argv) const;
+template <typename T> int testSumLoop<T>::operator()(int argc, const char **argv) const {
 	CuMatrix<T> m = CuMatrix<T>::ones(5000,400);
 	ulong matBytes = m.size;
     CuTimer timer;
@@ -263,7 +302,7 @@ template <typename T> int testSumLoop<T>::operator()(int argc, const char** args
 
     string max;
 
-	int count = b_util::getCount(argc,args,1000);
+	int count = b_util::getCount(argc,argv,1000);
 	float memFlowIter =0, maxFlow = 0;
 	for(int grids = 16; grids < 256; grids *= 2) {
 		for(int blocks = 32; blocks <=1024; blocks *= 2) {
@@ -294,9 +333,9 @@ template <typename T> int testSumLoop<T>::operator()(int argc, const char** args
 	return 0;
 }
 
-template int testNneqP<float>::operator()(int argc, char const ** args) const;
-template int testNneqP<double>::operator()(int argc, char const ** args) const;
-template <typename T> int testNneqP<T>::operator()(int argc, const char** args) const {
+template int testNneqP<float>::operator()(int argc, const char **argv) const;
+template int testNneqP<double>::operator()(int argc, const char **argv) const;
+template <typename T> int testNneqP<T>::operator()(int argc, const char **argv) const {
 	CuMatrix<T> bigSeq = CuMatrix<T>::sequence(0,20,20).syncBuffers();
 	CuMatrix<T> chunk1, chunk2;
 	bigSeq.submatrix(chunk1,4,4,2,2);
@@ -309,15 +348,15 @@ template <typename T> int testNneqP<T>::operator()(int argc, const char** args) 
 	return 0;
 }
 
-template int testEqualsEtc<float>::operator()(int argc, char const ** args) const;
-template int testEqualsEtc<double>::operator()(int argc, char const ** args) const;
-template <typename T> int testEqualsEtc<T>::operator()(int argc, const char** args) const {
+template int testEqualsEtc<float>::operator()(int argc, const char **argv) const;
+template int testEqualsEtc<double>::operator()(int argc, const char **argv) const;
+template <typename T> int testEqualsEtc<T>::operator()(int argc, const char **argv) const {
 	CuMatrix<T> ms = CuMatrix<T>::sin(40, 39);
 	CuMatrix<T> ms2 = CuMatrix<T>::sin(40, 39);
 	CuMatrix<T> ms3 = CuMatrix<T>::sin(40, 39);
 	outln("\nms " << ms.toShortString() << "\nms2 " << ms2.toShortString() << "\nms3 " << ms3.toShortString());
 	//ms3.set(5, 5, 5);
-	set<T>(ms3.d_elements, ms3.m, ms3.n, ms3.p, 5, 5, 5);
+	setL<T>(ms3.tiler.currBuffer(), ms3.m, ms3.n, ms3.p, 5, 5, 5);
 	outln("ms == ms2 " << tOrF(ms == ms2));
 	outln("ms == ms3 " << tOrF(ms == ms3));
 	assert( (ms == ms2));
@@ -327,7 +366,7 @@ template <typename T> int testEqualsEtc<T>::operator()(int argc, const char** ar
 	assert(bigZ.zeroQ());
 	assert(medZ.zeroQ());
 	//medZ.set(303,452,1);
-	set<T>(medZ.d_elements, medZ.m, medZ.n, medZ.p, 303, 452, 1);
+	setL<T>(medZ.tiler.currBuffer(), medZ.m, medZ.n, medZ.p, 303, 452, 1);
 
 	outln("modified medZ != 0 " << tOrF(!medZ.zeroQ()));
 	outln("\n\n\n");
@@ -362,10 +401,10 @@ template <typename T> int testEqualsEtc<T>::operator()(int argc, const char** ar
 }
 
 
-template int testCount<float>::operator()(int argc, char const ** args) const;
-template int testCount<double>::operator()(int argc, char const ** args) const;
-template int testCount<ulong>::operator()(int argc, char const ** args) const;
-template <typename T> int testCount<T>::operator()(int argc, const char** args) const {
+template int testCount<float>::operator()(int argc, const char **argv) const;
+template int testCount<double>::operator()(int argc, const char **argv) const;
+template int testCount<ulong>::operator()(int argc, const char **argv) const;
+template <typename T> int testCount<T>::operator()(int argc, const char **argv) const {
 	outln("int testCount<T>::operator enter");
 	CuMatrix<T> longC = CuMatrix<T>::ones(1000,1);
 	T longCSum = longC.sum();
@@ -465,10 +504,10 @@ template <typename T> int testCount<T>::operator()(int argc, const char** args) 
 	return 0;
 
 }
-template int testEtoX<float>::operator()(int argc, char const ** args) const;
-template int testEtoX<double>::operator()(int argc, char const ** args) const;
-template int testEtoX<ulong>::operator()(int argc, char const ** args) const;
-template <typename T> int testEtoX<T>::operator()(int argc, const char** args) const {
+template int testEtoX<float>::operator()(int argc, const char **argv) const;
+template int testEtoX<double>::operator()(int argc, const char **argv) const;
+template int testEtoX<ulong>::operator()(int argc, const char **argv) const;
+template <typename T> int testEtoX<T>::operator()(int argc, const char **argv) const {
 /*
 	CuTimer timer;
 	timer.start();

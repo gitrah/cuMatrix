@@ -7,6 +7,7 @@
 
 #ifndef MATRIXEXCEPTIONS_H_
 #define MATRIXEXCEPTIONS_H_
+using std::ostream;
 
 class MatrixException {
 public:
@@ -30,7 +31,7 @@ class notRowVector : public  notVector{};
 class notColumnVector : public  notVector{};
 
 class notSynced: public  MatrixException{}; // required buffer (host or dev) missing or out of date
-class notSynceCUDART_DEVICE: public  notSynced{}; // required buffer (host or dev) missing or out of date
+class notSyncedDev: public  notSynced{}; // required buffer (host or dev) missing or out of date
 class notSyncedHost: public  notSynced{}; // required buffer (host or dev) missing or out of date
 
 class notSquare : public  MatrixException{};

@@ -5,7 +5,9 @@
  *      Author: reid
  */
 
+#pragma once
 
+/*
 #include "util.h"
 
 template<typename T> struct DMatrix;
@@ -15,8 +17,9 @@ template<typename T> class CuMatrix;
 template <typename T> struct cu_util : public util<T> {
 	static string pdm(const DMatrix<T>& md);
 	static __host__ __device__ void prdm(const DMatrix<T>& md);
+	static __host__ __device__ void prdmln(const DMatrix<T>& md);
 	static __host__ __device__ void printDm( const DMatrix<T>& dm, const char* msg = null);
-	static __host__ __device__ void printRow(const DMatrix<T>& dm, uint row = 0);
+	static __host__ __device__ void printRow(const DMatrix<T>& dm, int row = 0);
 
 	static int release(std::map<std::string, CuMatrix<T>*>& map);
 	static cudaError_t migrate(int dev, CuMatrix<T>& m, ...);
@@ -32,3 +35,4 @@ template <typename T> struct cu_util : public util<T> {
 	static T timeReps( CuMatrix<T> (CuMatrix<T>::*unaryFn)(), const char* name, CuMatrix<T>* mPtr, int reps) ;
 
 };
+*/

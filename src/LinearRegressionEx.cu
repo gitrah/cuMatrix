@@ -261,7 +261,7 @@ template<typename T> T LinearRegression<T>::costFunctionNoReg(
 
 template<typename T> T LinearRegression<T>::costFunction(CuMatrix<T>& a,
 		CuMatrix<T>& y, T lambda, vector<CuMatrix<T> > thetas) {
-	uint m = y.m;
+	int m = y.m;
 	T jDel = 0.;
 	if (lambda != 0) {
 		uint i = 0;

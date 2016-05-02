@@ -15,10 +15,11 @@
 
 template class MemMgr<float>;
 template class MemMgr<double>;
+template class MemMgr<long>;
 template class MemMgr<ulong>;
 template class MemMgr<int>;
 template class MemMgr<uint>;
-
+bool pinnedQ = true;
 /*
 template <typename K, typename V> void printMap(string name, CMap<K,V>& theMap) {
 	typedef typename map<K, V>::iterator iterator;
@@ -38,8 +39,9 @@ template<typename T> __host__ MemMgr<T>::MemMgr() :
 		dBytesFreed(0l),
 		mmHHCopied(0l),
 		memMmHhCopied(0l),
-		currHost(0l),
-		currDevice(0l)
+		currHostB(0l),
+		currDeviceB(0l),
+		page_size((size_t) sysconf (_SC_PAGESIZE))
 {
 	outln("MemMgr<T>::MemMgr() this " << this << ", sizeof(T) " << sizeof(T)  );
 }
@@ -65,10 +67,15 @@ template<typename T> __host__ MemMgr<T>::~MemMgr() {
 			if(si != hSizes.end()) {
 				long amt = (*si).second;
 				hBytesFreed += amt;
-				currHost -= amt;
+				currHostB -= amt;
 				hSizes.erase(si);
 			}
-			checkCudaError(cudaFreeHost( (*it).first));
+			T* hostm = (*it).first;
+			if(checkDebug(debugDestr)){
+				checkValid(hostm,"~MemMgr");
+				flprintf("freeing host hostm %p\n", hostm);
+			}
+			checkCudaError(cudaFreeHost( hostm));
 		}
 		it++;
 	}
@@ -81,7 +88,7 @@ template<typename T> __host__ MemMgr<T>::~MemMgr() {
 			if(si != dSizes.end()) {
 				long amt = (*si).second;
 				dBytesFreed += amt;
-				currDevice -= amt;
+				currDeviceB -= amt;
 				dSizes.erase(si);
 			}
 			checkCudaError(cudaFree( mem));
@@ -90,11 +97,10 @@ template<typename T> __host__ MemMgr<T>::~MemMgr() {
 	}
 	dBuffers.clear();
 
-	if(checkDebug(debugMatStats) ){
-		dumpUsage();
-	}
-	outln("~MemMgr currDevice " << b_util::expNotation(currDevice));
-	outln("~MemMgr currHost " << b_util::expNotation(currHost));
+	if(checkDebug(debugMem))dumpUsage();
+
+	outln("~MemMgr currDeviceB " << b_util::expNotation(currDeviceB));
+	outln("~MemMgr currHostB " << b_util::expNotation(currHostB));
 
 	parentsIt pit = parents.begin();
 	while (pit != parents.end()) {
@@ -114,82 +120,140 @@ template<typename T> void MemMgr<T>::dumpLeftovers() {
 	}
 }
 
-template<typename T> __host__ void MemMgr<T>::migrate(int dev, CuMatrix<T>& m) {
-	outln("migrating " << m.toShortString() << " to gpu " << dev);
+template<typename T> __host__ int MemMgr<T>::migrate(int dev, CuMatrix<T>& m) {
+	assert(m.tiler.countGpus() == 1);
+
+	if(checkDebug(debugMultGPU))outln( b_util::caller() << " migrating " << m.toShortString() << " to gpu " << dev);
 	if(m.lastMod == mod_host) {
-		dthrow(notSynceCUDART_DEVICE());
+		dthrow(notSyncedDev());
 	}
 	int currentDev;
 	checkCudaErrors(cudaGetDevice(&currentDev));
+
 	if(currentDev != dev) {
-		if(checkDebug(debugMem)) {
-			outln("changing curr device from " << currentDev << " to " << dev);
-		}
-		checkCudaErrors( cudaSetDevice(dev));
+		if(checkDebug(debugMultGPU))outln(b_util::caller() << " changing curr device from " << currentDev << " to " << dev);
+		ExecCaps_setDevice(dev);
 	}
-    cudaPointerAttributes ptrAtts;
-    checkCudaErrors(cudaPointerGetAttributes(&ptrAtts, m.d_elements));
-	if(dev != ptrAtts.device) {
-		if(checkDebug(debugMem)) {
-			outln(m.d_elements << " not on " << dev << "; moving from " << ptrAtts.device);
-		}
+    int mDevice = util<T>::getDevice(m.tiler.buffer(m.tiler.nextGpu(currentDev)));
+    if(mDevice == dev) {
+    	if(checkDebug(debugMultGPU))outln(m.toShortString() << " already on device " << dev);
+    	return 0;
+    } else {
+		//if(checkDebug(debugMem)) {
+		if(checkDebug(debugMultGPU))outln("org tiler " << m.tiler);
+		if(checkDebug(debugMultGPU))outln("currBuff " << m.tiler.currBuffer() << " not on " << dev << "; moving from " << mDevice);
+		//}
 		T* devMem = null;
+		if(checkDebug(debugMem)) {
+			flprintf("migrate %p, dBytesAllocated now at %ld\n", devMem, m.size);
+			//b_util::usedDmem();
+		}
 		checkCudaErrors( cudaMalloc((void**) &devMem, m.size));
-		checkCudaErrors( cudaMemcpyPeer((void*)devMem, dev, (void*) m.d_elements, ptrAtts.device, m.size) );
+		checkCudaErrors( cudaMemcpyPeer((void*)devMem, dev, (void*) m.tiler.currBuffer(), mDevice, m.size) );
 		CuMatrix<T>::DDCopied++;
 		CuMatrix<T>::MemDdCopied += m.size;
 
-		freeDevice(m);
-		m.d_elements = devMem;
-		addDevice(m);
+		freeTiles(m);
+		m.tiler.setGpuMask( Tiler<T>::gpuMaskFromGpu(dev));
+		m.tiler.setBuffer(dev,devMem);
+		if(checkDebug(debugMultGPU))outln("after migatr " << m.tiler);
+		addTiles(&(m.tiler));
+		return 1;
+
 	}
 	if(currentDev != dev) {
-		checkCudaErrors( cudaSetDevice(currentDev));
+		ExecCaps_restoreDevice(currentDev);
 	}
 }
 
-template<typename T> __host__ void MemMgr<T>::locate(int dev, CuMatrix<T>& m) {
-	outln("migrating " << m.toShortString() << " to gpu " << dev);
-	if(m.lastMod == mod_host) {
-		dthrow(notSynceCUDART_DEVICE());
+template<typename T> __host__ pair<size_t,size_t> MemMgr<T>::migrate(int dev, vector<reference_wrapper<CuMatrix<T>>>  ms) {
+	//typedef
+	pair<size_t,size_t> load(0,0);
+
+	for( CuMatrix<T> & curr : ms) {
+
+		if(curr.elements)
+			load.first += curr.size;
+		if(curr.currBuffer())
+			load.second += curr.tiler.tileSize;
+		migrate(dev, curr);
 	}
-	if(!m.d_elements) {
-		dthrow(noDeviceBuffer());
+	return load;
+}
+
+template<typename T> __host__ int MemMgr<T>::meet(const vector<CuMatrix<T> >& mats) {
+	vector<long> volumes;
+	T* buff = nullptr;
+	for(  auto& m : mats) {
+		buff = m.currBuffer();
+		if(buff)
+			volumes.push_back(m.size);
 	}
-    cudaPointerAttributes ptrAtts;
-    checkCudaErrors(cudaPointerGetAttributes(&ptrAtts, m.d_elements));
-	if(dev != ptrAtts.device) {
-		if(checkDebug(debugMem)) {
-			outln(m.d_elements << " not on " << dev );
+
+	long maxVol = -1;
+	int targGpu = -1;
+	int idx = 0;
+	for( auto v : volumes) {
+		if(v > maxVol) {
+			maxVol = v;
+			targGpu = idx;
 		}
-		dthrow(notResidentOnDevice());
+		idx++;
 	}
+
+	if(checkDebug(debugMultGPU))flprintf("chose device %d because it had morbytz %ld\n", targGpu, maxVol);
+
+	return targGpu;
 }
 
-template<typename T> bool MemMgr<T>::checkValid(const T* addr) {
+template<typename T> bool MemMgr<T>::checkValid(const T* addr, const char* msg) {
+
+		if(checkDebug(debugMem | debugCons | debugCheckValid)) {
+
+			ExecCaps* currCaps;
+			checkCudaErrors(ExecCaps::currCaps(&currCaps));
+			if (currCaps->deviceProp.major > 1) {
+				struct cudaPointerAttributes ptrAtts;
+				//ptrAtts.memoryType = dev ? cudaMemoryTypeDevice : cudaMemoryTypeHost;
+				cudaError_t ret = cudaPointerGetAttributes(&ptrAtts, addr);
+				if (ret == cudaSuccess) {
+					if(checkDebug(debugMem | debugRefcount | debugCheckValid | debugCons )) {
+						outln((msg != null ? msg : "") << " cudaSuccess " << addr << " points to " << ( ptrAtts.memoryType == cudaMemoryTypeDevice ? " device " : " host") << " mem" ) ;
+					}
+					return true;
+				}
+				outln((msg != null ? msg : "") << " Imwalid " << addr);
+				b_util::dumpStack();
+				checkCudaError(ret);
+			}
+			return false;
+		} else {
+			return true;
+		}
+	}
+
+template<typename T> void MemMgr<T>::checkRange(const T* addr, int endIdx, const char* msg) {
 	ExecCaps* currCaps;
 	checkCudaErrors(ExecCaps::currCaps(&currCaps));
-	if (currCaps->deviceProp.major > 1) {
-		struct cudaPointerAttributes ptrAtts;
-		//ptrAtts.memoryType = dev ? cudaMemoryTypeDevice : cudaMemoryTypeHost;
-		cudaError_t ret = cudaPointerGetAttributes(&ptrAtts, addr);
-		if (ret == cudaSuccess) {
-			//outln("checkValid " << addr << " to " << ( ptrAtts.memoryType == cudaMemoryTypeDevice ? " device " : " not device"));
-			return true;
-
+	for(int i =0; i < endIdx; i++) {
+		if (currCaps->deviceProp.major > 1) {
+			struct cudaPointerAttributes ptrAtts;
+			//ptrAtts.memoryType = dev ? cudaMemoryTypeDevice : cudaMemoryTypeHost;
+			cudaError_t ret = cudaPointerGetAttributes(&ptrAtts, addr + i);
+			if (ret != cudaSuccess) {
+				outln((msg != null ? msg : "") << " Imwalid " << addr << " + " << i );
+				b_util::dumpStack();
+				checkCudaError(ret);
+			}
 		}
-		outln("INValid " << addr);
-		b_util::dumpStack();
-		checkCudaError(ret);
 	}
-	return false;
 }
 
 template<typename T> __host__ void MemMgr<T>::dumpUsage() {
 	typedef typename map<string, int>::iterator siterator;
 	outln("\n\nMemMgr::dumpUsage()");
 	b_util::announceTime();
-	outln( hDimCounts.size() << " distinct dimensions of host allocations; counts:");
+	if(checkDebug(debugMem))outln( hDimCounts.size() << " distinct dimensions of host allocations; counts:");
 	siterator sit = hDimCounts.begin();
 	while (sit != hDimCounts.end()) {
 		cout << "\t" << (*sit).first.c_str()  << " allocated " << (*sit).second << " times" << endl;
@@ -218,46 +282,60 @@ template<typename T> __host__ void MemMgr<T>::addHostDims( const CuMatrix<T>& ma
 		hDimCounts.erase(it);
 		hDimCounts.insert( hDimCounts.end(),
 				pair<string, int>(dims, allocCount));
-		if(checkDebug(debugMem))outln( "host dim " << dims << " has now been allocated " << allocCount << " time" << (allocCount > 1 ? "s":""));
+		if(checkDebug(debugMem | debugCons ))outln( "host dim " << dims << " has now been allocated " << allocCount << " time" << (allocCount > 1 ? "s":""));
 	} else {
 		hDimCounts.insert( hDimCounts.end(),
 				pair<string, int>(dims, 1));
-		if(checkDebug(debugMem))outln("host dim " << dims << " gets first allocation");
+		if(checkDebug(debugMem| debugCons ))outln("host dim " << dims << " gets first allocation");
 	}
 	if(mat.ownsBuffers)ptrDims.insert(ptrDims.end(), pair<T*, string>(mat.elements, dims));
 	hSizes.insert(hSizes.end(), pair<T*, long>(mat.elements, mat.size));
-	if(checkDebug(debugMem))b_util::dumpStack();
+	//if(checkDebug(debugMem))b_util::dumpStack();
 }
+
+
 
 template<typename T> __host__ cudaError_t MemMgr<T>::allocHost(CuMatrix<T>& mat, T* source) {
 	if(mat.size > 0) {
-		if(mat.elements && checkValid(mat.elements)) {
+		if(checkDebug(debugMem| debugCons ))usedDevMem();
+		if(mat.elements && (pinnedQ && checkValid(mat.elements))) {
 			outln("already allocated " << mat.elements << " to " << &mat.elements);
 			dthrow(hostReallocation());
 		}
-		cudaError_t res = cudaHostAlloc( (void**)&mat.elements,mat.size,0);
+		cudaError_t res = cudaSuccess;
+		if(pinnedQ)
+			res = cudaHostAlloc( (void**)&mat.elements,mat.size,0);
+		else
+			mat.elements = (T*) malloc(mat.size);
+
 		if(res != cudaSuccess) {
 			outln("allocHost: FAILURE: " << mat.toShortString());
 			checkCudaError(res);
 			return res;
 		}
+		mat.tiler.m_elems = mat.elements;
 		hBytesAllocated += mat.size;
-		currHost += mat.size;
-		if(checkDebug(debugMem))
-			outln("allocHost: success for " << mat.toShortString() << " hBytesAllocated now at " << b_util::expNotation(hBytesAllocated));
-
+		currHostB += mat.size;
+		if(checkDebug(debugMem| debugCons )) {
+			outln("allocHost pinneQ " << pinnedQ <<": success for " << mat.toShortString() << " hBytesAllocated now at " << b_util::expNotation(hBytesAllocated));
+			mCheckValid(mat.elements);
+		}
 		hBuffers.insert(hBuffers.end(),pair<T*, int>(mat.elements, 1));
+		if(checkDebug(debugRefcount))  {
+			outln("allocHost pinned " << pinnedQ << " success for " << mat.toShortString() << ", " << mat.elements << " refcount now at 1");
+		}
 		mhBuffers.insert(mhBuffers.end(),
 				pair<CuMatrix<T>*, T*>(&mat, mat.elements));
 		if (source != null) {
-			outln("allocHost copying "<<mat.size << " from " << mat.elements << " to " << source);
+			outln("allocHost copying " << mat.size << " from " << mat.elements << " to " << source);
 			checkCudaError(
 					cudaMemcpy(source, mat.elements, mat.size, cudaMemcpyHostToHost));
 			mmHHCopied++;
 			memMmHhCopied += mat.size;
 		}
-		if(checkDebug(debugMem))b_util::dumpStack();
+		//if(checkDebug(debugRefcount))b_util::dumpStack();
 		addHostDims(mat);
+		if(checkDebug(debugMem))usedDevMem();
 	}
 	return cudaSuccess;
 }
@@ -269,23 +347,33 @@ template<typename T> __host__ string MemMgr<T>::stats() {
 	return ss.str();
 }
 
+template<typename T> __host__ pair<int,int> MemMgr<T>::refCounts(const CuMatrix<T>& m) {
+	return pair<int,int>( m.elements ? refCount(m.elements) : 0,  m.tiler.buff() ? refCount(m.tiler.buff()) : 0);
+}
+
 template<typename T> __host__ void MemMgr<T>::addHost(  CuMatrix<T>& mat) {
 	if (mat.elements) {
+/*
+		if(checkDebug(debugRefcount)){
+			prlocf("dumping stack\n");
+			b_util::dumpStack();
+		}
+*/
 
 		typedef typename map<T*, int>::iterator iterator;
 		iterator it = hBuffers.find(mat.elements);
 		int refCount = -1;
 		if (it != hBuffers.end()) {
 			refCount = ((*it).second + 1) ;
-			if(checkDebug(debugMem)) {
-				outln("addHost: matrix " << mat.toShortString() << " adding " << refCount << " ref for " << mat.elements);
+			if(checkDebug(debugRefcount)) {
+				outln("addHost: " << b_util::caller() << ": matrix " << mat.toShortString() << " setting " << refCount << " ref for " << mat.elements);
 				//dumpStack();
 			}
 			hBuffers.erase(it);
 			hBuffers.insert( hBuffers.end(),
 					pair<T*, int>(mat.elements, refCount));
 		} else {
-			if(checkDebug(debugMem)) {
+			if(checkDebug(debugRefcount)) {
 				outln("addHost: matrix " << &mat <<
 					" found no host ref for " << mat.elements);
 				b_util::dumpStack();
@@ -321,6 +409,12 @@ template<typename T> __host__ cudaError_t MemMgr<T>::getHost(  CuMatrix<T>& mat)
 }
 
 template<typename T> __host__ int MemMgr<T>::freeHost(CuMatrix<T>& mat) {
+/*
+	if(checkDebug(debugRefcount)){
+		prlocf("dumping stack\n");
+		b_util::dumpStack();
+	}
+*/
 	//outln("freeHost enter " << b_util::caller());
 	int count = -1;
 	if(mat.elements) {
@@ -332,29 +426,40 @@ template<typename T> __host__ int MemMgr<T>::freeHost(CuMatrix<T>& mat) {
 			hBuffers.erase(it);
 			//outln("after erase, hBuffers.size " << hBuffers.size());
 			if (count == 1) {
-				if(checkDebug(debugMem))
-					outln("freeHost:  " << mat.toShortString() << " had only 1 ref; FREEING host " << mat.elements);
 				typedef typename map<T*, long>::iterator sizeit;
 				sizeit si = hSizes.find(mat.elements);
 				if(si != hSizes.end()) {
 					hSizes.erase(si);
 					long amt = (*si).second;
 					hBytesFreed += amt;
-					currHost -= amt;
+					currHostB -= amt;
 				}
 				ptrDims.erase(mat.elements);
-				checkCudaError(cudaFreeHost( mat.elements));
+				if(pinnedQ) {
+					checkCudaError(cudaGetLastError());
+					checkValid(mat.elements);
+					if(checkDebug(debugRefcount | debugDestr ))
+						outln("freeHost:  " << mat.toShortString() << " had only 1 ref; FREEING pinned host " << mat.elements);
+					checkCudaError(cudaGetLastError());
+					checkCudaError(cudaFreeHost( mat.elements));
+				}
+				else {
+					if(checkDebug(debugRefcount | debugDestr ))
+						outln("freeHost:  " << mat.toShortString() << " had only 1 ref; FREEING malloc host " << mat.elements);
+					free(mat.elements);
+				}
 				mat.elements = null;
 				count = 0;
 			} else {
-				if(checkDebug(debugMem))
-					outln("freeHost:  " << mat.toShortString() << " host ( " << mat.elements << ") refcount now at " << (count - 1) );
+				if (checkDebug(debugRefcount | debugDestr))
+					outln(
+							"freeHost:  " << mat.toShortString() <<
+							" host ( " << mat.elements << ") refcount now at " << (count - 1));
 				hBuffers.insert(hBuffers.end(),
 						pair<T*, int>(mat.elements, --count));
 			}
 		} else {
 			outln("freeHost: " << mat.toShortString() << " had no hBuffer ref for "<< mat.elements << " [caller " << b_util::caller().c_str() << "] disposition elsewhere" );
-			if(checkDebug(debugMem))b_util::dumpStack();
 		}
 		typedef typename map<CuMatrix<T>*, T*>::iterator miterator;
 		miterator mit = mhBuffers.find(&mat);
@@ -365,7 +470,7 @@ template<typename T> __host__ int MemMgr<T>::freeHost(CuMatrix<T>& mat) {
 	return count;
 }
 
-template<typename T> __host__ void MemMgr<T>::addDeviceDims( const CuMatrix<T>& mat) {
+template<typename T> __host__ void MemMgr<T>::addDeviceDims( const CuMatrix<T>& mat, ulong tileSize) {
 	typedef typename map<string, int>::iterator iterator;
 	string dims = mat.dimsString();
 	iterator it = dDimCounts.find(dims);
@@ -381,8 +486,12 @@ template<typename T> __host__ void MemMgr<T>::addDeviceDims( const CuMatrix<T>& 
 				pair<string, int>(dims, 1));
 		if(checkDebug(debugMem))outln( "dev dim " << dims << " gets first allocation");
 	}
-	if(mat.ownsBuffers)ptrDims.insert(ptrDims.end(), pair<T*, string>(mat.d_elements, dims));
-	dSizes.insert(dSizes.end(), pair<T*, long>(mat.d_elements, mat.size));
+	if(mat.ownsBuffers) {
+		for(int i =0; i < mat.tiler.countGpus(); i++) {
+			ptrDims.insert(ptrDims.end(), pair<T*, string>(mat.tiler.buffer(i), tileSize == 0 ? dims : string("tile of " + tileSize)));
+			dSizes.insert(dSizes.end(), pair<T*, long>(mat.tiler.buffer(i), tileSize == 0 ? mat.size : tileSize));
+		}
+	}
 }
 
 template<typename T> string dimsString( const DMatrix<T>& mat) {
@@ -394,121 +503,172 @@ template<typename T> string dimsString( const DMatrix<T>& mat) {
 	return ssout.str();
 }
 
-template<typename T> __host__ cudaError_t MemMgr<T>::allocDevice(
-		CuMatrix<T>& mat) {
-	dassert(mat.size && mat.ownsBuffers);
-	if(mat.size / (mat.m * mat.p) != sizeof(T) ) {
-		dthrow(MemoryException());
-	}
-	if(checkDebug(debugMultGPU)) {
-		outln("MemMgr<T>::allocDevice on dev " << ExecCaps::currDev());
-	}
-	if(mat.d_elements != null) {
-		if(checkDebug(debugMem))outln("pointer was already pointing! " << mat.d_elements);
-		if(!(checkValid(mat.d_elements ) && checkValid(mat.d_elements  + mat.size / sizeof(T) - 1))) {
-			throw alreadyPointingDevice();
-		}
-	} else {
-		if(checkDebug(debugMem)) outln("mat.size " << mat.size );
-		checkCudaError(cudaMalloc( (void**)&mat.d_elements,mat.size));
-		if(checkDebug(debugMem)) outln("dBytesAllocated " << dBytesAllocated);
+//multi gpu case?
 
-		dBytesAllocated += mat.size;
-		currDevice += mat.size;
-		if(checkDebug(debugMem)) {
-			outln("allocDevice: success for " << mat.toShortString() << " dBytesAllocated now at " << b_util::expNotation(dBytesAllocated));
-			b_util::usedDmem();
-		}
-		dBuffers.insert(dBuffers.end(), pair<T*, int>(mat.d_elements, 1));
-		mdBuffers.insert(mdBuffers.end(),
-				pair<CuMatrix<T>*, T*>(&mat, mat.d_elements));
-		addDeviceDims(mat);
-	}
+template<typename T> __host__ cudaError_t MemMgr<T>::allocDevice(
+		CuMatrix<T>& mat,int device, ulong tileSize) {
+	assert(0);
 	return cudaSuccess;
 }
 
-template<typename T> __host__ void MemMgr<T>::addDevice( CuMatrix<T>& mat) {
-	if (mat.d_elements && mat.ownsBuffers) {
+template<typename T> __host__ void MemMgr<T>::addTiles( const Tiler<T>* tiler) {
+	if (tiler->hasDmemQ() ) {
+/*
+		if(checkDebug(debugRefcount)) {
+			prlocf("dumpingstack");
+			b_util::dumpStack();
+		}
+*/
+		if(checkDebug(debugCheckValid)) {
+			flprintf("curr dev %d %s  tiler& %p, %dx%dx%d - matsize %ld -:> %p\n", ExecCaps::currDev(), b_util::caller().c_str(), tiler, tiler->m_m, tiler->m_n, tiler->m_p, tiler->m_size, tiler->buff());
+		}
+		if(checkDebug(debugMem))usedDevMem();
 		typedef typename map<T*, int>::iterator iterator;
 		int refs = -1;
-		iterator it = dBuffers.find(mat.d_elements);
-		if (it != dBuffers.end()) {
-			refs = (*it).second + 1;
-			if(checkDebug(debugMem))outln("addDevice: matrix " << &mat <<
-					" adding " << refs << " ref for " << mat.d_elements);
-			dBuffers.erase(it);
-			dBuffers.insert(dBuffers.end(),
-					pair<T*, int>(mat.d_elements, refs));
-		} else {
-			if(checkDebug(debugMem)) outln("addDevice: matrix " << &mat <<
-					" found no ref for " << mat.d_elements);
-			dBuffers.insert(dBuffers.end(),
-					pair<T*, int>(mat.d_elements, 1));
-		}
-		it = dBuffers.find(mat.d_elements);
-		if(checkDebug(debugMem))outln(
-				"after adding " << mat.d_elements << ", ref now at " << (*it).second);
-		typedef typename map<CuMatrix<T>*, T*>::iterator miterator;
-		miterator mit = mdBuffers.find(&mat);
-		if (mit == mdBuffers.end()) {
-			mdBuffers.insert(mdBuffers.end(),
-					pair<CuMatrix<T>*, T*>(&mat, mat.d_elements));
-		}
-	}
-}
-
-template<typename T> __host__ cudaError_t MemMgr<T>::getDevice(  CuMatrix<T>& mat) {
-	typedef typename map<CuMatrix<T>*, T*>::iterator miterator;
-	miterator mit = mdBuffers.find(&mat);
-	if (mit != mdBuffers.end()) {
-		mat.d_elements = (*mit).second;
-		return cudaSuccess;
-	}
-	return cudaErrorMemoryAllocation;
-}
-
-template<typename T> __host__ int MemMgr<T>::freeDevice(CuMatrix<T>& mat) {
-	if(checkDebug(debugMem))outln("freeDevice mat " << &mat << " d_elements " << mat.d_elements);
-	if(submatrixQ(mat)) {
-		outln(mat.toShortString() << " is submatrix");
-		return 0;
-	}
-	typedef typename map<T*, int>::iterator iterator;
-	iterator it = dBuffers.find(mat.d_elements);
-	int count = -1;
-	if (it != dBuffers.end()) {
-		count = (*it).second;
-		dBuffers.erase(it);
-		if(checkDebug(debugMem))outln("dBuffers erased");
-		if (count == 1) {
-			typedef typename map<T*, long>::iterator sizeit;
-			sizeit si = dSizes.find(mat.d_elements);
-			if(si != dSizes.end()) {
-				dSizes.erase(si);
-				long amt = (*si).second;
-				dBytesFreed += amt;
-				currDevice -= amt;
+		if(checkDebug(debugCheckValid))outln("tiler->countGpus() " << tiler->countGpus()<< "\n");
+		for(int i =0; i < tiler->countGpus(); i++) {
+			int nextGpu = tiler->nextGpu(i);
+			T* buffer = tiler->buffer(nextGpu);
+			if(!buffer) continue;
+			if( !util<T>::onDevice(buffer, nextGpu)) {
+				if(checkDebug(debugRefcount))outln("addTiles: tiler " << tiler <<
+						" buffer " << buffer << " not on device " << nextGpu);
+				continue;
 			}
-			ptrDims.erase(mat.d_elements);
-			if(checkValid(mat.d_elements)) {
-				if(checkDebug(debugMem))outln("freeDevice:  " << mat.toShortString() << " had only 1 ref; FREEING device " << mat.d_elements);
-				checkCudaError(cudaFree( mat.d_elements));
+			iterator it = dBuffers.find(buffer);
+			if (it != dBuffers.end()) {
+				refs = (*it).second + 1;
+				if(checkDebug(debugRefcount))outln("addTiles: tiler " << tiler <<
+						" incing refs to " << refs << " for " << buffer);
+				dBuffers.erase(it);
+				dBuffers.insert(dBuffers.end(),
+						pair<T*, int>(buffer, refs));
+			} else {
+				if(checkDebug(debugRefcount)) outln("addTiles: tiler " << *tiler <<
+						" found no ref for " << buffer);
+				dBuffers.insert(dBuffers.end(),
+						pair<T*, int>(buffer, 1));
 			}
-			mat.d_elements = null;
-		} else {
-			dBuffers.insert(dBuffers.end(),
-					pair<T*, int>(mat.d_elements, count - 1));
-			if(checkDebug(debugMem))outln("freeDevice:  " << mat.toShortString() << " device ( " << mat.d_elements << ") refcount now at " << (count - 1) );
+			it = dBuffers.find(buffer);
+			if(checkDebug(debugRefcount))outln(
+					"after adding " << buffer <<  " to &dBuffers (" << &dBuffers << "), ref now at " << (*it).second);
+			dBytesAllocated += tiler->tileSize;
 		}
-		count--;
+		if(checkDebug(debugMem))usedDevMem();
 	} else {
-		outln("freeDevice: " << mat.toShortString() << " had no dBuffer ref for "<< mat.d_elements << " [caller " << b_util::caller().c_str() << "] disposition elsewhere" );
+		outln("addTiles called on " << ExecCaps::currDev() << " with non-dmemq tiler " << *tiler );
+		b_util::dumpStack();
 	}
-	typedef typename map<CuMatrix<T>*, T*>::iterator miterator;
-	miterator mit = mdBuffers.find(&mat);
-	if (mit != mdBuffers.end()) {
-		mdBuffers.erase(mit);
-	}
-	return count;
 }
 
+template<typename T> __host__ int MemMgr<T>::refCount( T* els) {
+	assert(els);
+	ExecCaps* currCaps;
+	checkCudaErrors(ExecCaps::currCaps(&currCaps));
+	int refCount = 0;
+	if (currCaps->deviceProp.major > 1) {
+		struct cudaPointerAttributes ptrAtts;
+		//ptrAtts.memoryType = dev ? cudaMemoryTypeDevice : cudaMemoryTypeHost;
+		cudaError_t ret = cudaPointerGetAttributes(&ptrAtts, els);
+		if (ret == cudaSuccess) {
+			typedef typename map<T*, int>::iterator iterator;
+			if (ptrAtts.memoryType == ::cudaMemoryTypeHost) {
+				iterator it = hBuffers.find(els);
+				if (it != hBuffers.end()) {
+					refCount = (*it).second;
+				}
+			} else if (ptrAtts.memoryType == ::cudaMemoryTypeDevice) {
+				iterator it = dBuffers.find(els);
+				if (it != dBuffers.end()) {
+					refCount = (*it).second;
+				}
+			}
+		}
+	}
+	return refCount;
+}
+
+template<typename T> __host__ int MemMgr<T>::freeTiles(CuMatrix<T>& mat) {
+/*
+	if(checkDebug(debugRefcount)){
+		flprintf("dumping stack %s\n","");
+		b_util::dumpStack();
+	}
+*/
+	if(checkDebug(debugCheckValid | debugDestr)) {
+		flprintf("%s  tiler& %p, %dx%dx%d - matsize %ld -:> %p\n", b_util::caller().c_str(), &(mat.tiler), mat.tiler.m_m, mat.tiler.m_n, mat.tiler.m_p, mat.tiler.m_size, mat.tiler.buff());
+	}
+	int refCount = -1;
+	int freedCount = 0;
+	if (mat.tiler.hasDmemQ() && mat.ownsBuffers) {
+		T* currBuff;
+		int currGpu;
+		for(int i = 0; i < mat.tiler.countGpus(); i++) {
+			refCount = -1;
+			currGpu = mat.tiler.nextGpu(i);
+			currBuff = mat.tiler.buffer(currGpu);
+			if(checkDebug(debugMem))outln("mat " << &mat << " buffers[nextGpu(" << i << ") == " << currGpu << "] " << currBuff);
+			if(submatrixQ(mat)) {
+				outln(mat.toShortString() << " is submatrix");
+				return freedCount;
+			}
+			typedef typename map<T*, int>::iterator iterator;
+			iterator it = dBuffers.find(currBuff);
+			if (it != dBuffers.end()) {
+				refCount = (*it).second;
+				dBuffers.erase(it);
+				if(checkDebug(debugMem))outln("dBuffers erased");
+				if (refCount == 1) {
+					typedef typename map<T*, long>::iterator sizeit;
+					sizeit si = dSizes.find(currBuff);
+					if(si != dSizes.end()) {
+						if(checkDebug(debugRefcount))outln("si != dSizes.end()");
+						dSizes.erase(si);
+						long amt = (*si).second;
+						currDeviceB -= amt;
+					}
+					ptrDims.erase(currBuff);
+					if(checkDebug(debugRefcount))outln("refCount of " << currBuff << " was 1");
+					size_t freeMemoryB, totalMemoryB;
+					if(checkValid(currBuff)) {
+						if(checkDebug(debugMem)) {
+							ExecCaps::allGpuMem(&freeMemoryB, &totalMemoryB);
+							b_util::usedDmem(true);
+						}
+						if(checkDebug(debugRefcount | debugDestr))outln(":  " << mat.toShortString() << " had only 1 ref; FREEING device " << currBuff);
+						checkCudaError(cudaFree( currBuff));
+						dBytesFreed += mat.tiler.tileSize;
+						mat.tiler.setBuffer(currGpu,0);
+						if(checkDebug(debugRefcount)) {
+							outln("after freeing " << currBuff << ",  buff now at " << mat.tiler.currBuffer());
+							b_util::dumpStack();
+						}
+						freedCount++;
+						if(checkDebug(debugMem)) {
+							size_t freeMemoryA, totalMemoryA, deltaGpu;
+							ExecCaps::allGpuMem(&freeMemoryA, &totalMemoryA);
+							deltaGpu = freeMemoryA - freeMemoryB;
+							outln("deltaGpu " << deltaGpu << " mat.tiler.tileSize " <<  mat.tiler.tileSize <<", freeMemoryB " << freeMemoryB << " freeMemoryA " << freeMemoryA);
+							outln("delta free " << (freeMemoryA-freeMemoryB) << ", checking validity of pointer post cudaFree\n");
+							//if(deltaGpu < mat.tiler.tileSize && deltaGpu > ExecCaps::currCaps()->alignment ) checkValid(currBuff);
+							//assert(freeMemoryA - freeMemoryB >= mat.tiler.tileSize || deltaGpu < ExecCaps::currCaps()->alignment);
+							b_util::usedDmem(true);
+						}
+					}
+				} else {
+					dBuffers.insert(dBuffers.end(),
+							pair<T*, int>(currBuff, refCount - 1));
+					if(checkDebug(debugRefcount))outln(":  " << mat.toShortString() << " device ( " << currBuff << ") refrefCount now at " << (refCount - 1) );
+				}
+				refCount--;
+			} else {
+				if(checkDebug(debugMem)){
+					outln(": " << mat.toShortString() << " had no dBuffer ref for "<< currBuff << " [caller " << b_util::caller().c_str() << "] disposition elsewhere" );
+					b_util::dumpStack();
+				}
+
+			}
+		}
+	}
+	return refCount;
+}

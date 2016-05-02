@@ -4,18 +4,33 @@
  *  Created on: Aug 22, 2012
  *      Author: reid
  */
-#ifndef LOGISTICREGRESSION_H_
-#define LOGISTICREGRESSION_H_
+#pragma once
 
 #include "CuMatrix.h"
 #include "util.h"
-
+/*
+ * z(theta)i = theta' * xi (where theta is col vector, xi is ith sample (also as row vector)
+ * hTheta(xi) = g(zi) = 1/(1 + e-zi) = 1/(1 + e-(theta'xi)
+ * m1 * m2 = m2' * m1
+ */
 template<typename T> class LogisticRegression {
 public:
+
+	/*
+	 * gradCostFunction
+	 * 		grad
+	 * 		cost cost output
+	 *
+	 */
+	static __host__ CUDART_DEVICE void gradCostFunction(CuMatrix<T>& grad, T& cost,
+				const CuMatrix<T>& x, const CuMatrix<T>& y,
+				const CuMatrix<T>& theta, T lambda);
+/*
 	static void gradCostFunction(CuMatrix<T>& grad, T& cost,
 			const CuMatrix<T>& x, const CuMatrix<T>& y,
 			const CuMatrix<T>& theta, T lambda) {
 		const int m = y.m;
+		outln("enter x " << x.toShortString() );
 		CuMatrix<T> tThetaX = theta.transpose() * x.transpose();
 		outln("tThetaX" << tThetaX.syncBuffers());
 		CuMatrix<T> hThetaT = tThetaX.sigmoid();
@@ -24,6 +39,7 @@ public:
 		cost = costFunctionNoReg(hThetaT, yT, m);
 		outln("cost " << cost);
 		CuMatrix<T> gradNoReg = ((hThetaT - yT) * x) / m;
+		outln("gradNoReg " << gradNoReg.syncBuffers());
 		CuMatrix<T> thetaCopy(theta);
 		thetaCopy.set(0, 0, 0); // elements[0] = 0;
 		CuMatrix<T> gradReg = lambda * thetaCopy.transpose() / m;
@@ -34,14 +50,20 @@ public:
 		grad = gradNoReg + gradReg;
 	}
 
+*/
 
-	// operator% => hadamardProduct (elementwise product)
+	// operator% => hadamardProduct (element-wise product)
 	/*
-	 * aka error function
 	 * hThetaT (h . theta')
 	 * yT ( y')
 	 */
-	static T costFunctionNoReg(CuMatrix<T>& hThetaT, CuMatrix<T>& yT, int m) {
+	static T costFunctionNoReg(const CuMatrix<T>& hThetaT, const CuMatrix<T>& yT, int m) {
+#ifndef __CUDA_ARCH__
+		if(checkDebug(debugCg)) {
+			printf("costFunctionNoReg hThetaT %dx%d d %p h %p,", hThetaT.m,hThetaT.n, hThetaT.tiler.currBuffer(), hThetaT.elements );
+			printf("yT %dx%d d %p h %p\n", yT.m,yT.n, yT.tiler.currBuffer(), yT.elements );
+		}
+#endif
 		return static_cast<T>((-1. / m)
 				* (yT % hThetaT.log() + (1 - yT) % ((1 - hThetaT).log())).sum());
 	}
@@ -53,50 +75,65 @@ public:
 		return hThetaT.combineReduce(misclassificationErrorBinaryOp<T>(),plusBinaryOp<T>(), yT, 0, stream);
 	}
 
-	static T costFunction(CuMatrix<T>& a, CuMatrix<T>& y, T lambda,
-			vector<CuMatrix<T> > thetas) {
-		uint m = y.m;
+	static T costFunction(const CuMatrix<T>& a, const CuMatrix<T>& y, T lambda,
+			const vector<CuMatrix<T> > thetas) {
+		int m = y.m;
 		CuMatrix<T> yb =
 				y.isBinaryCategoryMatrix() ? y : y.toBinaryCategoryMatrix();
 		T jDel = 0.;
 		if (lambda != 0) {
 			uint i = 0;
-			typedef typename vector<CuMatrix<T> >::iterator iterator;
+			typedef typename vector<CuMatrix<T> >::const_iterator iterator;
 			for (iterator it = thetas.begin(); it < thetas.end(); it++) {
 				CuMatrix<T> thetaCopy = (*it).dropFirst();
 				T jdeldel = lambda / (2. * m) * thetaCopy.autoDot();
-				outln( i << " jdeldel " << jdeldel);
+				if(checkDebug(debugCg))outln( i << " lambda " << lambda << ", jdeldel " << jdeldel);
 				jDel += jdeldel;
 				i += 1;
 			}
 		}
 		T jNoReg = costFunctionNoReg(a, yb, m);
-		outln("jNoReg " << jNoReg);
+		//outln("jNoReg " << jNoReg);
 		return (jNoReg + jDel);
 	}
 
-	static T costFunctionNoReg2(CuMatrix<T>& hThetaT, CuMatrix<T>& yT, int m) {
+	static T costReg(int m, T lambda, const vector<CuMatrix<T> > thetas) {
+		T jDel = 0.;
+		if (lambda != 0) {
+			uint i = 0;
+			typedef typename vector<CuMatrix<T> >::const_iterator iterator;
+			for (iterator it = thetas.begin(); it < thetas.end(); it++) {
+				CuMatrix<T> thetaCopy = (*it).dropFirst();
+				T jdeldel = lambda / (2. * m) * thetaCopy.autoDot();
+				if(checkDebug(debugNn))outln("i " << i << " lambda " << lambda << ", jdeldel " << jdeldel);
+				jDel += jdeldel;
+				i += 1;
+			}
+		}
+		return (jDel);
+	}
+
+	static T __host__ __device__  costFunctionNoReg2(CuMatrix<T>& hThetaT, CuMatrix<T>& yT, int m) {
 		CuMatrix<T> yThThetaLog = yT % hThetaT.log();
-		outln("yThThetaLog");
-		outln(yThThetaLog.toString());
-		CuMatrix<T> oneMinusyTh = (1 - yT) % ((1 - hThetaT).log());
-		outln("oneMinusyTh");
-		outln(oneMinusyTh.toString());
-		CuMatrix<T> onMin = 1 - yT;
-		outln("onMin");
-		outln(onMin.toString());
-		CuMatrix<T> onMinh = 1 - hThetaT;
-		outln("onMinh");
-		outln(onMinh.toString());
-		CuMatrix<T> lonminh = onMinh.log();
-		outln("lonminh");
-		outln(lonminh.toString());
-		CuMatrix<T> ha = onMin.hadamardProduct(lonminh);
-		outln("ha");
-		outln(ha.toString());
-		CuMatrix<T> ha2 = onMin.binaryOp(lonminh, Functory<T,plusBinaryOp>::pinch());
-		outln("ha2");
-		outln(ha2.toString());
+		if (checkDebug(debugCg)) {
+			CuMatrix<T> oneMinusyTh = (1 - yT) % ((1 - hThetaT).log());
+			CuMatrix<T> onMin = 1 - yT;
+			CuMatrix<T> onMinh = 1 - hThetaT;
+			CuMatrix<T> lonminh = onMinh.log();
+			CuMatrix<T> ha = onMin.hadamardProduct(lonminh);
+			CuMatrix<T> ha2 = onMin.binaryOp(lonminh,
+					Functory<T, plusBinaryOp>::pinch());
+#ifndef __CUDA_ARCH__
+			outln("hThetaT " << hThetaT.syncBuffers());
+			outln("yThThetaLog " << yThThetaLog.syncBuffers());
+			outln("oneMinusyTh " << oneMinusyTh.syncBuffers());
+			outln("onMin " << onMin.syncBuffers());
+			outln("onMinh " << onMinh.syncBuffers());
+			outln("lonminh " << lonminh.syncBuffers());
+			outln("ha " << ha .syncBuffers());
+			outln("ha2 " << ha2 .syncBuffers());
+#endif
+		}
 		return static_cast<T>((-1. / m)
 				* (yThThetaLog + (1 - yT) % ((1 - hThetaT).log())).sum());
 	}
@@ -118,27 +155,21 @@ public:
 		}
 		return gradApprox;
 	}
+
+	static T predictionAccuracy(const CuMatrix<T>& theta, const CuMatrix<T>& x,const CuMatrix<T>& y) {
+		CuMatrix<T> predicted = (theta.transpose() * x.transpose()).sigmoid() >= (T).5;
+		return 100 * predicted.transpose().accuracy(y);
+	}
+
 };
 
 template<typename T> struct logRegCostFtor {
 	const CuMatrix<T>& y;
-	const CuMatrix<T>& theta;
+	const CuMatrix<T>& x;
 	T lambda;
-	logRegCostFtor( const CuMatrix<T>& y,
-			const CuMatrix<T>& theta, T lambda) : y(y),theta(theta), lambda(lambda) {}
-
-	virtual __host__ __device__ void operator()(CuMatrix<T>& grad, T& cost,
-			const CuMatrix<T>& x) const {
+	logRegCostFtor( const CuMatrix<T>& y,const CuMatrix<T>& x, T lambda) : y(y),x(x), lambda(lambda) {}
+	 __host__ __device__ void operator()(CuMatrix<T>& grad, T& cost, const CuMatrix<T>& theta) const {
 		LogisticRegression<T>::gradCostFunction(grad, cost,x, y,theta, lambda);
 	}
 };
 
-template void LogisticRegression<float>::gradCostFunction(
-		CuMatrix<float>& grad, float& cost,
-		const CuMatrix<float>& x, const CuMatrix<float>& y, const CuMatrix<float>& theta, float lambda);
-
-template void LogisticRegression<double>::gradCostFunction(
-		CuMatrix<double>& grad, double& cost,
-		const CuMatrix<double>& x, const CuMatrix<double>& y, const CuMatrix<double>& theta,
-		double lambda);
-#endif /* LOGISTICREGRESSION_H_ */

@@ -8,7 +8,7 @@
 #include "FuncPtr.h"
 #include "debug.h"
 #include "UnaryOpIndexF_Gen.h"
-//template <typename T> __managed__ void * DevFuncs<T>[];
+//template <typename T> __device__ void * DevFuncs<T>[];
 template <typename T> typename func1<T>::inst**  Funcs<T>::func1s = null;
 template <>  __device__ float sigmoidFn(float f) {
 	return 1.0f / (1.0f + (float) exp(-f));
@@ -77,11 +77,11 @@ template __host__ void launchDFuncArrayBuilder<ulong>();
 template <typename T> struct dfuncs {
 	static typename func1<T>::inst funcs[MAX_FUNCS];
 };
-//template <typename T> __managed__ dfuncs<T> theDefuncs;
+//template <typename T> __device__ dfuncs<T> theDefuncs;
 
 template <typename T> typename func1<T>::inst dfuncs<T>::funcs[];
 
-__managed__ void * funcPtres[MAX_FUNCS];
+__device__ void * funcPtres[MAX_FUNCS];
 //funcPtres[0] = 0;
 //func[poly1_2] =
 template <typename T> struct D_Funcs {

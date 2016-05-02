@@ -17,7 +17,7 @@
 
 template<typename T> __global__
 void selectThresholdKernel(T* f1s, CuMatrix<T> yValidation, CuMatrix<T> pdv, T pdvMin,
-		T pdvMax, ulong n) {
+		T pdvMax, long n) {
 
 	ulong gIdx = threadIdx.x + blockIdx.x * blockDim.x; // 1d mapped to probability spectrum
 	T epsilon = pdvMin + (pdvMax - pdvMin) * gIdx / n; //  this is epsilon
@@ -70,7 +70,7 @@ void selectThresholdKernel(T* f1s, CuMatrix<T> yValidation, CuMatrix<T> pdv, T p
 	// and then a Max reduction on fs[] (saving index in fs of max and using that to find corr. epsilon)
 }
 template __global__ void selectThresholdKernel(float*, CuMatrix<float>,
-		CuMatrix<float>, float, float, ulong);
+		CuMatrix<float>, float, float, long);
 template __global__ void selectThresholdKernel(double*, CuMatrix<double>,
-		CuMatrix<double>, double, double, ulong);
+		CuMatrix<double>, double, double, long);
 #endif

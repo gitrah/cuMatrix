@@ -25,7 +25,9 @@ template<> __host__ __device__ ulong Epsilon() {
 }
 
 __global__ void warmup() {
-#if __CUDA_ARCH__ == 500
+#if __CUDA_ARCH__ == 520
+	prlocf("\n\nwarmup<<<>>> on cc 5.2 device\n\n\n");
+#elif __CUDA_ARCH__ == 500
 	prlocf("\n\nwarmup<<<>>> on cc 5 device\n\n\n");
 #elif __CUDA_ARCH__ == 350
 	prlocf("\n\nwarmup<<<>>> on cc 3.5 device\n\n\n");
@@ -36,7 +38,6 @@ __global__ void warmup() {
 #endif
 
 	printLongSizes();
-
 }
 
 __global__ void slep(long slepMs) {
@@ -55,19 +56,19 @@ __global__ void slep(long slepMs) {
 }
 
 
-template <typename T> __host__ CUDART_DEVICE void set(T* elements, uint m, uint n, uint p, uint row, uint col, T val) {
+template <typename T> __host__ CUDART_DEVICE void setL(T* elements, int m, int n, int p, int row, int col, T val) {
 	if(row > m) { printf("rowOutOfBounds()\n"); return;}
 	if(col > n) {printf("columnOutOfBounds()\n"); return; }
 	setKernel<<<1,1>>>(elements,row,col,p, row * p + col, val);
 }
-template void set<float>(float*, uint, uint, uint, uint, uint, float);
-template void set<double>(double*, uint, uint, uint, uint, uint, double);
-template void set<ulong>(ulong*, uint, uint, uint, uint, uint, ulong);
-template void set<int>(int*, uint, uint, uint, uint, uint, int);
-template void set<uint>(uint*, uint, uint, uint, uint, uint, uint);
-//template void set<uint>(uint*, unsigned int, unsigned int, unsigned int, unsigned long, uint);
+template void setL<float>(float*, int, int, int, int, int, float);
+template void setL<double>(double*, int, int, int, int, int, double);
+template void setL<long>(long*, int, int, int, int, int, long);
+template void setL<ulong>(ulong*, int, int, int, int, int, ulong);
+template void setL<int>(int*, int, int, int, int, int, int);
+template void setL<uint>(uint*, int, int, int, int, int, uint);
 
-template <typename T> __global__ void setKernel(T* elements,  uint m, uint n, uint p,  ulong l, T val) {
+template <typename T> __global__ void setKernel(T* elements,  int m, int n, int p,  long l, T val) {
 	if(n == p) {
 		elements[l] = val;
 	} else {
@@ -80,51 +81,52 @@ template <typename T> __global__ void setKernel(T* elements,  uint m, uint n, ui
 	}
 }
 
-template <typename T> __host__ CUDART_DEVICE void set(T* elements, uint m, uint n, uint p, ulong l, T val) {
+template <typename T> __host__ CUDART_DEVICE void setL(T* elements, int m, int n, int p, long l, T val) {
 	if(l > m * p) {printf("outOfBounds()\n"); return;}
 	setKernel<<<1,1>>>(elements, m, n, p, l,val);
 }
 
-template void set<float>(float*, uint, uint, uint, ulong, float);
-template void set<double>(double*, uint, uint, uint, ulong, double);
-template void set<ulong>(ulong*, uint, uint, uint, ulong, ulong);
-template void set<int>(int*, uint, uint, uint, ulong, int);
-template void set<uint>(uint*, uint, uint, uint, ulong, uint);
+template void setL<float>(float*, int, int, int, long, float);
+template void setL<double>(double*, int, int, int, long, double);
+template void setL<long>(long*, int, int, int, long, long);
+template void setL<ulong>(ulong*, int, int, int, long, ulong);
+template void setL<int>(int*, int, int, int, long, int);
+template void setL<uint>(uint*, int, int, int, long, uint);
 // filluers
 /*
-template __global__ void fillOpKernel<float, stepFiller<float> >(stepFiller<float>, float*, unsigned int, unsigned int, unsigned int, bool);
-template __global__ void fillOpKernel<float, constFiller<float> >(constFiller<float>, float*, unsigned int, unsigned int, unsigned int, bool);
-template __global__ void fillOpKernel<float, sinFiller<float> >(sinFiller<float>, float*, unsigned int, unsigned int, unsigned int, bool);
-template __global__ void fillOpKernel<float, cosFiller<float> >(cosFiller<float>, float*, unsigned int, unsigned int, unsigned int, bool);
-template __global__ void fillOpKernel<float, randFiller<float> >(randFiller<float>, float*, unsigned int, unsigned int, unsigned int, bool);
-template __global__ void fillOpKernel<float, sequenceFiller<float> >(sequenceFiller<float>, float*, unsigned int, unsigned int, unsigned int, bool);
-template __global__ void fillOpKernel<float, seqModFiller<float> >(seqModFiller<float>, float*, unsigned int, unsigned int, unsigned int, bool);
-template __global__ void fillOpKernel<float, diagonalFiller<float> >(diagonalFiller<float>, float*, unsigned int, unsigned int, unsigned int, bool);
-template __global__ void fillOpKernel<float, increasingColumnsFiller<float> >(increasingColumnsFiller<float>, float*, unsigned int, unsigned int, unsigned int, bool);
-template __global__ void fillOpKernel<float, increasingRowsFiller<float> >(increasingRowsFiller<float>, float*, unsigned int, unsigned int, unsigned int, bool);
-template __global__ void fillOpKernel<float, sequenceScaleFiller<float> >(sequenceScaleFiller<float>, float*, unsigned int, unsigned int, unsigned int, bool);
-template __global__ void fillOpKernel<float, spanFiller<float> >(spanFiller<float>, float*, unsigned int, unsigned int, unsigned int, bool);
+template __global__ void fillOpKernel<float, stepFiller<float> >(stepFiller<float>, float*, int, int, int, bool);
+template __global__ void fillOpKernel<float, constFiller<float> >(constFiller<float>, float*, int, int, int, bool);
+template __global__ void fillOpKernel<float, sinFiller<float> >(sinFiller<float>, float*, int, int, int, bool);
+template __global__ void fillOpKernel<float, cosFiller<float> >(cosFiller<float>, float*, int, int, int, bool);
+template __global__ void fillOpKernel<float, randFiller<float> >(randFiller<float>, float*, int, int, int, bool);
+template __global__ void fillOpKernel<float, sequenceFiller<float> >(sequenceFiller<float>, float*, int, int, int, bool);
+template __global__ void fillOpKernel<float, seqModFiller<float> >(seqModFiller<float>, float*, int, int, int, bool);
+template __global__ void fillOpKernel<float, diagonalFiller<float> >(diagonalFiller<float>, float*, int, int, int, bool);
+template __global__ void fillOpKernel<float, increasingColumnsFiller<float> >(increasingColumnsFiller<float>, float*, int, int, int, bool);
+template __global__ void fillOpKernel<float, increasingRowsFiller<float> >(increasingRowsFiller<float>, float*, int, int, int, bool);
+template __global__ void fillOpKernel<float, sequenceScaleFiller<float> >(sequenceScaleFiller<float>, float*, int, int, int, bool);
+template __global__ void fillOpKernel<float, spanFiller<float> >(spanFiller<float>, float*, int, int, int, bool);
 
-template __global__ void fillOpKernel<double, stepFiller<double> >(stepFiller<double>, double*, unsigned int, unsigned int, unsigned int, bool);
-template __global__ void fillOpKernel<double, constFiller<double> >(constFiller<double>, double*, unsigned int, unsigned int, unsigned int, bool);
-template __global__ void fillOpKernel<double, sinFiller<double> >(sinFiller<double>, double*, unsigned int, unsigned int, unsigned int, bool);
-template __global__ void fillOpKernel<double, cosFiller<double> >(cosFiller<double>, double*, unsigned int, unsigned int, unsigned int, bool);
-template __global__ void fillOpKernel<double, randFiller<double> >(randFiller<double>, double*, unsigned int, unsigned int, unsigned int, bool);
-template __global__ void fillOpKernel<double, sequenceFiller<double> >(sequenceFiller<double>, double*, unsigned int, unsigned int, unsigned int, bool);
-template __global__ void fillOpKernel<double, seqModFiller<double> >(seqModFiller<double>, double*, unsigned int, unsigned int, unsigned int, bool);
-template __global__ void fillOpKernel<double, diagonalFiller<double> >(diagonalFiller<double>, double*, unsigned int, unsigned int, unsigned int, bool);
-template __global__ void fillOpKernel<double, increasingColumnsFiller<double> >(increasingColumnsFiller<double>, double*, unsigned int, unsigned int, unsigned int, bool);
-template __global__ void fillOpKernel<double, increasingRowsFiller<double> >(increasingRowsFiller<double>, double*, unsigned int, unsigned int, unsigned int, bool);
-template __global__ void fillOpKernel<double, sequenceScaleFiller<double> >(sequenceScaleFiller<double>, double*, unsigned int, unsigned int, unsigned int, bool);
-template __global__ void fillOpKernel<double, spanFiller<double> >(spanFiller<double>, double*, unsigned int, unsigned int, unsigned int, bool);
+template __global__ void fillOpKernel<double, stepFiller<double> >(stepFiller<double>, double*, int, int, int, bool);
+template __global__ void fillOpKernel<double, constFiller<double> >(constFiller<double>, double*, int, int, int, bool);
+template __global__ void fillOpKernel<double, sinFiller<double> >(sinFiller<double>, double*, int, int, int, bool);
+template __global__ void fillOpKernel<double, cosFiller<double> >(cosFiller<double>, double*, int, int, int, bool);
+template __global__ void fillOpKernel<double, randFiller<double> >(randFiller<double>, double*, int, int, int, bool);
+template __global__ void fillOpKernel<double, sequenceFiller<double> >(sequenceFiller<double>, double*, int, int, int, bool);
+template __global__ void fillOpKernel<double, seqModFiller<double> >(seqModFiller<double>, double*, int, int, int, bool);
+template __global__ void fillOpKernel<double, diagonalFiller<double> >(diagonalFiller<double>, double*, int, int, int, bool);
+template __global__ void fillOpKernel<double, increasingColumnsFiller<double> >(increasingColumnsFiller<double>, double*, int, int, int, bool);
+template __global__ void fillOpKernel<double, increasingRowsFiller<double> >(increasingRowsFiller<double>, double*, int, int, int, bool);
+template __global__ void fillOpKernel<double, sequenceScaleFiller<double> >(sequenceScaleFiller<double>, double*, int, int, int, bool);
+template __global__ void fillOpKernel<double, spanFiller<double> >(spanFiller<double>, double*, int, int, int, bool);
 */
 
 /*
 template<typename T> __global__ void fill_Kernel(
 		T* trg,
-		uint height,
-		uint width,
-		uint pitch,
+		int height,
+		int width,
+		int pitch,
 		bool colMajor)
 {
     uint xIndex = blockIdx.x * blockDim.x + threadIdx.x;
@@ -135,13 +137,27 @@ template<typename T> __global__ void fill_Kernel(
 }
 */
 
+template <typename T> __global__ void fillKernel(T* elements,  T val, long n) {
+
+	int idx = blockDim.x * blockIdx.x + threadIdx.x;
+	if(idx < n) {
+		elements[idx] = val;
+	}
+}
+template __global__ void fillKernel<float>(float*, float, long);
+template __global__ void fillKernel<double>(double*, double, long);
+template __global__ void fillKernel<int>(int*, int, long);
+template __global__ void fillKernel<uint>(uint*, uint, long);
+template __global__ void fillKernel<long>(long*, long, long);
+template __global__ void fillKernel<ulong>(ulong*, ulong, long);
+
 // Non-Square Block version, to amortize index calcs
 template<typename T, typename FillOp> __global__ void fillOpNsbKernel(
 		FillOp op,
 		T* trg,
-		uint height,
-		uint width,
-		uint pitch,
+		int height,
+		int width,
+		int pitch,
 		bool colMajor)
 {
     uint xIndex = blockIdx.x * blockDim.x + threadIdx.x;
@@ -156,8 +172,8 @@ template<typename T, typename FillOp> __global__ void fillOpNsbKernel(
 			}
 		}
 }
-template __global__ void fillOpNsbKernel<float, oneOverFiller<float> >(oneOverFiller<float>, float*, unsigned int, unsigned int, unsigned int, bool);
-template __global__ void fillOpNsbKernel<double, oneOverFiller<double> >(oneOverFiller<double>, double*, unsigned int, unsigned int, unsigned int, bool);
+template __global__ void fillOpNsbKernel<float, oneOverFiller<float> >(oneOverFiller<float>, float*, int, int, int, bool);
+template __global__ void fillOpNsbKernel<double, oneOverFiller<double> >(oneOverFiller<double>, double*, int, int, int, bool);
 
 __global__ void setup_kernel ( curandState * state, int width )
 {
@@ -194,6 +210,8 @@ template __global__ void generate_uniform_kernel ( curandState * state,
 		float*  result, float epsilon, int height, int width );
 template  __global__ void generate_uniform_kernel ( curandState * state,
 		double*  result, double epsilon, int height, int width );
+template  __global__ void generate_uniform_kernel ( curandState * state,
+		long*  result, long epsilon, int height, int width );
 template  __global__ void generate_uniform_kernel ( curandState * state,
 		ulong*  result, ulong epsilon, int height, int width );
 template  __global__ void generate_uniform_kernel ( curandState * state,

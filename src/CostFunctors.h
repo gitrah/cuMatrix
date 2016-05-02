@@ -4,9 +4,7 @@
  *  Created on: Sep 18, 2013
  *      Author: reid
  */
-
-#ifndef COSTFUNCTORS_H_
-#define COSTFUNCTORS_H_
+#pragma once
 
 #include <helper_cuda.h>
 #include <helper_math.h>
@@ -60,5 +58,3 @@ struct reglinearRegressionCostF : public linearRegressionCostF<T>  {
 		return delta * delta + regF();
 	}
 };
-
-#endif /* COSTFUNCTORS_H_ */

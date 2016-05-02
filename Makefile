@@ -3,9 +3,14 @@ INC_PATH   ?= /mnt/rd/include
 CUDA_RD_PATH    ?= /mnt/rd/cuda
 #CUDA_PATH       ?= /usr/local/cuda
 CUDA_INC_PATH   ?= $(CUDA_RD_PATH)/include
+NVML_INC_PATH ?=/usr/include/nvidia/gdk
+NVML_LIB_PATH ?=/usr/src/gdk/nvml/lib
 CUDA_COMMON_INC_PATH   ?= $(CUDA_RD_PATH)/src/common/inc
 CUDA_LIB_PATH   ?= $(CUDA_RD_PATH)/lib
 CUDA_BIN_PATH   ?= $(CUDA_RD_PATH)/bin
+OCTAVE_364_INC_PATH ?= /usr/include/octave-3.6.4
+OCTAVE_382_INC_PATH ?= /usr/include/octave-3.8.2
+
 #FREETYPE2_INC_PATH  ?= /usr/include/freetype2
 NVCC            ?= $(CUDA_BIN_PATH)/nvcc
 GCC             ?= g++
@@ -18,25 +23,40 @@ MAKE			?= /mnt/rd/bin/make
 GENCODE_SM30    := -gencode arch=compute_30,code=sm_30
 GENCODE_SM35    := -gencode arch=compute_35,code=sm_35 
 GENCODE_SM50   	:= -gencode arch=compute_50,code=sm_50 
-GENCODE_FLAGS := -arch=compute_30 -code=sm_35 -code=sm_50
-# Debug build flags
+GENCODE_SM52   	:= -gencode arch=compute_52,code=sm_52 
 
-CPPFLAGS= -Wall -m64 -Wno-switch -fPIC -frepo -Wstrict-aliasing=0 -Wno-unused-function -std=c++11 -fopenmp
+# keep it lean by only compiling/linking for the gpus you have
+ARCHS = $(shell ./tools/gpuArchs)
+ifneq ($(filter 3.0,$(ARCHS)),)
+    GENCODE_FLAGS += $(GENCODE_SM30)
+endif
+ifneq ($(filter 3.5,$(ARCHS)),)
+    GENCODE_FLAGS += $(GENCODE_SM35)
+endif
+ifneq ($(filter 5.0,$(ARCHS)),)
+    GENCODE_FLAGS += $(GENCODE_SM50)
+endif
+ifneq ($(filter 5.2,$(ARCHS)),)
+    GENCODE_FLAGS += $(GENCODE_SM52)
+endif
+
+CPPFLAGS= -Wall -m64 -Wno-switch -fpic -Wstrict-aliasing=0 -Wno-unused-function -std=c++11 -fopenmp 
 AGXXFLAGS= -Wunused-function
-NVCPPFLAGS := -m64 -Xcompiler '-fPIC' -dc -std=c++11 
+# -DCuMatrix_Maxwell_Workaround1
+NVCPPFLAGS := -m64 -Xcompiler '-fpic' -dc -std=c++11  --expt-relaxed-constexpr
 SRCDIR := src
 OGLSRCDIR := src/ogl
 TESTDIR := src/test
 CUDA_MEMCHECK_FILES:=cuda-memcheck.file*
 CUDA_KEEP_FILES=*.cpp?.i? *.cudafe?.* *.cuobjdump *.fatbin?? *.hash *.module_id *.ptx *.cubin
 
-LDFLAGS=-lgomp
+LDFLAGS=-lgomp  -lnvidia-ml -L$(CUDA_RD_PATH)/lib64 -L$(NVML_LIB_PATH) 
 DBG_EXECUTABLE := cumatrest
 RLS_EXECUTABLE := cumatrel
 CONSOLE_OUTPUT := res.txt
 SIDEXPS := sidexps
 DMG_TOOL := dmg
-SAMPLE_DATA_FILES := ex*data*.txt ex4weights.txt 
+SAMPLE_DATA_FILES := ex*data*.txt ex4weights.txt ct*.txt
 
 DEBUG := debug
 RELEASE := release
@@ -47,22 +67,42 @@ FILES_TO_CLEAN = $(DEBUG) $(RELEASE) $(RLS_EXECUTABLE) $(DBG_EXECUTABLE) $(CUDA_
 ifeq ($(kep),1)
 	NVCPPFLAGS += -keep
 endif
-
+ifeq ($(rpo),1)
+	CPPFLAGS += -frepo
+endif
+  
+# verbose nvcc compilation
 ifeq ($(vrb),1)
 	NVCPPFLAGS +=  -Xptxas="-v"
 endif
 
-ifeq ($(statFunc),1)
-    CPPFLAGS +=  -DCuMatrix_StatFunc
-	NVCPPFLAGS += -DCuMatrix_StatFunc
+#nvml for gpu temp
+ifeq ($(nvml),1)
+    CPPFLAGS +=  -DCuMatrix_NVML
+	NVCPPFLAGS += -DCuMatrix_NVML
 	export cufuncStatic = true
 endif
 
-#disable ribosome so makefile 
+ifeq ($(blas),1)
+    CPPFLAGS +=  -DCuMatrix_UseCublas
+	NVCPPFLAGS += -DCuMatrix_UseCublas
+	LDFLAGS +=  -lcublas  
+endif
+
+# compile functor kernels parameterized by functor data type and functor state dimension
+# have CuFunctor.dna simulate functor polymorphism with static methods (ie function pointers)
+#ifeq ($(statFunc),1)
+    CPPFLAGS +=  -DCuMatrix_StatFunc
+	NVCPPFLAGS += -DCuMatrix_StatFunc
+	export cufuncStatic = true
+#endif
+
+#disable ribosome so makefile generates only binaries
 ifeq ($(ngen),1)
 	RIBOSOME = echo
 endif
 
+# compile functor kernels templated by functor type polymorphism with static methods (ie function pointers)
 ifeq ($(kts),1)
 	export cuKts = true
 	NVCPPFLAGS += -DCuMatrix_Enable_KTS 
@@ -86,13 +126,12 @@ else
 endif
 
 
-# cuda dynamic parallelism  
+# build version using cuda dynamic parallelism 
 ifeq ($(cdp),1)
-	LDFLAGS += -lcudadevrt -L$(CUDA_RD_PATH)/lib64 -lcudart -lcublas 
+	LDFLAGS += -lcudadevrt -lcudart
 	NVCPPFLAGS += -DCuMatrix_Enable_Cdp 
-	GENCODE_FLAGS := $(GENCODE_SM35) $(GENCODE_SM50)
 else
-	LDFLAGS += -lcudart -L$(CUDA_RD_PATH)/lib64 -lcublas 
+	LDFLAGS += -lcudart -lcublas 
 endif
 
 # opengl
@@ -109,6 +148,13 @@ endif
 ifeq ($(nopt),1)
     CPPFLAGS += -O0 
     NVCPPFLAGS += -O0
+endif
+
+
+# omp
+ifeq ($(omp),1)
+    CPPFLAGS += -DCuMatrix_UseOmp 
+    NVCPPFLAGS += -DCuMatrix_UseOmp 
 endif
 
 
@@ -142,6 +188,9 @@ ifeq ($(ogl),0)
 	TEST_SOURCES= $(filter-out *ogl*, $(TEST_SOURCES))
 endif
 
+# to print the contents of any makefile variable, make echoVar-<<varname>>
+echoVar-%  : ; @echo $($*)
+
 HEADERS := $(BUILD_SOURCES:.cc=.h) $(BUILD_SOURCES:.cu=.h)  
 ASPECTS := $(wildcard $(SRCDIR)/**.ah)
 
@@ -150,7 +199,7 @@ OBJECTS_CC_PASS=$(addprefix $(OBJDIR)/, $(notdir $(BUILD_SOURCES:.cc=.o)))
 OBJECTS=$(OBJECTS_CC_PASS:.cu=.o)
 
 # Common includes and paths for CUDA
-INCLUDES      := -I. -I.. -I$(CUDA_RD_PATH)/samples/common/inc -I$(CUDA_INC_PATH) -I$(CUDA_COMMON_INC_PATH) -I$(INC_PATH) 
+INCLUDES      := -I. -I.. -I$(CUDA_RD_PATH)/samples/common/inc -I$(CUDA_INC_PATH) -I$(NVML_INC_PATH) -I$(OCTAVE_364_INC_PATH) -I$(OCTAVE_382_INC_PATH) -I$(CUDA_COMMON_INC_PATH) -I$(INC_PATH) 
 
 all: $(BUILD_SOURCES) $(EXECUTABLE)
 	
@@ -175,7 +224,6 @@ else
 	$(GCC) $(OBJECTS) $(OUT_DIR)/link.o $(LDFLAGS) -lcudart -o $@
 endif
 endif
-
 
 test: $(EXECUTABLE)
 	$(EXECUTABLE)

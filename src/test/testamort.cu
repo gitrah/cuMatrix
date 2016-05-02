@@ -12,9 +12,9 @@
 #include "../Kernels.h"
 #include <typeinfo>
 
-template int testBinaryOpAmort<float>::operator()(int argc, char const ** args) const;
-template int testBinaryOpAmort<double>::operator()(int argc, char const ** args) const;
-template<typename T> int testBinaryOpAmort<T>::operator()(int argc, const char** args) const {
+template int testBinaryOpAmort<float>::operator()(int argc, const char **argv) const;
+template int testBinaryOpAmort<double>::operator()(int argc, const char **argv) const;
+template<typename T> int testBinaryOpAmort<T>::operator()(int argc, const char** argv) const {
 
 	int m = 5000, n = 3000;
 	int ma = 5*1024, na = 3*1024;
@@ -35,7 +35,7 @@ template<typename T> int testBinaryOpAmort<T>::operator()(int argc, const char**
 
 	multBinaryOp<T> mult;
 	//
-	int count = b_util::getCount(argc,args,1);
+	int count = b_util::getCount(argc,argv,1);
 	int h2w[] = {0, 1, 2, 4, 8, 16};
 	uint* misses;
 	checkCudaError(cudaMalloc(&misses,sizeof(uint)));

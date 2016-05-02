@@ -17,15 +17,31 @@ template<typename T> template<template <typename> class UnaryOp> __host__ CUDART
 template<typename T> template<int StateDim> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::unaryOp(UnaryOpF<T,StateDim> op, cudaStream_t stream ) const
 #endif
 {
-	CuMatrix<T> res(m, n, false, true);
+	CuMatrix<T> res(m, n, true, true);
 	if(checkDebug(debugUnaryOp)) {
-		printShortString("unary op src");
-		res.printShortString("unary op targ");
+		prlocf("in unaryOp(UnaryOp,...)\n");
+		printShortString("unary op, src");
+		res.printShortString("unary op, targ");
 	}
 	unaryOp(res, op, stream);
 	return res;
 }
 #ifdef  CuMatrix_Enable_KTS
+
+template __host__ CUDART_DEVICE CuMatrix<float> CuMatrix<float>::unaryOp<absUnaryOp>(absUnaryOp<float>, CUstream_st*) const;
+template __host__ CUDART_DEVICE CuMatrix<int> CuMatrix<int>::unaryOp<absUnaryOp>(absUnaryOp<int>, CUstream_st*) const;
+template __host__ CUDART_DEVICE CuMatrix<uint> CuMatrix<uint>::unaryOp<absUnaryOp>(absUnaryOp<uint>, CUstream_st*) const;
+template __host__ CUDART_DEVICE CuMatrix<ulong> CuMatrix<ulong>::unaryOp<absUnaryOp>(absUnaryOp<ulong>, CUstream_st*) const;
+template __host__ CUDART_DEVICE CuMatrix<long> CuMatrix<long>::unaryOp<absUnaryOp>(absUnaryOp<long>, CUstream_st*) const;
+template __host__ CUDART_DEVICE CuMatrix<double> CuMatrix<double>::unaryOp<absUnaryOp>(absUnaryOp<double>, CUstream_st*) const;
+
+template __host__ CUDART_DEVICE CuMatrix<float> CuMatrix<float>::unaryOp<powUnaryOp>(powUnaryOp<float>, CUstream_st*) const;
+template __host__ CUDART_DEVICE CuMatrix<int> CuMatrix<int>::unaryOp<powUnaryOp>(powUnaryOp<int>, CUstream_st*) const;
+template __host__ CUDART_DEVICE CuMatrix<uint> CuMatrix<uint>::unaryOp<powUnaryOp>(powUnaryOp<uint>, CUstream_st*) const;
+template __host__ CUDART_DEVICE CuMatrix<ulong> CuMatrix<ulong>::unaryOp<powUnaryOp>(powUnaryOp<ulong>, CUstream_st*) const;
+template __host__ CUDART_DEVICE CuMatrix<long> CuMatrix<long>::unaryOp<powUnaryOp>(powUnaryOp<long>, CUstream_st*) const;
+template __host__ CUDART_DEVICE CuMatrix<double> CuMatrix<double>::unaryOp<powUnaryOp>(powUnaryOp<double>, CUstream_st*) const;
+
 template __host__ CUDART_DEVICE CuMatrix<float> CuMatrix<float>::unaryOp<expUnaryOp>(expUnaryOp<float>, cudaStream_t) const;
 template __host__ CUDART_DEVICE CuMatrix<double> CuMatrix<double>::unaryOp<expUnaryOp>(expUnaryOp<double>, cudaStream_t) const;
 template __host__ CUDART_DEVICE CuMatrix<float> CuMatrix<float>::unaryOp<translationUnaryOp>(translationUnaryOp<float>, cudaStream_t) const;
@@ -57,8 +73,6 @@ template __host__ CUDART_DEVICE CuMatrix<float> CuMatrix<float>::unaryOp<sqrtUna
 template __host__ CUDART_DEVICE CuMatrix<double> CuMatrix<double>::unaryOp<sqrtUnaryOp>(sqrtUnaryOp<double>, cudaStream_t) const;
 template __host__ CUDART_DEVICE CuMatrix<float> CuMatrix<float>::unaryOp<sqrUnaryOp>(sqrUnaryOp<float>, cudaStream_t) const;
 template __host__ CUDART_DEVICE CuMatrix<double> CuMatrix<double>::unaryOp<sqrUnaryOp>(sqrUnaryOp<double>, cudaStream_t) const;
-template __host__ CUDART_DEVICE CuMatrix<float> CuMatrix<float>::unaryOp<powUnaryOp>(powUnaryOp<float>, cudaStream_t) const;
-template __host__ CUDART_DEVICE CuMatrix<double> CuMatrix<double>::unaryOp<powUnaryOp>(powUnaryOp<double>, cudaStream_t) const;
 template __host__ CUDART_DEVICE CuMatrix<float> CuMatrix<float>::unaryOp<divSqrtUnaryOp>(divSqrtUnaryOp<float>, cudaStream_t) const;
 template __host__ CUDART_DEVICE CuMatrix<double> CuMatrix<double>::unaryOp<divSqrtUnaryOp>(divSqrtUnaryOp<double>, cudaStream_t) const;
 
@@ -99,15 +113,25 @@ template __host__ CUDART_DEVICE CuMatrix<unsigned int> CuMatrix<unsigned int>::u
 template __host__ CUDART_DEVICE CuMatrix<unsigned int> CuMatrix<unsigned int>::unaryOp<translationUnaryOp>(translationUnaryOp<unsigned int>, CUstream_st*) const;
 template __host__ CUDART_DEVICE CuMatrix<unsigned int> CuMatrix<unsigned int>::unaryOp<scaleUnaryOp>(scaleUnaryOp<unsigned int>, CUstream_st*) const;
 
+template __host__ CUDART_DEVICE CuMatrix<long> CuMatrix<long>::unaryOp<scaleUnaryOp>(scaleUnaryOp<long>, CUstream_st*) const;
+template __host__ CUDART_DEVICE CuMatrix<long> CuMatrix<long>::unaryOp<gteUnaryOp>(gteUnaryOp<long>, CUstream_st*) const;
+template __host__ CUDART_DEVICE CuMatrix<long> CuMatrix<long>::unaryOp<translationUnaryOp>(translationUnaryOp<long>, CUstream_st*) const;
+template __host__ CUDART_DEVICE CuMatrix<long> CuMatrix<long>::unaryOp<lteUnaryOp>(lteUnaryOp<long>, CUstream_st*) const;
+template __host__ CUDART_DEVICE CuMatrix<long> CuMatrix<long>::unaryOp<ltUnaryOp>(ltUnaryOp<long>, CUstream_st*) const;
+template __host__ CUDART_DEVICE CuMatrix<long> CuMatrix<long>::unaryOp<eqUnaryOp>(eqUnaryOp<long>, CUstream_st*) const;
+template __host__ CUDART_DEVICE CuMatrix<long> CuMatrix<long>::unaryOp<gtUnaryOp>(gtUnaryOp<long>, CUstream_st*) const;
+template __host__ CUDART_DEVICE CuMatrix<long> CuMatrix<long>::unaryOp<subFromUnaryOp>(subFromUnaryOp<long>, CUstream_st*) const;
 
 #else
 template __host__ CUDART_DEVICE CuMatrix<float> CuMatrix<float>::unaryOp(UnaryOpF<float,0>, cudaStream_t) const;
 template __host__ CUDART_DEVICE CuMatrix<double> CuMatrix<double>::unaryOp(UnaryOpF<double,0>, cudaStream_t) const;
+template __host__ CUDART_DEVICE CuMatrix<long> CuMatrix<long>::unaryOp(UnaryOpF<long,0>, cudaStream_t) const;
 template __host__ CUDART_DEVICE CuMatrix<ulong> CuMatrix<ulong>::unaryOp(UnaryOpF<ulong,0>, cudaStream_t) const;
 template __host__ CUDART_DEVICE CuMatrix<int> CuMatrix<int>::unaryOp(UnaryOpF<int,0>, cudaStream_t) const;
 template __host__ CUDART_DEVICE CuMatrix<uint> CuMatrix<uint>::unaryOp(UnaryOpF<uint,0>, cudaStream_t) const;
 template __host__ CUDART_DEVICE CuMatrix<float> CuMatrix<float>::unaryOp(UnaryOpF<float,1>, cudaStream_t) const;
 template __host__ CUDART_DEVICE CuMatrix<double> CuMatrix<double>::unaryOp(UnaryOpF<double,1>, cudaStream_t) const;
+template __host__ CUDART_DEVICE CuMatrix<long> CuMatrix<long>::unaryOp(UnaryOpF<long,1>, cudaStream_t) const;
 template __host__ CUDART_DEVICE CuMatrix<ulong> CuMatrix<ulong>::unaryOp(UnaryOpF<ulong,1>, cudaStream_t) const;
 template __host__ CUDART_DEVICE CuMatrix<int> CuMatrix<int>::unaryOp(UnaryOpF<int,1>, cudaStream_t) const;
 template __host__ CUDART_DEVICE CuMatrix<uint> CuMatrix<uint>::unaryOp(UnaryOpF<uint,1>, cudaStream_t) const;
@@ -122,23 +146,41 @@ template<typename T> template<template <typename> class UnaryOp> __host__ CUDART
 template<typename T> template<int StateDim> __host__ CUDART_DEVICE void CuMatrix<T>::unaryOp(CuMatrix<T>& res, UnaryOpF<T,StateDim> op, cudaStream_t stream) const
 #endif
 {
+/*
 	if(checkDebug(debugUnaryOp)) {
-		printf("unaryOp d_element %p, %p\n", d_elements , res.d_elements);
+		flprintf("unaryOp tileCount %d lastMod %s\n", tiler.getTileCount(), b_util::modStr(lastMod));
 	}
-	//outln("this " << toShortString() << ", res " << res.toShortString());
-	DMatrix<T> d_A, d_res;
-	asDmatrix(d_A);
-	res.asDmatrix(d_res, false);
-	if(p == n) {
-		unaryOpL( d_res, d_A, op,stream);
-	} else {
-		if(checkDebug(debugUnaryOp)) {
-			printf("invoking DMatrix version of unaryOp\n");
+*/
+
+	uint tileM, tileN, roff, coff;
+	tiler.tileDims(tileM, tileN, tdRows);
+	int tileCount = DIV_UP(m,tileM);
+	DMatrix<T> d_A, d_Res;
+	int lastGpu = ExecCaps::currDev();
+	for(int i = 0; i < tileCount; i++) {
+		if(checkDebug(debugFill))flprintf("tileM %d tileN %d tile %d lastGpu %u\n", tileM, tileN, i, lastGpu);
+		if(checkDebug(debugFill))flprintf("roff %u coff %u\n",roff, coff);
+		tiler.tileLike(d_A, roff, coff, tileM, tileN, i, tdRows, lastMod == mod_host, lastGpu, stream);
+		if(checkDebug(debugFill))flprintf("after tiler.tileLike for tile %d; roff %u coff %u\n", i, roff, coff);
+		lastGpu = res.tiler.tileLike(d_Res, roff, coff, tileM, tileN, i, tdRows, false,lastGpu, stream);
+		if(checkDebug(debugFill))flprintf("after res.tiler.tileLike for tile %d; roff %u coff %u lastGpu %d\n", i, roff, coff, lastGpu);
+		if(p == n) {
+			unaryOpL( d_Res, d_A, op,stream);
+		} else {
+			if(checkDebug(debugUnaryOp)) {
+				printf("invoking DMatrix version of unaryOp\n");
+			}
+			unaryOpDmL(d_Res, d_A, op, DefaultWidth2Height , stream);
 		}
-		unaryOpDmL(d_res, d_A, op, DefaultWidth2Height , stream);
+		res.tiler.syncTile(d_Res, roff, coff, stream);
 	}
+	if(checkDebug(debugUnaryOp)) {
+		printDevArray(d_Res.elements,"d_Res",-1, MIN(10, m*n));
+		printColoArray(res.elements,MIN(10, m*n));
+	}
+
 	//res.invalidateHost();
-	res.lastMod = mod_device;
+	res.lastMod = (tileCount>1) ? mod_host : mod_synced;
 }
 #ifdef  CuMatrix_Enable_KTS
 template __host__ CUDART_DEVICE void CuMatrix<float>::unaryOp<approxInvSqrtUnaryOp>(CuMatrix<float>&, approxInvSqrtUnaryOp<float>, cudaStream_t) const;
@@ -162,15 +204,25 @@ template<typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::log() const
 	return unaryOp(Functory<T,logUnaryOp>::pinch());
 }
 
+template<typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::ceil() const {
+	return unaryOp(Functory<T,ceilUnaryOp>::pinch());
+}
+
+template<typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::floor() const {
+	return unaryOp(Functory<T,floorUnaryOp>::pinch());
+}
+
+
 template<typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::oneOver() const {
 	return unaryOp(Functory<T,oneOverUnaryOp>::pinch());
 }
 
 template<typename T> __host__ CUDART_DEVICE void CuMatrix<T>::setAll(int val) {
+	assert(tiler.tileSize == tiler.m_size);
 #ifndef __CUDA_ARCH__
-	checkCudaErrors(cudaMemset(d_elements, val, size));
+	checkCudaErrors(cudaMemset( tiler.currBuffer(), val, size));
 #else
-	memset(d_elements, val, size);
+	memset(tiler.currBuffer(), val, size);
 #endif
 	lastMod = mod_device;
 }
@@ -220,11 +272,13 @@ template __host__ CUDART_DEVICE bool CuMatrix<unsigned int>::all<almostEqUnaryOp
 #else
 template __host__ CUDART_DEVICE bool CuMatrix<float>::all<1>(UnaryOpF<float,1>) const;
 template __host__ CUDART_DEVICE bool CuMatrix<double>::all<1>(UnaryOpF<double,1>) const;
+template __host__ CUDART_DEVICE bool CuMatrix<long>::all<1>(UnaryOpF<long,1>) const;
 template __host__ CUDART_DEVICE bool CuMatrix<ulong>::all<1>(UnaryOpF<ulong,1>) const;
 template __host__ CUDART_DEVICE bool CuMatrix<float>::all<2>(UnaryOpF<float,2>) const;
 template __host__ CUDART_DEVICE bool CuMatrix<double>::all<2>(UnaryOpF<double,2>) const;
 template __host__ CUDART_DEVICE bool CuMatrix<int>::all<2>(UnaryOpF<int,2>) const;
 template __host__ CUDART_DEVICE bool CuMatrix<uint>::all<2>(UnaryOpF<uint,2>) const;
+template __host__ CUDART_DEVICE bool CuMatrix<long>::all<2>(UnaryOpF<long,2>) const;
 template __host__ CUDART_DEVICE bool CuMatrix<ulong>::all<2>(UnaryOpF<ulong,2>) const;
 #endif
 
@@ -349,6 +403,7 @@ template<typename T> template <int StateDim> __host__ CUDART_DEVICE IndexArray C
 #else
 	checkCudaError(cudaHostAlloc(&temp, arraySize * sizeof(uint),0));
 	cherr(cudaMemcpy(temp, arry, (currIdx -1) * sizeof(uint), cudaMemcpyHostToHost));
+	if(checkDebug(debugDestr))flprintf("freeing host arry %p\n", arry);
 	cherr(cudaFreeHost(arry));
 	arry = temp;
 #endif
@@ -370,6 +425,7 @@ template<typename T> template <int StateDim> __host__ CUDART_DEVICE IndexArray C
 #else
 	checkCudaError(cudaHostAlloc(&temp, arraySize * sizeof(uint),0));
 	cherr(cudaMemcpy(temp, arry, (currIdx -1) * sizeof(uint), cudaMemcpyHostToHost));
+	if(checkDebug(debugDestr))flprintf("freeing host arry %p\n", arry);
 	cherr(cudaFreeHost(arry));
 	arry = temp;
 #endif
@@ -397,7 +453,7 @@ template<typename T> template <int StateDim> __host__ CUDART_DEVICE void CuMatri
 	int currIdx = 0;
 	for(int i =0; i < len; i++ ) {
 		if(i == len -1 ){
-			if(checkDebug(debugUnaryOp)) flprintf("lastIdx %d (+d_elements = %p)\n", i, i + d_elements);
+			if(checkDebug(debugUnaryOp)) flprintf("lastIdx %d (+tiler.currBuffer() = %p)\n", i, i + tiler.currBuffer());
 		}
 		if(m.elements[i]) {
 			if(checkDebug(debugUnaryOp)) flprintf("adding idx %d\n", i);

@@ -165,7 +165,7 @@ template <> __host__ __device__ double sign(double x) {
 template <> __host__ __device__ ulong sign(ulong  x) {
 	return 1;
 }
-
+/*
 __device__ uint inclusiveSumAsm(uint s) {
 	uint tot = 0;
 
@@ -184,7 +184,7 @@ __device__ uint inclusiveSumAsm(uint s) {
 			" mov.u32 	%0, %total;\n\t"   // set tot with %total
 			"}"
 			: "=r"(tot) : "r" (s));
-
+	flprintf("tot %u\n", tot);
 	return tot;
 }
 
@@ -194,7 +194,7 @@ __global__ void inclusiveSum(uint* d_res, uint fin) {
 		flprintf("isum for %u is %u\n",fin, isum);
 		*d_res = isum;
 	}
-}
+}*/
 template<typename T> __host__ CUDART_DEVICE void testem(BinaryOpF<T,1> ref)  {
 #ifdef __CUDA_ARCH__
 	flprintf("ref(6,7) %f\n", (float) ref(6,7));
@@ -207,9 +207,9 @@ __host__ CUDART_DEVICE  int largestFactor(uint v, bool smallest) {
 	if(v < 4) {
 		return v;
 	}
-	uint nP = 10000;
-	uint threads;
-	uint blocks;
+	long nP = 10000;
+	int threads;
+	int blocks;
 	::getReductionExecContext(blocks,threads, nP);
 	int* d_ints;
 	cherr(cudaMalloc(&d_ints, blocks * sizeof(int)));
@@ -237,14 +237,14 @@ __host__ CUDART_DEVICE  int smallestFactor(uint v) {
 	return largestFactor(v,true);
 }
 
-__host__ CUDART_DEVICE  int largestMutualFactor(uint v, uint w, bool smallest){
+__host__ CUDART_DEVICE  int largestCommonFactor(uint v, uint w, bool smallest){
 	if(v < 4 && w < 4  && v == w) {
 		return v;
 	}
 
-	uint nP = 10000;
-	uint threads;
-	uint blocks;
+	long nP = 10000;
+	int threads;
+	int blocks;
 	::getReductionExecContext(blocks,threads, nP);
 	int* d_ints;
 	cherr(cudaMalloc(&d_ints, blocks * sizeof(int)));
@@ -265,17 +265,17 @@ __host__ CUDART_DEVICE  int largestMutualFactor(uint v, uint w, bool smallest){
 	return total;
 }
 
-__host__ CUDART_DEVICE  int smallestMutualFactor(uint v, uint w) {
-	return largestMutualFactor(v,w,true);
+__host__ CUDART_DEVICE  int smallestCommonFactor(uint v, uint w) {
+	return largestCommonFactor(v,w,true);
 }
 
 __host__ CUDART_DEVICE  bool primeQ(uint v) {
 	return v == largestFactor(v);
 }
 
-__device__ double power( double x,uint N) {
+__device__ double power( double x,int n) {
 	double r = 1.0;
-	for(int i = 0 ; i < N ; i++)
+	for(int i = 0 ; i < n ; i++)
 		r *= x;
 	return r;
 }
@@ -295,7 +295,7 @@ template<typename T, template <typename> class Function>  __host__ __device__ in
 
 #ifdef CuMatrix_Enable_Cdp
 template<typename T, template <typename> class Function> __global__
-void rooties(T* roots, uint* count, uint maxRoots,Function<T> fn, T a, T span, T interval, uint threads, T epsilon) {
+void rooties(T* roots, uint* count, uint maxRoots,Function<T> fn, T a, T span, T interval, int threads, T epsilon) {
 	/*
 	 *  one thread per interval
 	 *  if sign of ordinate or gradient changes
@@ -367,7 +367,7 @@ T bisection(T* roots, uint* count, uint maxRoots,Function<T> function, T a, T b,
 	grid.x = slices/block.x;
 	if(checkDebug(debugMaths))flprintf("grid.x %u block.x %u\n", grid.x, block.x);
 #ifdef CuMatrix_Enable_Cdp
-	uint threads = grid.x * block.x;
+	int threads = grid.x * block.x;
 	rooties<<<grid,block>>>(roots, count, maxRoots, function, a, b-a, (b-a)/threads, threads, epsilon);
 #else
 	prlocf("not implemented for non-cdp\n");
@@ -386,7 +386,7 @@ template<typename T>  __host__ __device__ inline T gradient(typename func1<T>::i
 }
 
 template<typename T> __global__
-void rooties( T* roots, uint* count, uint maxRoots, typename func1<T>::inst function, T a, T span, T interval, uint threads, T epsilon) {
+void rooties( T* roots, uint* count, uint maxRoots, typename func1<T>::inst function, T a, T span, T interval, int threads, T epsilon) {
 	/*
 	 *  one thread per interval
 	 *  if sign of ordinate or gradient changes
@@ -415,7 +415,6 @@ void rooties( T* roots, uint* count, uint maxRoots, typename func1<T>::inst func
 	prlocf("not implemented for non-cdp\n");
 	assert(false);
 #endif
-
 		} else {
 			//flprintf("[%f,%f] brackets a root within epsilon!\n", (float) myA, (float)myB);
 			uint idx = atomicInc(count,maxRoots);
@@ -438,7 +437,7 @@ template<typename T> __host__ CUDART_DEVICE T bisection( T* roots, uint* count, 
 	dim3 grid, block;
 	block.x = 256;
 	grid.x = slices/block.x;
-	uint threads = grid.x * block.x;
+	int threads = grid.x * block.x;
 	if(checkDebug(debugMaths))flprintf("grid.x %u block.x %u\n", grid.x, block.x);
 	rooties<<<grid,block>>>(roots, count, maxRoots, function, a, b-a, (b-a)/threads, threads, epsilon);
 	cherr(cudaDeviceSynchronize());
@@ -455,7 +454,7 @@ template<typename T> __host__ CUDART_DEVICE T bisection(T* roots, uint* count, u
 	dim3 grid, block;
 	block.x = 256;
 	grid.x = slices/block.x;
-	uint threads = grid.x * block.x;
+	int threads = grid.x * block.x;
 	if(checkDebug(debugMaths))flprintf("grid.x %u block.x %u\n", grid.x, block.x);
 	rooties<<<grid,block>>>(roots, count, maxRoots, function, a, b-a, (b-a)/threads, threads, epsilon);
 	cherr(cudaDeviceSynchronize());
@@ -466,4 +465,14 @@ template __host__ CUDART_DEVICE float bisection<float>(float*, uint*, uint,FuncN
 template __host__ CUDART_DEVICE double bisection<double>(double*, uint*, uint,FuncNums, double, double, double, unsigned int);
 template __host__ CUDART_DEVICE ulong bisection<ulong>(ulong*, uint*, uint,FuncNums, ulong, ulong, ulong, uint);
 
-
+__host__ CUDART_DEVICE void biggestBin( int* whichBin, const int* binCounts, int nbins) {
+	int maxIdx, maxCount = -1, currCount;
+	for(int i =0; i < nbins; i++) {
+		currCount = binCounts[i];
+		if( currCount > maxCount) {
+			maxCount = currCount;
+			maxIdx = i;
+		}
+	}
+	*whichBin = maxIdx;
+}
