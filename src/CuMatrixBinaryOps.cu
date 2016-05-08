@@ -316,6 +316,12 @@ CuMatrix<T> CuMatrix<T>::binaryOp(const CuMatrix<T>& o, BinaryOpF<T,StateDim> op
 template __host__ CUDART_DEVICE CuMatrix<float> CuMatrix<float>::binaryOp<almostEqualsBinaryOp>(CuMatrix<float> const&, almostEqualsBinaryOp<float>, CUstream_st*) const;
 template __host__ CUDART_DEVICE CuMatrix<double> CuMatrix<double>::binaryOp<almostEqualsBinaryOp>(CuMatrix<double> const&, almostEqualsBinaryOp<double>, CUstream_st*) const;
 template __host__ CUDART_DEVICE CuMatrix<unsigned long> CuMatrix<unsigned long>::binaryOp<almostEqualsBinaryOp>(CuMatrix<unsigned long> const&, almostEqualsBinaryOp<unsigned long>, CUstream_st*) const;
+template __host__ CUDART_DEVICE CuMatrix<float> CuMatrix<float>::binaryOp<plusBinaryOp>(CuMatrix<float> const&, plusBinaryOp<float>, CUstream_st*) const;
+template __host__ CUDART_DEVICE CuMatrix<unsigned long> CuMatrix<unsigned long>::binaryOp<plusBinaryOp>(CuMatrix<unsigned long> const&, plusBinaryOp<unsigned long>, CUstream_st*) const;
+template __host__ CUDART_DEVICE CuMatrix<double> CuMatrix<double>::binaryOp<plusBinaryOp>(CuMatrix<double> const&, plusBinaryOp<double>, CUstream_st*) const;
+template __host__ CUDART_DEVICE CuMatrix<float> CuMatrix<float>::binaryOp<equalsBinaryOp>(CuMatrix<float> const&, equalsBinaryOp<float>, CUstream_st*) const;
+template __host__ CUDART_DEVICE CuMatrix<double> CuMatrix<double>::binaryOp<equalsBinaryOp>(CuMatrix<double> const&, equalsBinaryOp<double>, CUstream_st*) const;
+template __host__ CUDART_DEVICE CuMatrix<unsigned long> CuMatrix<unsigned long>::binaryOp<equalsBinaryOp>(CuMatrix<unsigned long> const&, equalsBinaryOp<unsigned long>, CUstream_st*) const;
 #else
 template __host__ CUDART_DEVICE CuMatrix<float> CuMatrix<float>::binaryOp<1>(CuMatrix<float> const&, BinaryOpF<float, 1>, CUstream_st*) const;
 template __host__ CUDART_DEVICE CuMatrix<double> CuMatrix<double>::binaryOp<1>(CuMatrix<double> const&, BinaryOpF<double, 1>, CUstream_st*) const;

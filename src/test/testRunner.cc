@@ -372,6 +372,10 @@ template <typename T> int tests<T>::runTest(int argc, const char** argv) {
 		timer.start();
 		int idx=0;
 		vector<Test<T>*> vTests;
+
+		vTests.push_back(new testTranspose<T>());
+		vTests.push_back(new testTransposeHuge<T>());
+
 		vTests.push_back(new testNeural<T>());
 
 		//vTests.push_back(new testDim3Octave<T>());
@@ -386,7 +390,6 @@ template <typename T> int tests<T>::runTest(int argc, const char** argv) {
 		//vTests.push_back(new testRandAsFnOfSize<T>());
 
 		//vTests.push_back(new testAnomDet<T>());
-	//	vTests.push_back(new testTranspose<T>());
 
 		//vTests.push_back(new testNeural2l<T>());
 		//vTests.push_back(new testPackedMat<T>());
@@ -396,11 +399,12 @@ template <typename T> int tests<T>::runTest(int argc, const char** argv) {
 	//	vTests.push_back(new testNeural2lYrPred<T>());
 		//vTests.push_back(new testMemset<T>());
 		//vTests.push_back(new testProductShapesLoop<T>());
-		//vTests.push_back(new testHugeMatProds<T>());
+		vTests.push_back(new testHugeMatProds<T>());
 		//vTests.push_back(new testCat<T>());
 		//vTests.push_back(new testKmeans<T>());
 		//vTests.push_back(new testSubmatrices<T>());
 		//vTests.push_back(new testLUdecomp<T>());
+		vTests.push_back(new testHugeMatProds2<T>());
 		/*
 		vTests.push_back(new testProductShapes<T>());
 		vTests.push_back(new testLargeMatProds<T>());

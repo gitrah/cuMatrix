@@ -438,15 +438,29 @@ template <typename T> int testHugeMatProds<T>::operator()(int argc, const char *
 	ExecCaps* caps = ExecCaps::currCaps();
     int total = b_util::getCount(argc,argv,5);
 
-	outln("testProductShapes start");
+	outln("testHugeMatProds start");
 	float exeTime;
     CuTimer timer;
 
     outln("creating big matrices");
-	CuMatrix<T> ms = CuMatrix<T>::ones(10000,10000) ;
+	CuMatrix<T> ms = CuMatrix<T>::ones(12248,12248) ;
+	memblo;
 	outln("ms\n" << ms);
 	outln("ms.tiler\n" << ms.tiler);
-	CuMatrix<T> mc = CuMatrix<T>::increasingColumns(1, 10000, 10000);
+
+	timer.start();
+	{
+		CuMatrix<T> prodOnes = ms * ms;
+		outln("prodOnes.sum\n" << prodOnes.sum() << " took " << timer.stop()/1000);
+	}
+
+	CuMatrix<T> mc = CuMatrix<T>::increasingColumns(1, 12248, 12248);
+	{
+		CuMatrix<T> prodMc = mc * mc;
+		outln("prodMc.sum\n"<< prodMc.sum());
+	}
+
+
 	outln("mc\n"<< mc);
 	outln("mc.tiler\n" << mc.tiler);
 	timer.start();

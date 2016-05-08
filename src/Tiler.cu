@@ -165,7 +165,10 @@ template<typename T> __host__ __device__ void Tiler<T>::allocOneTile(){
         b_util::usedDmem(1);
 #endif
     }
+
     cherr(cudaMalloc( &buff, tileSize));
+    memblo;
+
     char maskBuff[34];
     if(checkDebug(debugCheckValid)) {
     	flprintf("from mask %s created %dx%dx%d - %p\n",  Tiler<T>::maskStr(maskBuff,gpuMask), m_m, m_n, m_p, buff);
@@ -312,6 +315,8 @@ template<typename T> __host__ __device__ void Tiler<T>::allocTiles( uint tileM, 
 		if(checkDebug(debugMem))
 			flprintf("after allocating %ld\n", tileSize);
 		cherr(cudaMalloc( &buff, tileSize));
+	    memblo;
+
 		if(checkDebug(debugCheckValid)) flprintf("%dx%dx%d - %p\n", m_m, m_n, m_p, buff);
 		if(checkDebug(debugMem)) {
 			flprintf("after allocating %p ( %ld bytes)\n", buff, tileSize);

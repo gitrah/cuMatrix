@@ -274,12 +274,12 @@ T CuMatrix<T>::indexReduceLauncher(T* d_odata, long n, UnaryOpIndexF<T,IopDim> i
 #endif
 	return gpu_result;
 }
-
 #ifdef  CuMatrix_Enable_KTS
-template __host__ CUDART_DEVICE float CuMatrix<float>::indexReduceLauncher<sequenceFiller, multBinaryOp>(float*,ulong, sequenceFiller<float>, multBinaryOp<float>, float, cudaStream_t);
-template __host__ CUDART_DEVICE double CuMatrix<double>::indexReduceLauncher<sequenceFiller, multBinaryOp>(double*,ulong, sequenceFiller<double>, multBinaryOp<double>, double, cudaStream_t);
+//template __host__ CUDART_DEVICE float CuMatrix<float>::indexReduceLauncher<sequenceFiller, multBinaryOp>(float*,ulong, sequenceFiller<float>, multBinaryOp<float>, float, cudaStream_t);
+//template __host__ CUDART_DEVICE double CuMatrix<double>::indexReduceLauncher<sequenceFiller, multBinaryOp>(double*,ulong, sequenceFiller<double>, multBinaryOp<double>, double, cudaStream_t);
 #else
 #endif
+
 
 template<typename T> __host__ CUDART_DEVICE T CuMatrix<T>::factorial(int val) {
 	if(val < 3) {
@@ -554,10 +554,12 @@ T CuMatrix<T>::indexedReduceLauncher(DMatrix<T> res, const T* d_idata, long n,	U
 }
 
 #ifdef  CuMatrix_Enable_KTS
+/*
 template float CuMatrix<float>::indexedReduceLauncher<isColumnFiller<float>, plusBinaryOp>(DMatrix<float>,const float*,ulong, isColumnFiller<float>, plusBinaryOp<float>, float, cudaStream_t);
 template double CuMatrix<double>::indexedReduceLauncher<isColumnFiller<float>, plusBinaryOp>(DMatrix<double>,const double*,ulong, isColumnFiller<float>, plusBinaryOp<double>, double, cudaStream_t);
 template float CuMatrix<float>::indexedReduceLauncher<isRowFiller<float>, plusBinaryOp>(DMatrix<float>,const float*,ulong, isRowFiller<float>, plusBinaryOp<float>, float, cudaStream_t);
 template double CuMatrix<double>::indexedReduceLauncher<isRowFiller<float>, plusBinaryOp>(DMatrix<double>,const double*,ulong, isRowFiller<float>, plusBinaryOp<double>, double, cudaStream_t);
+*/
 #else
 #endif
 

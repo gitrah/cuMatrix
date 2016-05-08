@@ -211,7 +211,7 @@ void CuMatrix<T>::fillFn( const UnaryOpIndexF<T,StateDim>& op, CuMatrix<T>& ret,
 		flprintf("printColorArray(retHostTile %p + roff %d - 5, 10)\n", retHostTile + roff - 5, roff);
 		//printColoArray(retHostTile + roff - ( roff > 5 ? 5 : 0), 10);
 
-		if(checkDebug(debugMem))usedDevMem();
+		if(checkDebug(debugMem))usedCurrMem();
 	}
 	if(gpuCount > 1) {
 		for(int i =0 ; i < gpuCount; i++) {

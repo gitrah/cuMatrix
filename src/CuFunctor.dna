@@ -15,6 +15,8 @@ end
 statFunc = ( ENV['cufuncStatic'] == 'true' )
 # kernel templates (by functor)
 kts = ( ENV['cuKts'] == 'true' )
+ puts "kts ", kts
+ puts "statFunc ", statFunc
  
 runTime = Time.new()
 # filenames
@@ -29,10 +31,10 @@ if(!kts)
     if(statFunc) 
         fMethodTableMgr = "src/FunctionTableMgr_Gen.cu"
     else
-        fMethodTableMgr = "src/FunctionTableMgr_Gen.cu"
+        fMethodTableMgr = "src/MethodTableMgr_Gen.cu"
     end # statFunc
 end
-
+puts "fMethodTableMgr ", fMethodTableMgr
 # switch to add debug output identifying which function is called:  base class's operator<<Name>> or subclass's <<Name>>::operator()(..)  
 locateFunction = ( ENV['cufuncLocate'] == 'true' )
 
@@ -2153,9 +2155,9 @@ if(!kts)
     .    checkCudaErrors(cudaMalloc(&uopMethods, Uop1sLast * sizeof(typename UnaryOpF<T,1>::uopMethod)));
     .    checkCudaErrors(cudaMalloc(&bopMethods, Bop1sLast * sizeof(typename BinaryOpF<T,1>::bopMethod)));
     
-    .    if(checkDebug(debugFtor))printf("void FunctionTableMgr<T>::setup1sFunctionTables() Iop1sLast %d iopFunctions @ %p\n", Iop1sLast, iopFunctions);
-    .    if(checkDebug(debugFtor))printf("void FunctionTableMgr<T>::setup1sFunctionTables() Uop1sLast %d uopFunctions @ %p\n", Uop1sLast, uopFunctions);
-    .    if(checkDebug(debugFtor))printf("void FunctionTableMgr<T>::setup1sFunctionTables() Bop1sLast %d bopFunctions @ %p\n", Bop1sLast, bopFunctions);
+    .    if(checkDebug(debugFtor))printf("void MethodTableMgr<T>::setup1sMethodTables() Iop1sLast %d iopMethods @ %p\n", Iop1sLast, iopMethods);
+    .    if(checkDebug(debugFtor))printf("void MethodTableMgr<T>::setup1sMethodTables() Uop1sLast %d uopMethods @ %p\n", Uop1sLast, uopMethods);
+    .    if(checkDebug(debugFtor))printf("void MethodTableMgr<T>::setup1sMethodTables() Bop1sLast %d bopMethods @ %p\n", Bop1sLast, bopMethods);
     
     .    findUop1sMethods<T><<<1,1>>>(uopMethods);
     .    findIop1sMethods<T><<<1,1>>>(iopMethods);

@@ -434,6 +434,7 @@ T CuMatrix<T>::gloloReduce(UnaryOpF<T,UopDim> gop, MonoidF<T,BopDim> lop, T star
 template __host__ CUDART_DEVICE float CuMatrix<float>::gloloReduce<oneOrZeroUnaryOp, andBinaryOp>(oneOrZeroUnaryOp<float>, andBinaryOp<float>, float,cudaStream_t) const;
 template __host__ CUDART_DEVICE double CuMatrix<double>::gloloReduce<oneOrZeroUnaryOp, andBinaryOp>(oneOrZeroUnaryOp<double>, andBinaryOp<double>, double,cudaStream_t) const;
 template __host__ CUDART_DEVICE ulong CuMatrix<ulong>::gloloReduce<oneOrZeroUnaryOp, andBinaryOp>(oneOrZeroUnaryOp<ulong>, andBinaryOp<ulong>, ulong,cudaStream_t) const;
+template __host__ CUDART_DEVICE long CuMatrix<long>::gloloReduce<oneOrZeroUnaryOp, andBinaryOp>(oneOrZeroUnaryOp<long>, andBinaryOp<long>, long, CUstream_st*) const;
 
 template __host__ CUDART_DEVICE float CuMatrix<float>::gloloReduce<almostEqUnaryOp, andBinaryOp>(almostEqUnaryOp<float>, andBinaryOp<float>, float,cudaStream_t) const;
 template __host__ CUDART_DEVICE double CuMatrix<double>::gloloReduce<almostEqUnaryOp, andBinaryOp>(almostEqUnaryOp<double>, andBinaryOp<double>, double,cudaStream_t) const;
@@ -485,6 +486,7 @@ template __host__ CUDART_DEVICE int CuMatrix<int>::gloloReduce<almostEqUnaryOp, 
 template __host__ CUDART_DEVICE int CuMatrix<int>::gloloReduce<oneOrZeroUnaryOp, andBinaryOp>(oneOrZeroUnaryOp<int>, andBinaryOp<int>, int, CUstream_st*) const;
 template __host__ CUDART_DEVICE uint CuMatrix<uint>::gloloReduce<almostEqUnaryOp, andBinaryOp>(almostEqUnaryOp<uint>, andBinaryOp<uint>, uint, CUstream_st*) const;
 template __host__ CUDART_DEVICE uint CuMatrix<uint>::gloloReduce<oneOrZeroUnaryOp, andBinaryOp>(oneOrZeroUnaryOp<uint>, andBinaryOp<uint>, uint, CUstream_st*) const;
+template __host__ CUDART_DEVICE  long CuMatrix<long>::gloloReduce<almostEqUnaryOp, andBinaryOp>(almostEqUnaryOp<long>, andBinaryOp<long>, long, CUstream_st*) const;
 
 template __host__ CUDART_DEVICE  int CuMatrix<int>::gloloReduce<sqrUnaryOp, plusBinaryOp>(sqrUnaryOp<int>, plusBinaryOp<int>, int, CUstream_st*) const;
 template __host__ CUDART_DEVICE  uint CuMatrix<uint>::gloloReduce<sqrUnaryOp, plusBinaryOp>(sqrUnaryOp<uint>, plusBinaryOp<uint>, uint, CUstream_st*) const;

@@ -71,6 +71,7 @@ template <typename T> struct testAnonMatrices : public Test<T> { int operator()(
 template <typename T> struct testTranspose : public Test<T> {	int operator()(int argc, const char **argv)const;};
 template <typename T> struct testTransposeNneqP : public Test<T> {	int operator()(int argc, const char **argv)const;};
 template <typename T> struct testTransposeLoop : public Test<T> {	int operator()(int argc, const char **argv)const;};
+template <typename T> struct testTransposeHuge : public Test<T> {	int operator()(int argc, const char **argv)const;};
 template <typename T> struct testCat : public Test<T> {	int operator()(int argc, const char **argv)const;};
 template <typename T> struct testBinCat : public Test<T> {	int operator()(int argc, const char **argv)const;};
 template <typename T> struct testReshape : public Test<T> {	int operator()(int argc, const char **argv)const;};

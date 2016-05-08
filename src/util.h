@@ -55,7 +55,13 @@ template <typename T> inline __host__ __device__ void prtColoArrayInterval(const
 #define printColoArrayDiagNe( array, pitch, n, notEq) prtColoArrayDiag( array, __PRETTY_FUNCTION__, __LINE__, pitch,  n , 1, notEq)
 #define countColoArrayDiagNe( array, pitch, n, notEq) cntColoArrayDiag( array, __PRETTY_FUNCTION__, __LINE__, pitch,  n , 1, notEq)
 #define printColoArrayInterval( array, n, sampleElemCount, sampleCount) prtColoArrayInterval( array, __PRETTY_FUNCTION__,   n, sampleElemCount, sampleCount)
-#define usedDevMem() {cout << __PRETTY_FUNCTION__ << "[" << __FILE__ << "::" << __LINE__ << "]\n"; b_util::usedDmem(1);}
+
+#ifndef __CUDA_ARCH__
+#define usedDevMem() {cout << __PRETTY_FUNCTION__ << "[" << __FILE__ << "::" << __LINE__ << "]\n"; b_util::usedDmem(0);}
+#else
+#define usedDevMem() {}
+#endif
+#define usedCurrMem() { printf("%s [%s :: %d] %.2f %%\n",__PRETTY_FUNCTION__ , __FILE__ ,__LINE__ , b_util::currMemRatio());}
 
 template <typename T> __host__ __device__ void printDevArray(const T* array, const char*, int line, int n, int direction = 1, T test = (T) 0);
 #define printArray( array, n) printDevArray( array, __PRETTY_FUNCTION__, __LINE__,   n,1)
@@ -189,7 +195,17 @@ struct b_util {
 	static string pd3(const dim3* d3, string msg);
 	static string toStr(const intPair& p);
 	static void syncGpu(const char * msg = null);
+	__device__ __host__ static inline uint maskShifts(uint x) {
+		x |= x >> 1;
+		x |= x >> 2;
+		x |= x >> 4;
+		x |= x >> 8;
+		x |= x >> 16;
+		return x;
+	}
 	__device__ __host__ static uint nextPowerOf2(uint x);
+	__device__ __host__ static uint prevPowerOf2(uint x);
+
 	template<typename T> static inline T nextFactorable(T start, uint factor) {
 		return static_cast<T>( ceilf(start*1./factor)*factor);
 	}
@@ -233,6 +249,7 @@ struct b_util {
 	static const char* lastErrStr();
 	static void dumpAnyErr(string file, int line);
 	static void dumpError(cudaError_t err);
+	static __host__ CUDART_DEVICE double currMemRatio();
 	static __host__ CUDART_DEVICE double usedMemRatio(bool allDevices = false);
 	static __host__ CUDART_DEVICE void usedDmem(bool allDevices = false);
 	static __host__ __device__ void  _checkCudaError(const char* file, int line, cudaError_t val);

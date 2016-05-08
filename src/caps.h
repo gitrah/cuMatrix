@@ -17,7 +17,7 @@
 #define MAX_GPUS 	10
 #define  DEFAULT_GMEM_HEADROOM_FACTOR  (0.25f)
 enum DataTypes {
-	dtFloat, dtDouble, dtLong,dtUlong, dtInt, dtUint, dtLast
+	dtFloat, dtDouble, dtLong, dtUlong, dtInt, dtUint, dtLast
 };
 
 template <typename T> int getTypeEnum();

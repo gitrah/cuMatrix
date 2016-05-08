@@ -522,7 +522,7 @@ template<typename T> __host__ void MemMgr<T>::addTiles( const Tiler<T>* tiler) {
 		if(checkDebug(debugCheckValid)) {
 			flprintf("curr dev %d %s  tiler& %p, %dx%dx%d - matsize %ld -:> %p\n", ExecCaps::currDev(), b_util::caller().c_str(), tiler, tiler->m_m, tiler->m_n, tiler->m_p, tiler->m_size, tiler->buff());
 		}
-		if(checkDebug(debugMem))usedDevMem();
+		memblo;
 		typedef typename map<T*, int>::iterator iterator;
 		int refs = -1;
 		if(checkDebug(debugCheckValid))outln("tiler->countGpus() " << tiler->countGpus()<< "\n");

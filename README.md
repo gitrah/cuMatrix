@@ -5,10 +5,18 @@ and functions for reading octave data files
 requires Cuda 3.5+ hardware 
 	needed to support arbitrary matrix math (including all operators) from device code
 
+Make 
+	with kts=1 to effect kernel polymorphism purely by template
+	with statFunc=1 for polymorphism by static function pointers
+	otherwise, kernels will be built with polymorphism via method pointers 
+
+	(uses a modified ruby script 'ribosome' that does template expansion to switch between these implementations)
+
+	Many matrix operations support extra-resident sizes.
 
 License 
 
-Copyright (c) 2014 Reid Hartenbower 
+Copyright (c) 2016 Reid Hartenbower 
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 

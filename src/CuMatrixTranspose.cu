@@ -129,7 +129,7 @@ template <typename T> __global__ void transposeDiagonalKernel(const T* sElements
 
 }
 
-template <typename T> __host__ CUDART_DEVICE void CuMatrix<T>::transposeKernelPtrL(DMatrix<T>& t,void (*kernel)(const T*, T*, int, int), const DMatrix<T>& s )  {
+template <typename T> __host__ CUDART_DEVICE void CuMatrix<T>::transposeKernelPtrL(DMatrix<T>& t,void (*kernel)(const T*, T*, int, int), const DMatrix<T>& s , cudaStream_t stream )  {
 	ulong len = s.m * s.n;
 	assert( len == t.m * t.n );
 	int blockW = TX_BLOCK_SIZE;
@@ -146,11 +146,11 @@ template <typename T> __host__ CUDART_DEVICE void CuMatrix<T>::transposeKernelPt
 		tileWidth++;
 	}
 	int smem = TX_BLOCK_SIZE * (tileWidth)* sizeof(T);
-	kernel<<<grid, block, smem>>>(s.elements, t.elements, s.n, s.m);
+	kernel<<<grid, block, smem, stream>>>(s.elements, t.elements, s.n, s.m);
 	//outln("tx with grid " << b_util::pd3(grid).c_str() << " of block " << b_util::pd3(block).c_str() << " smem " << smem);
 }
 
-template <typename T> __host__ CUDART_DEVICE void CuMatrix<T>::transposeL( DMatrix<T>& t, const DMatrix<T>& s)  {\
+template <typename T> __host__ CUDART_DEVICE void CuMatrix<T>::transposeL( DMatrix<T>& t, const DMatrix<T>& s, cudaStream_t stream)  {\
 
     void (*txNmbcPtr)(const T*,T*,int,int);
     txNmbcPtr=&transposeDiagonalKernel;
@@ -188,7 +188,7 @@ template<typename T> CuMatrix<T> CuMatrix<T>::transposeKernelPtr(void (*kernel)(
 }
 
 
-template<typename T>  __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::transpose() const {
+template<typename T>  __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::transpose(cudaStream_t stream ) const {
 	if(scalarQ()) {
 		return *this;
 	}
@@ -215,18 +215,80 @@ template<typename T>  __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::transpose(
 */
 		return ret;
 	}
-	assert(tiler.tileSize == tiler.m_size);
+	if(tiler.tileSize != tiler.m_size) {
+		return transposeXr();
+	}
 	//ExecCaps_setDevice( tiler.nextGpu());
 	CuMatrix<T> ret(n,m, true,true);
 	//if(checkDebug(debugTxp)) outln("tx from " << toShortString() << " to " << ret.toShortString() );
 	DMatrix<T> retD, d_A;
 	tile0(d_A, lastMod == mod_host);
 	ret.tile0(retD, false);
-	transposeL(retD, d_A);
+	transposeL(retD, d_A, stream );
 	ret.invalidateHost();
 
 	return ret;
 }
+
+
+template<typename T>  __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::transposeXr(cudaStream_t stream) const {
+	CuMatrix<T> ret(n,m, true,true);
+	/*
+	 *  tile of source starts at 0,0 and moves right
+	 *  tiler of target starts at 0,0  and moves down
+	 *  each subs source starts at lr corner of last start tile and moves right
+	 *
+	 tile2D(DMatrix<T>& dm,
+            uint& roff, uint& coff,
+            uint& tileM, uint& tileN,
+            int rowTileIdx, int colTileIdx,
+            int rowTileCount, int colTileCount,
+            bool copy = true, int lastGpu =-1, cudaStream_t stream = 0)
+
+	 */
+
+
+	DMatrix<T> d_A, d_B;
+
+	uint maxTileD = (uint) (sqrtf( (float) tiler.tileSize) * MIN(m,n)/MAX(m,n));
+	uint tileD = b_util::prevPowerOf2(maxTileD);
+	tileD = MIN(m, MIN(n, tileD));
+	int colSteps = DIV_UP(n,tileD);
+	int rowSteps = DIV_UP(m, tileD);
+
+	const Tiler<T>* btiler =&(ret.tiler);
+
+	uint aroff = 0,acoff = 0;
+	int lastGpu = 0;
+	int gpuCount = tiler.countGpus();
+	int orgDevice = ExecCaps::currDev();
+    int rowTileIdx, colTileIdx;
+    int rowTileCount, colTileCount;
+
+	cudaStream_t* streams = nullptr;
+	lastGpu = tiler.nextGpu(0);
+
+	if(gpuCount > 1) {
+		assert(!stream);
+		cudaStream_t* streams = (cudaStream_t* ) malloc(gpuCount * sizeof(cudaStream_t));
+		for(int i =0 ; i < gpuCount; i++) {
+			lastGpu = tiler.nextGpu(lastGpu);
+			ExecCaps_setDevice(lastGpu);
+			cherr(cudaStreamCreateWithFlags(&streams[i],cudaStreamNonBlocking));
+		}
+	}
+
+	int coliStart = 0;
+    for(int rowi = 0; rowi < rowSteps; rowi++) {
+    	for(int coli = coliStart; coli < colSteps; coli++) {
+    		tiler.tile2D(d_A, aroff, acoff, tileD, tileD, rowSteps, colSteps, rowi, coli, true,  lastGpu, gpuCount > 1 ? streams[coli] : stream);
+    		btiler->tile2D(d_B, acoff, aroff, tileD, tileD, rowSteps, colSteps, rowi, coli, false, lastGpu, gpuCount > 1 ? streams[coli] : stream);
+    		transposeL(d_A,d_B, gpuCount > 1 ? streams[coli] : stream);
+    	}
+    	coliStart++;
+	}
+}
+
 
 template<typename T> void CuMatrix<T>::transposeKernelPtr(DMatrix<T>& retD, void (*kernel)(const T*,T*,int,int)) {
 	DMatrix<T>  d_A;

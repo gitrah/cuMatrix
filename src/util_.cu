@@ -174,13 +174,13 @@ __device__ __host__ uint b_util::nextPowerOf2(uint x) {
 	if (x < 2) {
 		return 2;
 	}
-	--x;
-	x |= x >> 1;
-	x |= x >> 2;
-	x |= x >> 4;
-	x |= x >> 8;
-	x |= x >> 16;
+	x = maskShifts(--x);
 	return ++x;
+}
+
+__device__ __host__ uint b_util::prevPowerOf2(uint x) {
+    x = maskShifts(x);
+    return x - (x >> 1);
 }
 
 template<> __host__ __device__ float util<float>::epsilon() {
@@ -839,8 +839,8 @@ string IndexArray::toString(bool lf) const {
 }
 
 __host__ __device__ void b_util::expNotation(char* buff, long val) {
-	double factor = 1.;
 #ifndef __CUDA_ARCH__
+	double factor = 1.;
 	if (val >= Giga) {
 		factor = 1. / Giga;
 		sprintf(buff, "%2.3gGb", (double) val * factor);
@@ -855,7 +855,11 @@ __host__ __device__ void b_util::expNotation(char* buff, long val) {
 	}
 #endif
 }
-
+__host__ CUDART_DEVICE double b_util::currMemRatio( ) {
+	size_t freeMemory =1, totalMemory =1;
+	cherr(		cudaMemGetInfo(&freeMemory, &totalMemory));
+	return 100 * (1 - freeMemory * 1. / totalMemory);
+}
 __host__ CUDART_DEVICE double b_util::usedMemRatio(bool allDevices) {
 	//outln("b_util::usedMemRatio("<< tOrF(allDevices) <<  ") ent");
 	//b_util::dumpStack();
@@ -886,7 +890,7 @@ __host__ __device__  void b_util::_checkCudaError(const char* file, int line, cu
 	if (val != cudaSuccess) {
 		printf("CuMatrixException (%d) %s at %s : %d\n",val ,__cudaGetErrorEnum(val),file, line);
 #ifndef __CUDA_ARCH__
-		cout << print_stacktrace() << endl;
+//		cout << print_stacktrace() << endl;
 #endif
 		assert(false);
 	}

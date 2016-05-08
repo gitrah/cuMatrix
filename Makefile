@@ -80,7 +80,6 @@ endif
 ifeq ($(nvml),1)
     CPPFLAGS +=  -DCuMatrix_NVML
 	NVCPPFLAGS += -DCuMatrix_NVML
-	export cufuncStatic = true
 endif
 
 ifeq ($(blas),1)
@@ -91,11 +90,11 @@ endif
 
 # compile functor kernels parameterized by functor data type and functor state dimension
 # have CuFunctor.dna simulate functor polymorphism with static methods (ie function pointers)
-#ifeq ($(statFunc),1)
+ifeq ($(statFunc),1)
     CPPFLAGS +=  -DCuMatrix_StatFunc
 	NVCPPFLAGS += -DCuMatrix_StatFunc
 	export cufuncStatic = true
-#endif
+endif
 
 #disable ribosome so makefile generates only binaries
 ifeq ($(ngen),1)

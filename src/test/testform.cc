@@ -157,6 +157,14 @@ template int testTranspose<ulong>::operator()(int argc, const char **argv) const
 template <typename T> int testTranspose<T>::operator()(int argc, const char **argv) const {
 
 
+
+	CuMatrix<T> twi = CuMatrix<T>::increasingColumns(1,1000,500);
+	CuMatrix<T> ttwi = twi.transpose();
+	outln("twi " << twi.syncBuffers());
+	outln("ttwi " << ttwi.syncBuffers());
+
+
+
 	for(int i=0; i < 2; i++ ){
 		CuMatrix<T> florp = CuMatrix<T>::ones(500,500);
 		outln(i << ": florp " << florp.toShortString());
@@ -349,6 +357,38 @@ template <typename T> int testTransposeLoop<T>::operator()(int argc, const char 
 	outln("testTransposeLoop finish");
 	return 0;
 }
+
+template int testTransposeHuge<float>::operator()(int argc, const char **argv) const;
+template int testTransposeHuge<double>::operator()(int argc, const char **argv) const;
+template int testTransposeHuge<ulong>::operator()(int argc, const char **argv) const;
+template <typename T> int testTransposeHuge<T>::operator()(int argc, const char **argv) const {
+    CuTimer timer;
+	outln("testTransposeHuge start");
+	CuMatrix<T> m = CuMatrix<T>::increasingColumns(1,10000, 12000);
+
+	outln("m " << m.syncBuffers());
+	timer.start();
+	clock_t lastTime = clock();
+
+	CuMatrix<T> tm = m.transpose();
+
+	double delta = b_util::diffclock(clock(), lastTime) / 1000;
+	outln("m' " << m.toShortString() << " took " << delta << " secs");
+    float exeTimeMs = timer.stop();
+    outln("cutimer exeTime s " << exeTimeMs/1000);
+
+	outln("tm " << tm.syncBuffers());
+
+	T ms = m.sum();
+	T tms = tm.sum();
+
+	outln("ms " << ms);
+	outln("tms " << tms);
+
+	assert(ms == tms);
+	return 0;
+}
+
 
 template int testReshape<float>::operator()(int argc, const char **argv) const;
 template int testReshape<double>::operator()(int argc, const char **argv) const;

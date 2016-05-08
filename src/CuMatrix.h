@@ -270,7 +270,8 @@ public:
 	std::set<T> distinct() const;
 
 // form
-	__host__ CUDART_DEVICE CuMatrix<T> transpose() const;
+	__host__ CUDART_DEVICE CuMatrix<T> transpose(cudaStream_t stream = 0) const;
+	__host__ CUDART_DEVICE CuMatrix<T> transposeXr(cudaStream_t stream = 0) const;
 	__host__ CUDART_DEVICE CuMatrix<T> transposeKernelPtr(void (*kernel)(const T*  sElements,  T* tElements, int width, int height));
 	__host__ CUDART_DEVICE void transpose(DMatrix<T>& res);
 	__host__ CUDART_DEVICE void transposeKernelPtr(DMatrix<T>& res, void (*kernel)(const T*  sElements,  T* tElements, int width, int height));
@@ -603,8 +604,8 @@ public:
 
 	//cudaError_t set( DMatrix<T> m, int row, int col, T val);
 	static int maxSlices(int n);
-	static __host__ CUDART_DEVICE void transposeL(DMatrix<T>& t, const DMatrix<T>& s);
-	static __host__ CUDART_DEVICE void transposeKernelPtrL( DMatrix<T>& t, void (*kernel)(const T*, T*, int, int), const DMatrix<T>& s);
+	static __host__ CUDART_DEVICE void transposeL(DMatrix<T>& t, const DMatrix<T>& s, cudaStream_t stream = 0);
+	static __host__ CUDART_DEVICE void transposeKernelPtrL( DMatrix<T>& t, void (*kernel)(const T*, T*, int, int), const DMatrix<T>& s, cudaStream_t stream = 0);
 
 	static __host__ CUDART_DEVICE void rightConcatenateL(DMatrix<T>& trg, const DMatrix<T>& src1, const DMatrix<T>& src2, cudaStream_t stream = 0);
 	static __host__ CUDART_DEVICE void bottomConcatenateL(DMatrix<T>& trg, const DMatrix<T>& src1, const DMatrix<T>& src2, cudaStream_t stream = 0);

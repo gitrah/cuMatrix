@@ -73,6 +73,26 @@ template __host__ CUDART_DEVICE double CuMatrix<double>::reduce<maxBinaryOp>(DMa
 template __host__ CUDART_DEVICE double CuMatrix<double>::reduce<minBinaryOp>(DMatrix<double> const&, minBinaryOp<double>, double, CUstream_st*);
 template __host__ CUDART_DEVICE ulong CuMatrix<ulong>::reduce<minBinaryOp>(DMatrix<ulong> const&, minBinaryOp<ulong>, ulong, CUstream_st*);
 template __host__ CUDART_DEVICE ulong CuMatrix<ulong>::reduce<maxBinaryOp>(DMatrix<ulong> const&, maxBinaryOp<ulong>, ulong, CUstream_st*);
+template __host__ CUDART_DEVICE int CuMatrix<int>::reduce<maxBinaryOp>(DMatrix<int> const&, maxBinaryOp<int>, int, CUstream_st*);
+template __host__ CUDART_DEVICE int CuMatrix<int>::reduce<minBinaryOp>(DMatrix<int> const&, minBinaryOp<int>, int, CUstream_st*);
+
+template __host__ CUDART_DEVICE unsigned int CuMatrix<unsigned int>::reduce<maxBinaryOp>(DMatrix<unsigned int> const&, maxBinaryOp<unsigned int>, unsigned int, CUstream_st*);
+template __host__ CUDART_DEVICE unsigned int CuMatrix<unsigned int>::reduce<minBinaryOp>(DMatrix<unsigned int> const&, minBinaryOp<unsigned int>, unsigned int, CUstream_st*);
+
+template __host__ CUDART_DEVICE float CuMatrix<float>::reduce<andBinaryOp>(DMatrix<float> const&, andBinaryOp<float>, float, CUstream_st*);
+template __host__ CUDART_DEVICE double CuMatrix<double>::reduce<andBinaryOp>(DMatrix<double> const&, andBinaryOp<double>, double, CUstream_st*);
+template __host__ CUDART_DEVICE int CuMatrix<int>::reduce<andBinaryOp>(DMatrix<int> const&, andBinaryOp<int>, int, CUstream_st*);
+template __host__ CUDART_DEVICE unsigned int CuMatrix<unsigned int>::reduce<andBinaryOp>(DMatrix<unsigned int> const&, andBinaryOp<unsigned int>, unsigned int, CUstream_st*);
+template __host__ CUDART_DEVICE long CuMatrix<long>::reduce<andBinaryOp>(DMatrix<long> const&, andBinaryOp<long>, long, CUstream_st*);
+template __host__ CUDART_DEVICE unsigned long CuMatrix<unsigned long>::reduce<andBinaryOp>(DMatrix<unsigned long> const&, andBinaryOp<unsigned long>, unsigned long, CUstream_st*);
+
+template __host__ CUDART_DEVICE float CuMatrix<float>::reduce<orBinaryOp>(DMatrix<float> const&, orBinaryOp<float>, float, CUstream_st*);
+template __host__ CUDART_DEVICE double CuMatrix<double>::reduce<orBinaryOp>(DMatrix<double> const&, orBinaryOp<double>, double, CUstream_st*);
+template __host__ CUDART_DEVICE int CuMatrix<int>::reduce<orBinaryOp>(DMatrix<int> const&, orBinaryOp<int>, int, CUstream_st*);
+template __host__ CUDART_DEVICE unsigned int CuMatrix<unsigned int>::reduce<orBinaryOp>(DMatrix<unsigned int> const&, orBinaryOp<unsigned int>, unsigned int, CUstream_st*);
+template __host__ CUDART_DEVICE long CuMatrix<long>::reduce<orBinaryOp>(DMatrix<long> const&, orBinaryOp<long>, long, CUstream_st*);
+template __host__ CUDART_DEVICE unsigned long CuMatrix<unsigned long>::reduce<orBinaryOp>(DMatrix<unsigned long> const&, orBinaryOp<unsigned long>, unsigned long, CUstream_st*);
+
 
 template __host__ CUDART_DEVICE float CuMatrix<float>::reduce<plusBinaryOp>(DMatrix<float> const&, plusBinaryOp<float>, float, CUstream_st*);
 template __host__ CUDART_DEVICE double CuMatrix<double>::reduce<plusBinaryOp>(DMatrix<double> const&, plusBinaryOp<double>, double, CUstream_st*);
@@ -80,12 +100,6 @@ template __host__ CUDART_DEVICE ulong CuMatrix<ulong>::reduce<plusBinaryOp>(DMat
 template __host__ CUDART_DEVICE int CuMatrix<int>::reduce<plusBinaryOp>(DMatrix<int> const&, plusBinaryOp<int>, int, CUstream_st*);
 template __host__ CUDART_DEVICE unsigned int CuMatrix<unsigned int>::reduce<plusBinaryOp>(DMatrix<unsigned int> const&, plusBinaryOp<unsigned int>, unsigned int, CUstream_st*);
 template __host__ CUDART_DEVICE long CuMatrix<long>::reduce<plusBinaryOp>(DMatrix<long> const&, plusBinaryOp<long>, long, CUstream_st*);
-
-template __host__ CUDART_DEVICE int CuMatrix<int>::reduce<maxBinaryOp>(DMatrix<int> const&, maxBinaryOp<int>, int, CUstream_st*);
-template __host__ CUDART_DEVICE int CuMatrix<int>::reduce<minBinaryOp>(DMatrix<int> const&, minBinaryOp<int>, int, CUstream_st*);
-
-template __host__ CUDART_DEVICE unsigned int CuMatrix<unsigned int>::reduce<maxBinaryOp>(DMatrix<unsigned int> const&, maxBinaryOp<unsigned int>, unsigned int, CUstream_st*);
-template __host__ CUDART_DEVICE unsigned int CuMatrix<unsigned int>::reduce<minBinaryOp>(DMatrix<unsigned int> const&, minBinaryOp<unsigned int>, unsigned int, CUstream_st*);
 
 
 #else
@@ -136,17 +150,12 @@ void CuMatrix<T>::reduceColumn(T* total, const DMatrix<T>& d_M, MonoidF<T,StateD
 	reduceLauncher(total, d_Res, nP, d_M, op, start, d_M.p, col, stream);
 }
 #ifdef  CuMatrix_Enable_KTS
-template __host__ CUDART_DEVICE void CuMatrix<float>::reduceColumn<maxBinaryOp>(float*,DMatrix<float> const&, maxBinaryOp<float>, float, int, CUstream_st*);
-template __host__ CUDART_DEVICE void CuMatrix<float>::reduceColumn<minBinaryOp>(float*,DMatrix<float> const&, minBinaryOp<float>, float, int, CUstream_st*);
-template __host__ CUDART_DEVICE void CuMatrix<float>::reduceColumn<plusBinaryOp>(float*, DMatrix<float> const&, plusBinaryOp<float>, float, unsigned int, CUstream_st*);
-template __host__ CUDART_DEVICE void CuMatrix<double>::reduceColumn<maxBinaryOp>(double*,DMatrix<double> const&, maxBinaryOp<double>, double, int, CUstream_st*);
-template __host__ CUDART_DEVICE void CuMatrix<double>::reduceColumn<minBinaryOp>(double*,DMatrix<double> const&, minBinaryOp<double>, double, uint, CUstream_st*);
-template __host__ CUDART_DEVICE void CuMatrix<double>::reduceColumn<plusBinaryOp>(double*, DMatrix<double> const&, plusBinaryOp<double>, double, unsigned int, CUstream_st*);
-template __host__ CUDART_DEVICE void CuMatrix<int>::reduceColumn<plusBinaryOp>(int*, DMatrix<int> const&, plusBinaryOp<int>, int, unsigned int, CUstream_st*);
-template __host__ CUDART_DEVICE void CuMatrix<unsigned int>::reduceColumn<plusBinaryOp>(unsigned int*, DMatrix<unsigned int> const&, plusBinaryOp<unsigned int>, unsigned int, unsigned int, CUstream_st*);
-template __host__ CUDART_DEVICE void CuMatrix<unsigned long>::reduceColumn<plusBinaryOp>(unsigned long*, DMatrix<unsigned long> const&, plusBinaryOp<unsigned long>, unsigned long, unsigned int, CUstream_st*);
-template __host__ CUDART_DEVICE void CuMatrix<long>::reduceColumn<plusBinaryOp>(long*, DMatrix<long> const&, plusBinaryOp<long>, long, unsigned int, CUstream_st*);
-
+template  __host__ CUDART_DEVICE void CuMatrix<float>::reduceColumn<plusBinaryOp>(float*, DMatrix<float> const&, plusBinaryOp<float>, float, int, CUstream_st*);
+template  __host__ CUDART_DEVICE  void CuMatrix<int>::reduceColumn<plusBinaryOp>(int*, DMatrix<int> const&, plusBinaryOp<int>, int, int, CUstream_st*);
+template  __host__ CUDART_DEVICE  void CuMatrix<long>::reduceColumn<plusBinaryOp>(long*, DMatrix<long> const&, plusBinaryOp<long>, long, int, CUstream_st*);
+template  __host__ CUDART_DEVICE  void CuMatrix<unsigned int>::reduceColumn<plusBinaryOp>(unsigned int*, DMatrix<unsigned int> const&, plusBinaryOp<unsigned int>, unsigned int, int, CUstream_st*);
+template  __host__ CUDART_DEVICE  void CuMatrix<double>::reduceColumn<plusBinaryOp>(double*, DMatrix<double> const&, plusBinaryOp<double>, double, int, CUstream_st*);
+template  __host__ CUDART_DEVICE  void CuMatrix<unsigned long>::reduceColumn<plusBinaryOp>(unsigned long*, DMatrix<unsigned long> const&, plusBinaryOp<unsigned long>, unsigned long, int, CUstream_st*);
 #else
 template __host__ CUDART_DEVICE void CuMatrix<float>::reduceColumn(float*, DMatrix<float> const&, MonoidF<float, 1>, float, int, CUstream_st*);
 template __host__ CUDART_DEVICE void CuMatrix<double>::reduceColumn(double*, DMatrix<double> const&, MonoidF<double, 1>, double, int, CUstream_st*);
@@ -189,8 +198,10 @@ template __host__ CUDART_DEVICE void CuMatrix<ulong>::reduceAsync<maxBinaryOp>(u
 template __host__ CUDART_DEVICE void CuMatrix<ulong>::reduceAsync<minBinaryOp>(ulong*,DMatrix<ulong> const&, minBinaryOp<ulong>, ulong, CUstream_st*);
 template __host__ CUDART_DEVICE void CuMatrix<int>::reduceAsync<minBinaryOp>(int*, DMatrix<int> const&, minBinaryOp<int>, int, CUstream_st*);
 template __host__ CUDART_DEVICE void CuMatrix<int>::reduceAsync<maxBinaryOp>(int*, DMatrix<int> const&, maxBinaryOp<int>, int, CUstream_st*);
-template __host__ CUDART_DEVICE void CuMatrix<unsigned int>::reduceAsync<minBinaryOp>(unsigned int*, DMatrix<unsigned int> const&, minBinaryOp<unsigned int>, int, CUstream_st*);
-template __host__ CUDART_DEVICE void CuMatrix<unsigned int>::reduceAsync<maxBinaryOp>(unsigned int*, DMatrix<unsigned int> const&, maxBinaryOp<unsigned int>, int, CUstream_st*);
+template __host__ CUDART_DEVICE void CuMatrix<uint>::reduceAsync<minBinaryOp>(uint*, DMatrix<uint> const&, minBinaryOp<uint>, uint, CUstream_st*);
+template __host__ CUDART_DEVICE void CuMatrix<uint>::reduceAsync<maxBinaryOp>(uint*, DMatrix<uint> const&, maxBinaryOp<uint>, uint, CUstream_st*);
+template __host__ CUDART_DEVICE void CuMatrix<long>::reduceAsync<minBinaryOp>(long*, DMatrix<long> const&, minBinaryOp<long>, long, CUstream_st*);
+template __host__ CUDART_DEVICE void CuMatrix<long>::reduceAsync<maxBinaryOp>(long*, DMatrix<long> const&, maxBinaryOp<long>, long, CUstream_st*);
 
 #else
 template __host__ CUDART_DEVICE void CuMatrix<float>::reduceAsync<1>(float*,DMatrix<float> const&, MonoidF<float,1>, float, CUstream_st*);
@@ -230,6 +241,8 @@ template __host__ CUDART_DEVICE void CuMatrix<int>::reduceAsyncBuffer<minBinaryO
 template __host__ CUDART_DEVICE void CuMatrix<int>::reduceAsyncBuffer<maxBinaryOp>(int*, DMatrix<int>&, int, int, long, DMatrix<int> const&, maxBinaryOp<int>, int, CUstream_st*);
 template __host__ CUDART_DEVICE void CuMatrix<unsigned int>::reduceAsyncBuffer<minBinaryOp>(unsigned int*, DMatrix<unsigned int>&, int, int, long, DMatrix<unsigned int> const&, minBinaryOp<unsigned int>, unsigned int, CUstream_st*);
 template __host__ CUDART_DEVICE void CuMatrix<unsigned int>::reduceAsyncBuffer<maxBinaryOp>(unsigned int*, DMatrix<unsigned int>&, int, int, long, DMatrix<unsigned int> const&, maxBinaryOp<unsigned int>, unsigned int, CUstream_st*);
+template __host__ CUDART_DEVICE void CuMatrix<long>::reduceAsyncBuffer<minBinaryOp>(long*, DMatrix<long>&, int, int, long, DMatrix<long> const&, minBinaryOp<long>, long, CUstream_st*);
+template __host__ CUDART_DEVICE void CuMatrix<long>::reduceAsyncBuffer<maxBinaryOp>(long*, DMatrix<long>&, int, int, long, DMatrix<long> const&, maxBinaryOp<long>, long, CUstream_st*);
 
 #else
 template __host__ CUDART_DEVICE void CuMatrix<float>::reduceAsyncBuffer(float*, DMatrix<float>&, int, int, long, DMatrix<float> const&, MonoidF<float, 1>, float, CUstream_st*);
@@ -326,6 +339,19 @@ template<typename T> template<int StateDim> __host__ CUDART_DEVICE T CuMatrix<T>
 }
 
 #ifdef  CuMatrix_Enable_KTS
+template __host__ CUDART_DEVICE float CuMatrix<float>::reduce<maxBinaryOp>(maxBinaryOp<float>, float, CUstream_st*) const;
+template __host__ CUDART_DEVICE float CuMatrix<float>::reduce<minBinaryOp>(minBinaryOp<float>, float, CUstream_st*) const;
+template __host__ CUDART_DEVICE double CuMatrix<double>::reduce<maxBinaryOp>(maxBinaryOp<double>, double, CUstream_st*) const;
+template __host__ CUDART_DEVICE double CuMatrix<double>::reduce<minBinaryOp>(minBinaryOp<double>, double, CUstream_st*) const;
+template __host__ CUDART_DEVICE int CuMatrix<int>::reduce<maxBinaryOp>(maxBinaryOp<int>, int, CUstream_st*) const;
+template __host__ CUDART_DEVICE int CuMatrix<int>::reduce<minBinaryOp>(minBinaryOp<int>, int, CUstream_st*) const;
+template __host__ CUDART_DEVICE long CuMatrix<long>::reduce<maxBinaryOp>(maxBinaryOp<long>, long, CUstream_st*) const;
+template __host__ CUDART_DEVICE long CuMatrix<long>::reduce<minBinaryOp>(minBinaryOp<long>, long, CUstream_st*) const;
+template __host__ CUDART_DEVICE unsigned int CuMatrix<unsigned int>::reduce<maxBinaryOp>(maxBinaryOp<unsigned int>, unsigned int, CUstream_st*) const;
+template __host__ CUDART_DEVICE unsigned int CuMatrix<unsigned int>::reduce<minBinaryOp>(minBinaryOp<unsigned int>, unsigned int, CUstream_st*) const;
+template __host__ CUDART_DEVICE unsigned long CuMatrix<unsigned long>::reduce<maxBinaryOp>(maxBinaryOp<unsigned long>, unsigned long, CUstream_st*) const;
+template __host__ CUDART_DEVICE unsigned long CuMatrix<unsigned long>::reduce<minBinaryOp>(minBinaryOp<unsigned long>, unsigned long, CUstream_st*) const;
+
 #else
 template __host__ CUDART_DEVICE float CuMatrix<float>::reduce(MonoidF<float,1>, float, CUstream_st*) const;
 template __host__ CUDART_DEVICE double CuMatrix<double>::reduce(MonoidF<double,1>, double, CUstream_st*) const;

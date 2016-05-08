@@ -94,7 +94,7 @@ typedef __device_builtin__ enum CuMatrixException CuMatrixException_t;
 #define debugCg  		(1 << 15)
 #define debugMultGPU  	(1 << 16)
 #define debugPm  		(1 << 17)
-#define debugMaths (1 << 18)
+#define debugMaths 		(1 << 18)
 #define debugAnomDet	(1 << 19)
 #define debugStream  	(1 << 20)
 #define debugRedux 		(1 << 21)
@@ -107,40 +107,42 @@ typedef __device_builtin__ enum CuMatrixException CuMatrixException_t;
 #define debugMeans 		(1 << 28)
 #define debugBinOp		(1 << 29)
 #define debugFile		(1 << 30)
+#define debugMemblo		(1 << 31)
 
-const auto allChoice = "all";
-const auto anomChoice = "anom";
-const auto memChoice = "mem";
-const auto copyChoice = "copy";
-const auto copyDhChoice = "copyDh";
-const auto execChoice = "exec";
-const auto fillChoice = "fill";
-const auto ftorChoice = "ftor";
-const auto matprodChoice = "matprod";
-const auto matprodBlockResizeChoice = "mpbr";
-const auto debugMatStatsChoice = "stats";
+extern const char* allChoice;
+extern const char* anomChoice;
+extern const char* memChoice;
+extern const char* copyChoice;
+extern const char* copyDhChoice;
+extern const char* execChoice;
+extern const char* fillChoice;
+extern const char* ftorChoice;
+extern const char* matprodChoice;
+extern const char* matprodBlockResizeChoice;
+extern const char* debugMatStatsChoice;
 
-const auto consChoice = "cons";
-const auto destrChoice = "dstr";
-const auto refcountChoice = "ref";
-const auto verboseChoice = "verb";
-const auto syncChoice = "sync";
-const auto nnChoice = "nn";
-const auto cgChoice = "cg";
-const auto txpChoice = "txp";
-const auto pmChoice = "pack";
-const auto smallBlkChoice = "sblk";
-const auto medBlkChoice = "mblk";
-const auto lrgBlkChoice = "lblk";
-const auto debugMultGPUChoice = "gpu";
-const auto debugMillisForMicrosChoice = "m4m";
-const auto debugReduxChoice = "rdx";
-const auto debugTilerChoice = "tlr";
-const auto debugUnaryOpChoice = "uny";
-const auto debugPrecisionChoice = "prec";
-const auto debugMeansChoice = "mean";
-const auto debugBinOpChoice = "bnop";
-const auto debugCheckValidChoice = "dcv";
+extern const char* consChoice;
+extern const char* destrChoice;
+extern const char* refcountChoice;
+extern const char* verboseChoice;
+extern const char* syncChoice;
+extern const char* nnChoice;
+extern const char* cgChoice;
+extern const char* txpChoice;
+extern const char* pmChoice;
+extern const char* smallBlkChoice;
+extern const char* medBlkChoice;
+extern const char* lrgBlkChoice;
+extern const char* debugMultGPUChoice;
+extern const char* debugMillisForMicrosChoice;
+extern const char* debugReduxChoice;
+extern const char* debugTilerChoice;
+extern const char* debugUnaryOpChoice;
+extern const char* debugPrecisionChoice;
+extern const char* debugMeansChoice;
+extern const char* debugBinOpChoice;
+extern const char* debugCheckValidChoice;
+extern const char* debugMembloChoice;
 
 __host__ __device__ const char* __cudaGetErrorEnum(cudaError_t res);
 __host__ __device__ const char *__cublasGetErrorEnum(cublasStatus_t error);
@@ -201,6 +203,10 @@ string fromSeconds(double seconds);
 string fromMillis(double millis);
 string fromMicros(double micros);
 string niceEpochMicros(long micros);
+
+
+void membly(const char * file , int line, const char * func);
+#define memblo membly(__FILE__, __LINE__, __func__)
 
 template<typename T> string niceVec(T* v) {
 	stringstream ss;

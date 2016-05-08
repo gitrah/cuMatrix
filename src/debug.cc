@@ -25,6 +25,40 @@ const long DAY_MS = DAY_S * SECOND_MS;
 
 const float F_DAY_MS = DAY_MS * 1.f;
 
+const char * allChoice = "all";
+const char * anomChoice = "anom";
+const char * memChoice = "mem";
+const char * copyChoice = "copy";
+const char * copyDhChoice = "copyDh";
+const char * execChoice = "exec";
+const char * fillChoice = "fill";
+const char * ftorChoice = "ftor";
+const char * matprodChoice = "matprod";
+const char * matprodBlockResizeChoice = "mpbr";
+const char * debugMatStatsChoice = "stats";
+const char * consChoice = "cons";
+const char * destrChoice = "dstr";
+const char * refcountChoice = "ref";
+const char * verboseChoice = "verb";
+const char * syncChoice = "sync";
+const char * nnChoice = "nn";
+const char * cgChoice = "cg";
+const char * txpChoice = "txp";
+const char * pmChoice = "pack";
+const char * smallBlkChoice = "sblk";
+const char * medBlkChoice = "mblk";
+const char * lrgBlkChoice = "lblk";
+const char * debugMultGPUChoice = "gpu";
+const char * debugMillisForMicrosChoice = "m4m";
+const char * debugReduxChoice = "rdx";
+const char * debugTilerChoice = "tlr";
+const char * debugUnaryOpChoice = "uny";
+const char * debugPrecisionChoice = "prec";
+const char * debugMeansChoice = "mean";
+const char * debugBinOpChoice = "bnop";
+const char * debugCheckValidChoice = "dcv";
+const char * debugMembloChoice = "mbl";
+
 // todo:  generate this from enum CuMatrixException
 string CuMatrixExceptionStrings[] = {
 		"successEx",
@@ -138,6 +172,14 @@ string niceEpochMicros(long micros) {
 	time_t argT = micros/1000;
 	struct tm* millisTm = localtime(&argT);
 	return string(asctime(millisTm));
+}
+
+void membly(const char * file , int line, const char * func){
+	size_t lFree, lTotal;
+	cherr(cudaMemGetInfo(&lFree, &lTotal));
+	double pct =  100 * (1 - 1.* (lTotal-lFree)/lTotal);
+	if(checkDebug(debugMemblo))
+		printf("memser %s : %d %s free %.2f%% %lu total %lu\n", file, line, func, pct, lFree, lTotal);
 }
 
 void dummy_1f1476811d0646db8cc4de3c21f85825() {}

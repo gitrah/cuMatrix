@@ -269,6 +269,7 @@ template __host__ CUDART_DEVICE bool CuMatrix<double>::all<ltUnaryOp>(ltUnaryOp<
 template __host__ CUDART_DEVICE bool CuMatrix<ulong>::all<ltUnaryOp>(ltUnaryOp<ulong>) const;
 template __host__ CUDART_DEVICE bool CuMatrix<int>::all<almostEqUnaryOp>(almostEqUnaryOp<int>) const;
 template __host__ CUDART_DEVICE bool CuMatrix<unsigned int>::all<almostEqUnaryOp>(almostEqUnaryOp<unsigned int>) const;
+template __host__ CUDART_DEVICE bool CuMatrix<long>::all<almostEqUnaryOp>(almostEqUnaryOp<long>) const;
 #else
 template __host__ CUDART_DEVICE bool CuMatrix<float>::all<1>(UnaryOpF<float,1>) const;
 template __host__ CUDART_DEVICE bool CuMatrix<double>::all<1>(UnaryOpF<double,1>) const;
