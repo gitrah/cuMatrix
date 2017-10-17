@@ -125,8 +125,6 @@ template <typename T, typename I> __h_ CUDART_DEVICE void d_idxfn1s_factory_cons
 	cherr(cudaDeviceSynchronize());
 }
 
-
-
 template <typename T, typename I> __g_ void idxfn1sFillFnK(d_idxfn1s<T,I> filler) {
 	FirstThread {
 		flprintf("idxfn1sFillFnK called with filler.s1 %f\n", (float)filler.s1);

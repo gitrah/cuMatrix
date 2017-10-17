@@ -22,20 +22,24 @@ template<typename T> class CuMatrix;
 #define MAX_BUFFERS 4
 
 /*
+ * Tiles host matrices
+ * 		A.  when the matrices can't fit (or some number matrices collaborating in a pipeline or of them can't all fit) into device memory
+ * 		B.  so multiple GPUs can operate on parts of them independently & simultaneously
+ *
  * Tiler maps host mem into device ram tiles that partition the source matrix
  * by width, height, or both, as required by the math
  *
- * allow varying GPU tile sizes instead of minimum
+ * todo: allow varying GPU tile sizes instead of minimum
  *
- *todo unimempl
+ * todo unempl
  * Tile size set to the smaller (host/device(s) buffer
  *     tiling for
  *         buffer limits
  *         multi-gpu data ||ism
- *         IO
+ *         IO:  tile file into host (..into device)
  *    multiple tiles (one can be loading while another participates in a calcul
  *
- *
+ * todo multi gpu tests
  */
 inline __host__ __device__ bool equiBuff(ulong4 a, ulong4 b) {
     return a.x == b.x && a.y ==b.y && a.z  == b.z &&  a.w == b.w;
@@ -44,37 +48,30 @@ template<typename T> struct Tiler {
 
     friend class CuMatrix<T>;
 
+    int m_m, m_n, m_p;
+    long m_size; // in BYTES
+    T* m_elems;
     long tileSize;
     int gpuMask;
     int gpuModulus;
 
     ulong4 buffers;
-    int m_m, m_n, m_p;
-    //uint tM,tN;
-    long m_size; // in BYTES
-    T* m_elems;
+    TileDirection tileD;
 
+    void (*kernelle)();
 
-    __host__ __device__ Tiler( const CuMatrix<T>& m);
-    __host__ __device__ Tiler( const CuMatrix<T>& m, bool allocate, int gpuMask = gpuMaskFromGpu(ExecCaps::currDev()));
+    __host__ __device__ Tiler( const CuMatrix<T>& m,  void (*kernelle)() = nullptr);
+    __host__ __device__ Tiler(
+			CuMatrix<T>& m, bool allocate,
+			int gpuMask = gpuMaskFromGpu(ExecCaps::currDev()),
+			TileDirection tileD = tdCols, void (*kernelle)() = nullptr);
     __host__ __device__ Tiler(const Tiler<T>& o);
 
+    __host__ __device__ bool validQ() const;
 
+    __host__ __device__ void setKernelle(  void (*kernelle)()) { this->kernelle =  kernelle; }
 
     __host__ __device__ inline T* buff() const {
-    	if(checkDebug(debugTiler)) {
-    		char buff[34];
-    		char buff2[34];
-    		flprintf("gpuMask %s; Tiler<T>::gpuMaskFromCurrGpu() %s\n",
-    				maskStr(buff, gpuMask), maskStr(buff2, Tiler<T>::gpuMaskFromCurrGpu()) );
-    	}
-    	//assert(gpuMask ==  Tiler<T>::gpuMaskFromCurrGpu());
-    	if(checkDebug(debugTiler)) {
-#ifndef __CUDA_ARCH__
-    		outln(toString());
-#endif
-    		flprintf("modFromMask %d buffer %p\n", modulusFromMask(), buffer(nextGpu(ExecCaps::currDev())));
-    	}
     	return buffer(nextGpu(ExecCaps::currDev()));
     }
 
@@ -89,7 +86,7 @@ template<typename T> struct Tiler {
         case 3:
             return (T*) buffers.w;
         default:
-            flprintf("buffer called with %d\n",i);
+            flprintf("called with %d\n",i);
             setLastError(illegalArgumentEx);
             return 0;
         }
@@ -111,6 +108,8 @@ template<typename T> struct Tiler {
 
     __host__ __device__ int deviceOfResidence() const;
 
+    __host__  __device__ int indexInMask(int gpu) const;
+
     __host__ __device__ inline void dumpBuff(const char* msg) const {
         printf("%s: {%p,%p,%p,%p}\n",msg, (T*)buffers.x,(T*)buffers.y,(T*)buffers.z,(T*)buffers.w);
     }
@@ -124,6 +123,8 @@ template<typename T> struct Tiler {
     }
 
     __host__ __device__ inline void setBuffer(int i, T* elems) {
+    	if(checkDebug(debugMem))
+    		flprintf("i %d elems %p\n", i, elems);
         switch (i) {
         case 0:
         //    assert(buffers.x == 0);
@@ -158,17 +159,28 @@ template<typename T> struct Tiler {
          flprintf("gpuMask [%s]\n",buff);
      }
 
+    static __host__ string maskStr(int mask) {
+         char buff[33];
+         buff[32]=0;
+         b_util::printBinInt(buff, mask);
+         flprintf("gpuMask [%s]\n",buff);
+         return string(buff);
+     }
+
     static __host__ __device__ const char * maskStr(char *buff, int mask) {
          b_util::printBinInt(buff, mask);
          return buff;
-     }
+    }
 
     static __host__ __device__ int gpuMaskFromCount(int count) {
         int mask = 0;
         for(int gpu =0; gpu < count;gpu++){
             mask |= 1 <<  gpu;
         }
-        if(checkDebug(debugTiler))flprintf("gpuMaskFromCount mask %d\n",mask);
+        char buff[33];
+        buff[32]=0;
+        b_util::printBinInt(buff, mask);
+        if(checkDebug(debugTiler))flprintf("gpuMaskFromCount %d mask %d bin %s\n",count,mask,buff);
         return mask;
     }
 
@@ -177,15 +189,14 @@ template<typename T> struct Tiler {
     	gpuModulus = modulusFromMask();
     }
     static __host__ __device__ int gpuMaskFromGpu(int gpu) {
+    	int maks = 1 <<  gpu;
         if (checkDebug(debugTiler)) {
-            flprintf("gpu %d mask %d\n", gpu, (1 <<  gpu));
-            dumpMask(1<<gpu);
+            flprintf("gpu %d mask %d\n", gpu, maks);
+            dumpMask(maks);
         }
-        return 1 <<  gpu;
+        return maks;
     }
     static __host__ __device__ int gpuMaskFromCurrGpu() { return gpuMaskFromGpu(ExecCaps::currDev());}
-
-    __host__ __device__ void set(const CuMatrix<T>& src);
 
     __host__ __device__ int countGpus() const {
         int count = 0;
@@ -204,14 +215,20 @@ template<typename T> struct Tiler {
         return mod;
     }
 
-    __host__ __device__ int nextGpu(int lastGpu = 0) const;
-    __host__ __device__ ulong offset(uint roff, uint coff, bool colMajor = false) const {
-            return colMajor ? (coff * m_m + roff ) : (roff * m_p + coff);
+    __host__ __device__ int nextGpu(int lastGpu = -1) const;
+    __host__ __device__ long offset(int roff, int coff, bool colMajor = false) const {
+            return colMajor ? ( (long)coff * m_m + roff ) : ((long)roff * m_p + coff);
+    }
+    __host__ __device__ long offsetd(int roff, int coff, int tileP,  bool colMajor = false) const {
+            return colMajor ? ((long)coff * m_m + roff ) : ((long)roff * tileP + coff);
     }
 
 
     __host__ __device__ bool hasDmemQ() const;
-    inline __host__ __device__ int getTileCount() const { assert(tileSize >0); return m_size == 0? 0 : DIV_UP(m_size,tileSize); }
+    inline __host__ __device__ int getTileCount() const {
+    	assert(tileSize >0);
+    	return m_size == 0? 0 : DIV_UP(m_size,tileSize);
+    }
 
     __device__ void free() {
         // buffer mgt handled by owning CuMatrix
@@ -241,16 +258,32 @@ template<typename T> struct Tiler {
         }
         buffers = o.buffers;
         tileSize = o.tileSize;
+        kernelle = o.kernelle;
+        if(checkDebug(debugTiler)) flprintf("tiler %p->tileSize set to %d\n", this, tileSize);
     }
 
-    __host__ __device__ void reset(const CuMatrix<T>& m) {
+    __host__ __device__ void reset( CuMatrix<T>& m) {
+#ifndef __CUDA_ARCH__
+    	if(buffers.x)
+    		m.getMgr().freeDbuff((T*) buffers.x, tileSize);
+    	if(buffers.y)
+    		m.getMgr().freeDbuff((T*) buffers.y, tileSize);
+    	if(buffers.z)
+    		m.getMgr().freeDbuff((T*) buffers.z, tileSize);
+    	if(buffers.w)
+    		m.getMgr().freeDbuff((T*) buffers.w, tileSize);
+    	buffers.x = buffers.y = buffers.z = buffers.w = 0;
+#else
+    	free();
+#endif
         m_m = m.m;
         m_n = m.n;
         m_p = m.p;
         m_size= m.size; // in BYTES
         m_elems= m.elements;
-        tileSize = m.size;
 
+        allocTiles(m._tileM, m._tileN, m._tileP);
+        m.getMgr().addTiles(this);
     }
     /*
      * source matrix maps to one tile (per gpu if so masked)
@@ -271,7 +304,7 @@ template<typename T> struct Tiler {
     }
 
 private:
-    __host__ __device__ void allocOneTile();
+    __host__ __device__ void allocSingleTile(bool padded);
 
 public:
     /*
@@ -292,9 +325,9 @@ public:
      *
      */
 
-    __host__ __device__ void allocTiles( uint tileM = 0, uint tileN = 0, float headroom = DEFAULT_GMEM_HEADROOM_FACTOR);
+    __host__ __device__ void allocTiles(  int& tileM, int& tileN, int& tileP, bool padded = false, float headroom = DEFAULT_GMEM_HEADROOM_FACTOR);
 
-    __host__ __device__ void tileDims(uint& tileM, uint& tileN, TileDirection tileD = tdRows) const;
+    __host__ __device__ void tileDims(int& tileM, int& tileN, int& tileP, TileDirection tileD = tdRows) const;
 
     static inline __device__ void memcpy2D(T *dst, size_t dpitchTs, const T *src, size_t spitchTs, size_t width, size_t height) {
         for(int i =0; i < height; i++) {
@@ -328,17 +361,20 @@ public:
 
     __host__ __device__ void clipTile(
             DMatrix<T>& dm,
-            uint tileM, uint tileN,
+            int tileM, int tileN,
             int rowTiles, int colTiles,
             int rowTileIdx, int colTileIdx) const;
 
 protected:
+
+    // todo:  remove til0 in favor of single-tile executions of tile1D or tile2D
+    // @deprecated
     __host__ __device__ void tile0(DMatrix<T>& dm, bool copy = true, cudaStream_t stream = 0) const;
     /*
      * streams are per gpu
      * if a stream is specified and lastGpu/gpuMask cause a device change for this tile, kaboom
      */
-    __host__ __device__ int tile1D(DMatrix<T>& dm,  uint& roff, uint& coff,uint& tileM, uint& tileN,
+    __host__ __device__ int tile1D(DMatrix<T>& dm,  int& roff, int& coff,int& tileM, int& tileN, int& tileP,
             int t, TileDirection tileD = tdRows, bool copy = true, int lastGpu = -1, cudaStream_t stream = 0) const;
 
     /*
@@ -347,8 +383,8 @@ protected:
      *      width of tile (dm.m, dm.n; same for all but, possibly, edge tiles)
      */
     __host__ __device__ int tile2D(DMatrix<T>& dm,
-            uint& roff, uint& coff,
-            uint& tileM, uint& tileN,
+            int& roff, int& coff,
+            int& tileM, int& tileN, int& tileP,
             int rowTileIdx, int colTileIdx,
             int rowTileCount, int colTileCount,
             bool copy = true, int lastGpu =-1, cudaStream_t stream = 0) const;
@@ -358,50 +394,20 @@ protected:
      * todo ensure compatible gpuMasks so 'collaborating' tiles Ta,Tb, Tc  (eg in Mc = Ma <<op>> Mb) are on same GPU...
      *
      */
-    __host__ __device__ int tileLike(DMatrix<T>& dm, uint& roff, uint& coff, uint tileM, uint tileN,
-            int t, TileDirection tileD = tdRows, bool copy = true, int lastGpu = -1, cudaStream_t stream = 0) const ;
 public:
+    __host__ __device__ int tileLike(DMatrix<T>& dm, int& roff, int& coff, int tileM, int tileN, int tileP,
+            int t, TileDirection tileD = tdRows, bool copy = true, int lastGpu = -1, cudaStream_t* streams = nullptr) const ;
 
-    __host__ __device__ void syncTile(const DMatrix<T>&dm, uint roff = 0, uint coff=0, cudaStream_t stream = 0) {
-        if(checkDebug(debugTiler)) {
-            flprintf("syncTile dm %uX%uX%u dm.elements %p roff %d coff %d\n", dm.m, dm.n, dm.p, dm.elements, roff, coff);
-        }
-    #ifndef __CUDA_ARCH__
-        if (checkDebug(debugTiler))flprintf("dpitchB(m_p) %u spitchB(dm.p) %u widthB(dm.n) %u height(dm.m) %u\n",  m_p* sizeof(T), dm.p* sizeof(T), dm.n* sizeof(T), dm.m );
-        if(stream) {
-            if (checkDebug(debugTiler))flprintf("cudaMemcpy2DAsync roff %u coff %u copying from %p to %p with stream %p\n", roff, coff, dm.elements, m_elems +offset(roff, coff), stream );
-            cherr( cudaMemcpy2DAsync(m_elems +offset(roff, coff), m_p * sizeof(T), dm.elements, dm.p* sizeof(T), dm.n* sizeof(T), dm.m, cudaMemcpyDeviceToHost,stream));
-        }else {
-            if (checkDebug(debugTiler))flprintf("cudaMemcpy2D roff %u coff %u copying from %p to %p with stream %p\n", roff, coff, dm.elements, m_elems +offset(roff, coff), stream );
-            if (checkDebug(debugTiler))flprintf(
-                    "cudaMemcpy2D m_elems +offset(roff, coff) %p, m_p* sizeof(T) %u, dm.elements %p, dm.p* sizeof(T) %u, dm.n* sizeof(T) %u, dm.m %u\n",
-                    m_elems +offset(roff, coff), m_p* sizeof(T), dm.elements, dm.p* sizeof(T), dm.n* sizeof(T), dm.m);
-            if (checkDebug(debugTiler)) {
-                flprintf(
-                    "void *dst %p, size_t dpitch %u, targ end %p\n",
-                    m_elems +offset(roff, coff), m_p* sizeof(T), m_elems +offset(roff, coff) + dm.m * m_p + dm.n);
-                flprintf(
-                    "const void *src %p, size_t spitch %u, size_t width %u, size_t height %u\n",
-                    dm.elements, dm.p* sizeof(T), dm.n* sizeof(T), dm.m);
-                MemMgr<T>::checkValid( dm.elements);
-                MemMgr<T>::checkValid( dm.elements + dm.p * dm.m - 1);
-            }
-            cherr( cudaMemcpy2D(m_elems +offset(roff, coff), m_p* sizeof(T), dm.elements, dm.p* sizeof(T), dm.n* sizeof(T), dm.m, cudaMemcpyDeviceToHost));
-        }
-    #else
-        if (checkDebug(debugTiler))printf("syncTile memcpy, synching stream %p\n",stream);
-        memcpy2D(m_elems +offset(roff, coff), m_p, dm.elements, dm.p, dm.n, dm.m);
-    #endif
-
-    }
+    __host__ __device__ void syncTile(const DMatrix<T>&dm, int roff = 0, int coff=0, cudaStream_t stream = nullptr);
 
     string toString() const {
         stringstream ss;
         const int gpus = countGpus();
         if(checkDebug(debugTiler))flprintf("gpus %d\n",gpus);
-        ss << "[tiler " << this << " h_elems "<< m_elems << ", sz " << m_size  << ", " << m_m << " X " << m_n << " X " << m_p << " {";
+        ss << "[tiler " << this << " h_elems "<< m_elems << ", sz/msz " << tileSize  <<
+        		"/" << m_size << ", " << m_m << " X " << m_n << " X " << m_p << " {";
         for(int i =0; i < gpus; i++) {
-            ss << buffer(nextGpu(i));
+            ss << "gpu" <<  i <<": " << buffer(i);
             if(i < gpus - 1) {
                 ss << ",";
             }
@@ -410,6 +416,7 @@ public:
         buff[32]=0;
         b_util::printBinInt(buff, gpuMask);
         ss << ", mask " << buff;
+        ss << " tdir " << b_util::tileDir(tileD);
         ss << "}] ";
         return ss.str();
     }

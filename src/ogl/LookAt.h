@@ -5,8 +5,7 @@
  *      Author: reid
  */
 
-#ifndef LOOKAT_H_
-#define LOOKAT_H_
+#pragma once
 #include "Vision.h"
 
 struct LookAt : public Vision {
@@ -26,4 +25,3 @@ struct LookAt : public Vision {
 	void set();
 };
 
-#endif /* LOOKAT_H_ */

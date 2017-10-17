@@ -32,13 +32,17 @@ using std::istringstream;
 using std::istream_iterator;
 
 #define DEBUG = true
-//#define UTLTYTMPLT
 
 extern ulong totalThreads;
 extern ulong totalElements;
 
-const char* GpuCriteriaNames[] = { "gcCoolest", "gcFreeest", "gcFastest" };
+const char* GpuCriteriaNames[] = { "gcCoolest", "gcFreeest", "gcFastest", "gcAll" };
 
+#ifdef CuMatrix_DebugBuild
+	BuildType g_BuildType = debug;
+#else
+	BuildType g_BuildType = release;
+#endif
 
 template<typename T, typename U> string pp(pair<T, U>& p) {
 	stringstream s1, s2, res;
@@ -264,12 +268,6 @@ vector<string> b_util::split(string s) {
 }
 
 
-template<typename T> bool util<T>::almostEquals(T t1, T t2, T epsilon) {
-	if(checkDebug(debugVerbose))flprintf("t2 %f - t1 %f < epsilon %f ::abs(t2 - t1) %f (%d)\n",
-			(double)t2, (double) t1, (double) epsilon,(double) ::fabs(t2 - t1),  ::fabs(t2 - t1) < epsilon);
-	return ::fabs(t2 - t1) < epsilon;
-}
-
 template<typename T> string util<T>::pdm(const DMatrix<T>& md) {
 	stringstream sadr, sm, sn, sz, sp, res;
 	sadr << (md.elements ? md.elements : 0);
@@ -291,7 +289,7 @@ template<typename T> string util<T>::pdm(const DMatrix<T>& md) {
 	return res.str();
 }
 
-template<typename T> bool util<T>::onDevice(T* ptr, int dev) {
+bool b_util::onDevice(void* ptr, int dev) {
 	assert(ptr);
 	struct cudaPointerAttributes ptrAtts;
 	int orgDev = ExecCaps::currDev();
@@ -300,11 +298,18 @@ template<typename T> bool util<T>::onDevice(T* ptr, int dev) {
 	}
 	//ptrAtts.memoryType = dev ? cudaMemoryTypeDevice : cudaMemoryTypeHost;
 	cudaError_t ret = cudaPointerGetAttributes(&ptrAtts, ptr);
-	if(checkDebug(debugCheckValid))outln(b_util::caller() << " ptr " << ptr << " on dev " << dev << ": " << ret << " atts.dev " << ptrAtts.device);
+	if (checkDebug(debugCheckValid))
+		outln(
+				b_util::caller() << "\n\tptr " << ptr << " on dev " << dev <<
+					": " << ret << " atts.dev " << ptrAtts.device);
 
 	bool succ = false;
 	if (ret == cudaSuccess) {
 		succ= dev == ptrAtts.device;
+	}else {
+		outln(" Imwalid " << ptr );
+		b_util::dumpStack();
+		checkCudaError(ret);
 	}
 	if(orgDev != dev) {
 		ExecCaps_restoreDevice(orgDev);
@@ -314,13 +319,13 @@ template<typename T> bool util<T>::onDevice(T* ptr, int dev) {
 }
 
 template<typename T> bool util<T>::onCurrentDevice(T* ptr) {
-	return onDevice(ptr, ExecCaps::currDev());
+	return b_util::onDevice(ptr, ExecCaps::currDev());
 }
 
-template<typename T> int util<T>::getDevice(T* ptr) {
+int b_util::getDevice(void* ptr) {
 	assert(ptr);
 	int onDeviceRes = -1;
-	for(int i = 0; i < ExecCaps::deviceCount; i++) {
+	for(int i = 0; i < ExecCaps::countGpus(); i++) {
 		if(onDevice(ptr,i)) {
 			//outln("ptr " << ptr << " on device " << i );
 			if(onDeviceRes != -1) {
@@ -446,7 +451,7 @@ uint b_util::getDeviceTemp(int dev) {
 GpuCriteria operator++(GpuCriteria& x) { return x = (GpuCriteria)(std::underlying_type<GpuCriteria>::type(x) + 1); }
 GpuCriteria operator*(GpuCriteria c) {return c;}
 GpuCriteria begin(GpuCriteria r) {return GpuCriteria::gcCoolest;}
-GpuCriteria end(GpuCriteria r)   {GpuCriteria l=GpuCriteria::gcFastest; return ++l;}
+GpuCriteria end(GpuCriteria r)   {GpuCriteria l=GpuCriteria::gcAll; return ++l;}
 
 int b_util::getDeviceThatIs(GpuCriteria criteria) {
 	size_t maxFree = 0;
@@ -537,11 +542,76 @@ template int b_util::devByMaxOccupancy<CuMatrix<double> const>(map<int,long>&, C
 template int b_util::devByMaxOccupancy<CuMatrix<ulong>>(map<int,long>&, CuMatrix<ulong>&);
 template int b_util::devByMaxOccupancy<CuMatrix<ulong> const>(map<int,long>&, CuMatrix<ulong> const&);
 
-void b_util::dumpGpuStats() {
+void b_util::dumpAllGpuStats() {
 	for(const auto& crit : GpuCriteria())  {
 		flprintf("%s device is %d\n", GpuCriteriaNames[crit], getDeviceThatIs(crit));
 	}
 }
+
+void b_util::dumpGpuStats(int gpu) {
+	return;
+#ifdef CuMatrix_NVML
+		uint gpuTemp;
+		nvmlDevice_t device;
+		nvmlGpuOperationMode_t mode;
+		//nvmlDeviceGetGpuOperationMode(nvmlDevice_t device, nvmlGpuOperationMode_t *current, nvmlGpuOperationMode_t *pending)
+		nvmlGpuOperationMode_t current, pending;
+
+		chnerr(nvmlDeviceGetHandleByIndex(gpu,  &device));
+		chnerr(nvmlDeviceGetTemperature(device,NVML_TEMPERATURE_GPU, &gpuTemp  ));
+		outln("gpu " << gpu << " temp " << gpuTemp);
+		const int strLens = 1024;
+		char serial[strLens], partNumber[strLens];
+		nvmlDeviceGetSerial(device, serial, strLens);
+		outln("gpu " << gpu << " serial " << serial);
+	//chnerr(nvmlDeviceGetBoardPartNumber(device,  partNumber, strLens));
+		unsigned int clock, maxClock;
+		chnerr(nvmlDeviceGetClockInfo( device, NVML_CLOCK_GRAPHICS, &clock));
+		chnerr(nvmlDeviceGetMaxClockInfo( device, NVML_CLOCK_GRAPHICS, &maxClock));
+		outln("gpu " << gpu << " NVML_CLOCK_GRAPHICS " << clock << " max " << maxClock);
+		chnerr(nvmlDeviceGetClockInfo( device, NVML_CLOCK_SM, &clock));
+		chnerr(nvmlDeviceGetMaxClockInfo( device, NVML_CLOCK_SM, &maxClock));
+		outln("gpu " << gpu << " NVML_CLOCK_SM " << clock << " max " << maxClock);
+		chnerr(nvmlDeviceGetClockInfo( device, NVML_CLOCK_MEM, &clock));
+		chnerr(nvmlDeviceGetMaxClockInfo( device, NVML_CLOCK_MEM, &maxClock));
+		outln("gpu " << gpu << " NVML_CLOCK_MEM " << clock << " max " << maxClock);
+		chnerr(nvmlDeviceGetClockInfo( device, NVML_CLOCK_VIDEO, &clock));
+		chnerr(nvmlDeviceGetMaxClockInfo( device, NVML_CLOCK_VIDEO, &maxClock));
+		outln("gpu " << gpu << " NVML_CLOCK_VIDEO " << clock << " max " << maxClock);
+
+		unsigned int speed;
+		chnerr(nvmlDeviceGetFanSpeed(device, &speed));
+		outln("gpu " << gpu << " fan speed " << speed << "% of max");
+
+		unsigned int power;
+		chnerr(nvmlDeviceGetPowerUsage(device, &power));
+		outln("gpu " << gpu << " power " << power/1000 << "W");
+
+		chnerr(nvmlDeviceGetGpuOperationMode(device, &current, &pending));
+
+		if(current == NVML_GOM_ALL_ON)
+			outln("gpu " << gpu << " current gpu mode  NVML_GOM_ALL_ON" );
+		else if(current == NVML_GOM_COMPUTE)
+			outln("gpu " << gpu << " current gpu mode  NVML_GOM_COMPUTE" );
+		else if(current == NVML_GOM_LOW_DP)
+			outln("gpu " << gpu << " current gpu mode  NVML_GOM_LOW_DP" );
+		else
+			outln("gpu " << gpu << " current gpu mode  ?????" );
+		if(pending == NVML_GOM_ALL_ON)
+			outln("gpu " << gpu << " pending gpu mode  NVML_GOM_ALL_ON" );
+		else if(pending == NVML_GOM_COMPUTE)
+			outln("gpu " << gpu << " pending gpu mode  NVML_GOM_COMPUTE" );
+		else if(pending == NVML_GOM_LOW_DP)
+			outln("gpu " << gpu << " pending gpu mode  NVML_GOM_LOW_DP" );
+		else
+			outln("gpu " << gpu << " pending gpu mode  ?????" );
+
+		nvmlMemory_t memory;
+		chnerr(nvmlDeviceGetMemoryInfo(device, &memory));
+		outln("gpu " << gpu << " total mem " << memory.total << ", free " << memory.free << ", used " << memory.used );
+#endif
+}
+
 void b_util::abortDumper(int level) {
 	dumpStack("SIGABORT");
 	exit(-1);
@@ -615,6 +685,15 @@ time_t b_util::timeReps(void (*fn)(), int reps) {
 	return time(0) - nowt;
 }
 
+int b_util::pad(int start, int width) {
+	if( width <= 0 )  {
+		setLastError(illegalArgumentEx);
+		return -1;
+	}
+	return (start <= width) ? width : start + width - (start % width);
+}
+
+
 void b_util::randSequence(vector<int>& ret, int count, int start) {
 	uint* arry = new uint[count];
 	for (int i = 0; i < count; i++) {
@@ -679,6 +758,14 @@ string b_util::expNotation(long val) {
 	return ss.str();
 }
 
+string b_util::expNotationMem(long val) {
+	char buff[256];
+	b_util::expNotationMem(buff, val);
+	stringstream ss;
+	ss << buff;
+	return ss.str();
+}
+
 #define MAX_STACK_DEPTH 100
 #define MAX_FUNC_NAME 512
 #define ADDRESS_STRING_LEN 20
@@ -698,21 +785,25 @@ string b_util::unmangl(const char* mangl) {
 	return ss.str();
 }
 
-string b_util::stackString(string msg, int start, int depth) {
+std::string b_util::stackString(string msg, int start, int depth) {
 //do_backtrace();
+
 	void* addrlist[MAX_STACK_DEPTH];
 	char address[ADDRESS_STRING_LEN + 1];
 	char* addressStrStart = null, *addressStrEnd = null;
-	ulong unmangleBufferLength = MAX_FUNC_NAME;
-	char unmangleBuffer[MAX_FUNC_NAME];
-	char* currentUnmangled = unmangleBuffer;
+	ulong unmangleBufferLength = 0;
+	char* currentUnmangled = nullptr;
 	depth = depth < 0 || depth > MAX_STACK_DEPTH ? MAX_STACK_DEPTH : depth;
 	stringstream ss;
 
 	int stElementCount = backtrace(addrlist, sizeof(addrlist) / sizeof(void*));
-	//printf("stackString enter\n");
-	if (stElementCount == 0) {
-		ss << "??? no stack trace available";
+	if(checkDebug(debugMemblo))
+		flprintf("stackString stElementCount %d  g_BuildType %d debug %d enter\n", stElementCount,g_BuildType, debug);
+	if (stElementCount == 0 ||  g_BuildType != debug) {
+		if( g_BuildType != debug)
+			ss << "??? no stack trace available";
+		else
+			ss << "??? not a debug build";
 		return ss.str();
 	}
 
@@ -759,10 +850,9 @@ string b_util::stackString(string msg, int start, int depth) {
 			mangldFnName++;
 			addressOffset++;
 			int status;
-			char* raw = abi::__cxa_demangle(mangldFnName, unmangleBuffer,
+			currentUnmangled = abi::__cxa_demangle(mangldFnName, currentUnmangled,
 					&unmangleBufferLength, &status);
 			if (status == 0) {
-				currentUnmangled = raw;
 				ss << (i == firstElement ? msg.c_str() : "  at ")
 						<< currentUnmangled << "   " << addressOffset;
 				if (depth > 1) {
@@ -777,9 +867,8 @@ string b_util::stackString(string msg, int start, int depth) {
 					<< endl;
 		}
 	}
-
 	free(stElements);
-	if (unmangleBuffer != currentUnmangled)
+	if (nullptr != currentUnmangled)
 		free(currentUnmangled);
 	return ss.str();
 }
@@ -834,7 +923,6 @@ string print_stacktrace(unsigned int max_frames) {
 			*begin_offset++ = '\0';
 			*end_offset = '\0';
 
-
 			// mangled name is now in [begin_name, begin_offset) and caller
 			// offset in [begin_offset, end_offset). now apply
 			// __cxa_demangle():
@@ -871,10 +959,9 @@ string print_stacktrace(unsigned int max_frames) {
 	return ss.str();
 }
 
-
-string b_util::stackString(int start, int depth) {
+std::string b_util::stackString(int start, int depth) {
 	stringstream ss;
-	ss << "";
+	ss << " ";
 	return stackString(ss.str(), start, depth);
 }
 
@@ -915,7 +1002,6 @@ void b_util::waitEnter() {
 
 //template <> double ConjugateGradient<double>::MinPositiveValue = 4.9E-324;
 //template <> float ConjugateGradient<float>::MinPositiveValue = 1.4E-45;
-
 
 void b_util::vectorExecContext(int threads, uint count, uint spacePerThread,
 		dim3& dBlocks, dim3& dThreads, uint& smem) {
@@ -960,7 +1046,6 @@ void b_util::dumpError(cudaError_t err) {
 	}
 }
 
-
 void b_util::_printCudaError(const char* file, int line, cudaError_t val) {
 	if (val != cudaSuccess) {
 		stringstream ss;
@@ -969,7 +1054,6 @@ void b_util::_printCudaError(const char* file, int line, cudaError_t val) {
 		b_util::dumpStackIgnoreHere(ss.str());
 	}
 }
-
 
 template int util<CuMatrix<float> >::deletePtrMap<string>(
 		map<string, CuMatrix<float>*>& m);
@@ -1016,8 +1100,6 @@ template<typename T> template<typename K> void util<T>::deleteDevPtrArray(
 	}
 	cudaFree(m);
 }
-
-
 
 template int util<float>::deleteVector(vector<float*>&);
 template int util<double>::deleteVector(vector<double*>&);
@@ -1092,7 +1174,7 @@ CuTimer::~CuTimer() {
 }
 
 void CuTimer::start() {
-	if(checkDebug(debugExec))outln("starting CuTimer " << this << " (stream " << stream << ")");
+	if(checkDebug(debugTimer))outln("starting CuTimer " << this << " (stream " << stream << ") dev " << device);
 	if (status != ready) {
 		dthrow(timerAlreadyStarted());
 	}
@@ -1108,18 +1190,19 @@ void CuTimer::start() {
 }
 
 float CuTimer::stop() {
-	if(checkDebug(debugExec))outln("stopping CuTimer " << this << " stream " << stream << "; currDev " << ExecCaps::currDev());
-	if(checkDebug(debugExec))outln("stopping CuTimer evt_stop " << evt_stop);
+	if(checkDebug(debugTimer))outln("stopping CuTimer " << this << " stream " << stream << "; dev " << device <<", currDev " << ExecCaps::currDev());
+	if(checkDebug(debugTimer))outln("stopping CuTimer evt_stop " << evt_stop);
 	if (status != started) {
 		dthrow(timerNotStarted());
 	}
+	checkCudaError(cudaGetLastError());
 	int currDev = ExecCaps::currDev();
 	if(device != currDev) {
 		ExecCaps_visitDevice(device);
 	}
 	status = ready;
 	checkCudaError(cudaEventRecord(evt_stop, stream));
-	//checkCudaError(cudaGetLastError());
+	checkCudaError(cudaGetLastError());
 	checkCudaError(cudaEventSynchronize(evt_stop));
 	float exeTimeMs;
 	checkCudaError(cudaEventElapsedTime(&exeTimeMs, evt_start, evt_stop));
@@ -1129,13 +1212,14 @@ float CuTimer::stop() {
 	return exeTimeMs;
 }
 
-
 CuMethodTimer::CuMethodTimer(void (*funcPtr)(), cudaStream_t stream) : CuTimer(stream), funcPtr(funcPtr), count(0), total(0) {
 	if(checkDebug(debugExec))outln("created CuMethodTimer " << this << " (stream " << stream << ", evt_start " << evt_start << ", evt_stop " << evt_stop << ")");
 }
+
 CuMethodTimer::CuMethodTimer(const char* name, cudaStream_t stream) : CuTimer(stream), funcName(name), count(0), total(0) {
 	if(checkDebug(debugExec))outln("created CuMethodTimer " << this << " (stream " << stream << ", evt_start " << evt_start << ", evt_stop " << evt_stop << ")");
 }
+
 CuMethodTimer::~CuMethodTimer() {
 //	summary();
 /*
@@ -1175,6 +1259,7 @@ template struct util<long> ;
 template struct util<ulong> ;
 template struct util<int> ;
 template struct util<uint> ;
+/*
 auto is_odd = [](int n) {return n%2==1;};
 
 
@@ -1192,7 +1277,6 @@ void testLambada() {
 	   // first even number in the list.
 	   const list<int>::const_iterator result =
 	      find_if(numbers.begin(), numbers.end(), is_odd);
-	         //[](int n) { return (n % 2) == 0; });
 
 	   // Print the result.
 	   if (result != numbers.end())
@@ -1209,36 +1293,4 @@ void testLambada() {
 	   }
 
 }
-
-/*
-
-class A {
-public : virtual void foo(int) final { std::cout << "A.foo" << std::endl;}
-};
-
-
-class B : public A{
-public : virtual void foo(int) override { std::cout << "A.foo" << std::endl;}
-};
 */
-typedef float (*MyFuncPtrType)(int, const char *);
-
-float phoo(int x, const char* y) {
-	printf("phoo x %d, y %s\n",x,y);
-	return 1.0f/x;
-}
-float bphoo(int x, const char* y) {
-	printf("bphoo x %d, y %s\n",x,y);
-	return 20.f * x;
-}
-
-template <typename T, MyFuncPtrType func, int StateDim> void doSumpin() {
-	(*func)(StateDim, b_util::unmangl(typeid(func).name()).c_str() );
-}
-
-int somethd() {
-	doSumpin<int, bphoo, 2>();
-	doSumpin<double, phoo, 55>();
-	return 0;
-}
-

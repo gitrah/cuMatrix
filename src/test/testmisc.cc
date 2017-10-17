@@ -32,7 +32,7 @@ template <typename T>  int testRandAsFnOfSize<T>::operator()(int argc, const cha
 	int devCount;
 	int orgDev, currDev;
 	cherr( cudaGetDevice(&orgDev));
-	int currIdx =0;
+	int currIdx =-1;
 	checkCudaErrors(cudaGetDeviceCount(&devCount));
 	gpuSwitcher.setGpuMask( Tiler<T>::gpuMaskFromCount( devCount ));
 	for(int i = 0; i < 12; i++) {
@@ -85,8 +85,8 @@ template int testRandomizingCopyRows<float>::operator()(int argc, const char **a
 template int testRandomizingCopyRows<double>::operator()(int argc, const char **argv) const;
 template <typename T>  int testRandomizingCopyRows<T>::operator()(int argc, const char **argv) const {
 
-	CuMatrix<T> src = CuMatrix<T>::increasingRows(0, 100,100);
-	CuMatrix<T> y = CuMatrix<T>::increasingRows(0, 100,1);
+	CuMatrix<T> src = CuMatrix<T>::increasingRows( 100,100,0);
+	CuMatrix<T> y = CuMatrix<T>::increasingRows( 100,1,0);
 	outln("src " << src.syncBuffers());
 
 	vector<int>indices, lindices;

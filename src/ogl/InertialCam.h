@@ -5,8 +5,7 @@
  *      Author: reid
  */
 
-#ifndef INERTIALCAM_H_
-#define INERTIALCAM_H_
+#pragma once
 
 #include "LookAt.h"
 #include "Steppable.h"
@@ -41,5 +40,3 @@ public:
 	int getY() const;
 	void setY(int y);
 };
-
-#endif /* INERTIALCAM_H_ */

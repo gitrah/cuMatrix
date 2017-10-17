@@ -5,8 +5,7 @@
  *      Author: reid
  */
 
-#ifndef POINT_H_
-#define POINT_H_
+#pragma once
 #include "../util.h"
 #include "AccelEvents.h"
 #include "Drawable.h"
@@ -109,6 +108,3 @@ public:
 	}
 
 };
-
-
-#endif /* POINT_H_ */

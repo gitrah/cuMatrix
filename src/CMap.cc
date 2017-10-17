@@ -38,6 +38,8 @@ template class CMap<uint*, int> ;
 template class CMap<uint*, long> ;
 template class CMap<uint*, string> ;
 template class CMap<string, int> ;
+template class CMap<string, long> ;
+template class CMap<string, double> ;
 template class CMap<CuMatrix<float>*, float*> ;
 template class CMap<CuMatrix<double>*, double*> ;
 template class CMap<CuMatrix<int>*, int*> ;

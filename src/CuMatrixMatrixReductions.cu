@@ -30,7 +30,7 @@ T CuMatrix<T>::combineReduceL(const DMatrix<T>& d_M1, const DMatrix<T>& d_M2, Bi
 	CuMatrix<T> res(blocks, 1,true,true);
 	DMatrix<T> d_Res;
 	res.tile0(d_Res, false);
-	T total = combineReduceOpLauncher(d_Res.elements, d_M1.elements, d_M2.elements, nP, cop, rop, start, stream);
+	T total = combineReduceOpLauncher(d_Res.elements, d_M1.elements, d_M2.elements, d_M1.p, d_M2.p, d_M1.m, d_M1.n, cop, rop, start, stream);
 	return total;
 }
 
@@ -44,8 +44,9 @@ T CuMatrix<	T>::combineReduceL(CuMatrix<T>& buffer, const DMatrix<T>& d_M1, cons
 		BinaryOpF<T,CopDim> cop, BinaryOpF<T,RopDim> rop, T start, cudaStream_t stream ) const
 #endif
 {
-	long nP = d_M1.m * d_M1.n;
-	T total = combineReduceOpLauncher(buffer.tiler.currBuffer(), d_M1.elements, d_M2.elements, nP, cop, rop, start, stream);
+	DMatrix<T> d_buffer;
+	buffer.tile0(d_buffer,false);
+	T total = combineReduceOpLauncher(d_buffer.elements, d_M1.elements, d_M2.elements, d_M1.p, d_M2.p, d_M1.m, d_M1.n, cop, rop, start, stream);
 	return total;
 }
 
@@ -64,20 +65,35 @@ T CuMatrix<T>::combineReduce(BinaryOpF<T,CopDim> cop, BinaryOpF<T,RopDim> rop, c
 	return res;
 }
 
-template<typename T> void cublasSgemm(DMatrix<T> d_C, const DMatrix<T> d_A, const DMatrix<T> d_B) {
+template<typename T> void cublasGemm(DMatrix<T> d_C, const DMatrix<T> d_A, const DMatrix<T> d_B) {
+/*
 	outln("d_C " << util<T>::pdm(d_C));
 	outln("d_A " << util<T>::pdm(d_A));
 	outln("d_B " << util<T>::pdm(d_B));
+*/
+
 #ifdef CuMatrix_UseCublas
 	cublasStatus_t ret;
 	if(sizeof(T) < 8) {
         const float alpha = 1.0f;
         const float beta  = 0.0f;
-        chblerr( cublasSgemm(g_handle, CUBLAS_OP_N, CUBLAS_OP_N, d_B.n, d_A.m, d_A.n, &alpha, (const float*)d_B.elements, d_B.p, (const float*)d_A.elements, d_A.p, &beta, (float*)d_C.elements, d_C.p));
+		chblerr(
+				cublasSgemm(g_handle, CUBLAS_OP_N, CUBLAS_OP_N,
+						d_B.n, d_A.m, d_A.n,
+						&alpha,
+						(const float*) d_B.elements, d_B.p,
+						(const float*) d_A.elements, d_A.p,
+						&beta, (float*) d_C.elements, d_C.p));
 	} else {
         const double alpha = 1.0;
         const double beta  = 0.0;
-        chblerr( cublasDgemm(g_handle, CUBLAS_OP_N, CUBLAS_OP_N, d_B.n, d_A.m, d_A.n, &alpha, (const double*)d_B.elements, d_B.p, (const double*)d_A.elements, d_A.p, &beta, (double*)d_C.elements, d_C.p));
+		chblerr(
+				cublasDgemm(g_handle, CUBLAS_OP_N, CUBLAS_OP_N,
+						d_B.n, d_A.m, d_A.n,
+						&alpha,
+						(const double*) d_B.elements, d_B.p,
+						(const double*) d_A.elements, d_A.p,
+						&beta, (double*) d_C.elements, d_C.p));
 	}
 #endif
 }
@@ -107,8 +123,11 @@ template<typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::matrixProdu
 	if(ratioY > 1) {
 		return mkMatrixProduct(b, block, stream);
 	}
+
 	if(checkDebug(debugMatProd))flprintf("before tile0 d_A.m %u d_A.n %u\n", d_A.m, d_A.n);
+
 	tile0(d_A, lastMod == mod_host);
+
 	if(checkDebug(debugMatProd))flprintf("after tile0 d_A.m %u d_A.n %u\n", d_A.m, d_A.n);
 
 	if(checkDebug(debugMatProd)) prlocf("tile0(d_A,true) ok\n");
@@ -123,7 +142,7 @@ template<typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::matrixProdu
 		if(checkDebug(debugMatProd)) prlocf("CuMatrix_UseCublas\n");
 		if( g_useCublas) {
 			if(checkDebug(debugMatProd)) prlocf("g_useCublas\n");
-			cublasSgemm(d_C, d_A, d_B);
+			cublasGemm(d_C, d_A, d_B);
 		}else {
 			if(checkDebug(debugMatProd)) prlocf("!g_useCublas\n");
 	#endif
@@ -151,7 +170,7 @@ template<typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::matrixProdu
 template<typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::matrixProduct( const CuMatrix<T>& b, dim3* block, cudaStream_t stream ) const {
 	if(checkDebug(debugMatProd))
 
-	if(n != b.m) {
+	if(n != b.m && !(vectorQ() && b.vectorQ())) {
 #ifndef __CUDA_ARCH__
 		outln("this " << toShortString());
 		outln("b " << b.toShortString());
@@ -170,7 +189,7 @@ template<typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::matrixProdu
 		// better as a reduction
 		if(checkDebug(debugMatProd))
 			prlocf("rowv . colv => reducc\n");
-		assert(rowVectorQ() && b.columnVectorQ());
+		//assert(rowVectorQ() && b.columnVectorQ());
 #ifdef  CuMatrix_Enable_KTS
 		T ret = combineReduce(multBinaryOp<T>(), plusBinaryOp<T>(), b, 0, stream);
 #else
@@ -181,14 +200,11 @@ template<typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::matrixProdu
 		return fromScalar(ret);
 	}
 
-	if(n != b.m) {
-		if(checkDebug(debugMatProd))flprintf("this mXn %u X %u, b %u x %u\n", m, n, b.m,b.n);
-	}
 	assert(n == b.m);
 	if(checkDebug(debugMatProd)) prlocf("mat * mat\n");
 
 	// non-tiled case
-	if(tiler.tileSize == tiler.m_size&& b.tiler.tileSize == b.tiler.m_size ) {
+	if(tiler.tileSize >= tiler.m_size&& b.tiler.tileSize >= b.tiler.m_size ) {
 		return matrixProductResident(b,block,stream);
 	}
 
@@ -199,8 +215,9 @@ template<typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::matrixProdu
 	bool freeBtiler = false;
 	if(tiler == b.tiler ) {
 		//
-		btiler = new Tiler<T>(b,true,tiler.gpuMask);
-		freeBtiler = true;
+		assert(false); // caller's responsibility  to first clone this matrix for self-mult
+		//btiler = new Tiler<T>(b,true,tiler.gpuMask, tdCols);
+		//freeBtiler = true;
 	} else{
 		btiler = &(b.tiler);
 	}
@@ -212,11 +229,13 @@ template<typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::matrixProdu
 
 	// in case *this and b are the same matrix, can't simply re-use tilers because
 	// they will be tiling in different directions and dev buffer contents will be different
-	uint tileM, tileN;
+	int tileM, tileN, tileP;
 
-	tiler.tileDims(tileM, tileN, tdRows);
+	tiler.tileDims(tileM, tileN, tileP, tdRows);
 	tileCount = MAX(tileCount,DIV_UP(m,tileM));
-	assert(tileM * tileN * sizeof(T) <= btiler->tileSize);
+
+	if(tileCount > 1 )
+		assert(tileM * tileN * sizeof(T) <= btiler->tileSize);
 
 	if (checkDebug(debugTiler)) {
 		flprintf("this %p, &o %p, &res %p\n",this, &b, &res);
@@ -227,15 +246,15 @@ template<typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::matrixProdu
 		outln("tiler " << tiler);
 		outln("res.tiler " << res.tiler);
 #endif
-		flprintf("tileM %u tileN %u tileCount %d\n",tileM, tileN, tileCount);
+		flprintf("tileM %u tileN %u tileP %u tileCount %d\n",tileM, tileN, tileP, tileCount);
 		printShortString("this");
 		res.printShortString("ret");
 
 	}
-	uint aroff = 0,acoff = 0;
-	uint broff = 0,bcoff = 0;
-	uint croff = 0,ccoff = 0;
-	int lastGpu = 0;
+	int aroff = 0,acoff = 0;
+	int broff = 0,bcoff = 0;
+	int croff = 0,ccoff = 0;
+	int lastGpu = -1;
 	int gpuCount = tiler.countGpus();
 	int orgDevice = ExecCaps::currDev();
 	cudaStream_t* streams = nullptr;
@@ -249,11 +268,12 @@ template<typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::matrixProdu
 		}
 	}
 
-	lastGpu = tiler.nextGpu(0);
+	lastGpu = -1;
 	for(int i =0; i < tileCount; i++ ) {
-		if(checkDebug(debugMatProd)) flprintf("i %d  tileM %u, tileN %u,\n ",i, tileM, tileN);
+		lastGpu = tiler.nextGpu(lastGpu);
+		if(checkDebug(debugMatProd)) flprintf("i %d  tileM %u, tileN %u, tileP %u\n ",i, tileM, tileN, tileP);
 		ExecCaps_setDevice(lastGpu); // do it here so this (i)tile, (j) b-tile and (i,j) res-tile all on same dev
-		tiler.tileLike(d_A, aroff,acoff, tileM, tileN, i, tdRows, true, lastGpu, gpuCount > 1 ? streams[i] : stream);
+		tiler.tileLike(d_A, aroff,acoff, tileM, tileN, tileP, i, tdRows, true, lastGpu,  streams);
 		if(checkDebug(debugMatProd)) flprintf("d_A after tileLike d_A.m %u d_A.n %u aroff %u acoff %u\n", d_A.m, d_A.n, aroff, acoff);
 		if( checkDebug(debugMatProd)) {
 			flprintf("d_A with d_A.p %u\n\n",d_A.p);
@@ -263,7 +283,7 @@ template<typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::matrixProdu
 		}
 		for(int j = 0; j < tileCount; j++) {
 			if(checkDebug(debugMatProd)) flprintf("\n------->i,j (%d,%d)\n",i,j);
-			btiler->tileLike(d_B, broff,bcoff, tileN,tileM,j, tdCols, true,lastGpu, gpuCount > 1 ? streams[i] : stream);
+			btiler->tileLike(d_B, broff,bcoff, tileN,tileM, tileP,j, tdCols, true,lastGpu, streams);
 			if(checkDebug(debugMatProd)) flprintf("d_B after tileLike d_B.m %u d_B.n %u broff %u bcoff %u\n", d_B.m, d_B.n, broff,bcoff);
 			if(i == j) {
 				flprintf("d_B with d_B.p %u\n\n",d_B.p);
@@ -272,14 +292,14 @@ template<typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::matrixProdu
 				printArrayDiag(d_B.elements, res.tiler.m_p, 10);
 				//printDevArrayDiagSpan(d_B.elements, res.tiler.m_p, d_C.m - 1, 10);
 			}
-			res.tiler.tile2D(d_C,  croff,ccoff, tileM, tileM, tileCount, tileCount, i, j, false,lastGpu, gpuCount > 1 ? streams[i] : stream);
+			res.tiler.tile2D(d_C,  croff,ccoff, tileM, tileM, tileP, tileCount, tileCount, i, j, false,lastGpu, gpuCount > 1 ? streams[i] : stream);
 			if(checkDebug(debugMatProd)) flprintf("d_C after tileLike d_C.m %u d_C.n %u d_C.p %u croff %u ccoff %u\n", d_C.m, d_C.n, d_C.p, croff,ccoff);
 			// res has nTiles^2 tileM x tileM tiles
 			#ifndef __CUDA_ARCH__
 #ifdef CuMatrix_UseCublas
 				if( g_useCublas) {
 					if(checkDebug(debugMatProd)) prlocf("g_useCublas\n");
-					cublasSgemm(d_C, d_A, d_B);
+					cublasGemm(d_C, d_A, d_B);
 				}else {
 #endif
 					if(g_matrix_product_kernel) {
@@ -350,7 +370,7 @@ template<typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::mkMatrixPro
 	CuMatrix<T> res(m, b.n,true, true);
 	flprintf("entre, blockY %u\n",blockY);
 
-	uint newM = (caps->maxGrid.y - 1) * blockY;
+	int newM = (caps->maxGrid.y - 1) * blockY;
 	if(checkDebug(debugMatProd)) flprintf("oldM %u, newM %u\n",res.m, newM);
 
 	DMatrix<T> d_B;
@@ -362,7 +382,7 @@ template<typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::mkMatrixPro
 	//CuMatrix<T> bColSlice;
 	CuMatrix<T> resSubmatrix;
 	// todo omp version
-	uint rowOffset;
+	int rowOffset;
 	for(int i = 0; i  < sections; i++) {
 		rowOffset = i * newM;
 		flprintf("for slice %d, offset row %u, aRowSlice:  ", i, rowOffset);
@@ -382,7 +402,7 @@ template<typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::mkMatrixPro
 #ifdef CuMatrix_UseCublas
 	if( g_useCublas) {
 		if(checkDebug(debugMatProd)) prlocf("g_useCublas\n");
-		cublasSgemm(d_Res, d_A, d_B);
+		cublasGemm(d_Res, d_A, d_B);
 	}else {
 #endif
 		if(g_matrix_product_kernel) {

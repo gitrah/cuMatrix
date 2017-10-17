@@ -13,6 +13,9 @@
 
 #define MABS(exp) ((exp) < 0 ? -(exp) : (exp))
 #define MAX_FUNCS 10
+#ifndef cherr
+	#define cherr(exp) if((exp)!= cudaSuccess) {printf( "\n\n%s : %d --> %s\n\n", __FILE__, __LINE__ , __cudaGetErrorEnum(exp));assert(0);}
+#endif
 
 #ifdef __GNUC__
     #define MAYBE_UNUSED __attribute__((used))
@@ -43,10 +46,7 @@
 #define ONE_OVER_2PI 	0.159154943
 #endif
 
-#define Giga (1024*1024*1024)
 #define tOrF(exp) ( (exp)? "true" : "false")
-#define Mega (1024*1024)
-#define Kilo (1024)
 
 #ifndef WARP_SIZE
 #define WARP_SIZE 32
@@ -89,4 +89,8 @@ template<typename T, int StateDim> __global__ void shuffle(T* res, const T* a, u
 
 __host__ __device__ void bprintBinary(char buff_33char[33], uint v);
 
+
+enum TileDirection {
+	tdNeither = 1, tdRows = 2, tdCols = 4, tdBoth = tdRows | tdCols,
+};
 

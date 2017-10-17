@@ -11,6 +11,7 @@
 #include <helper_math.h>
 #include "CuDefs.h"
 #include "debug.h"
+#include "Maths.h"
 #include "FunctorEnums_Gen.h"
 
 // true when all method tables initialized for this GPU
@@ -82,6 +83,12 @@ template <> struct CuFunctor<ulong, 2> {
 	inline __host__ __device__ ulong& operator[](ptrdiff_t ofs);
 	inline __host__ __device__ const ulong& operator[](ptrdiff_t ofs)const ;
 };
+
+template<typename T> struct CuFunctor<T,3> {
+	inline __host__ __device__ T& operator[](ptrdiff_t ofs);
+	inline __host__ __device__ const T& operator[](ptrdiff_t ofs) const;
+};
+
 
 template <> struct CuFunctor<float, 3> {
 	float3 state;
@@ -175,10 +182,12 @@ template<typename T> __host__ __device__ T minValue();
 		typedef T (*uop0sFunction)(const UnaryOpF<T,0>&,T);
 		typedef T (*uop1sFunction)(const UnaryOpF<T,1>&,T);
 		typedef T (*uop2sFunction)(const UnaryOpF<T,2>&,T);
+		typedef T (*uop3sFunction)(const UnaryOpF<T,3>&,T);
 
 		static uop0sFunction h_uop0sFunctions[MAX_GPUS][Uop0sLast];
 		static uop1sFunction h_uop1sFunctions[MAX_GPUS][Uop1sLast];
 		static uop2sFunction h_uop2sFunctions[MAX_GPUS][Uop2sLast];
+		static uop3sFunction h_uop3sFunctions[MAX_GPUS][Uop3sLast];
 
 
 		typedef T (*bop0sFunction)(const BinaryOpF<T,0>&, T,T);
@@ -200,10 +209,12 @@ template<typename T> __host__ __device__ T minValue();
 		typedef T (UnaryOpF<T,0>::*uop0sMethod)(T)const;
 		typedef T (UnaryOpF<T,1>::*uop1sMethod)(T)const;
 		typedef T (UnaryOpF<T,2>::*uop2sMethod)(T)const;
+		typedef T (UnaryOpF<T,3>::*uop3sMethod)(T)const;
 
 		static uop0sMethod h_uop0sMethods[MAX_GPUS][Uop0sLast];
 		static uop1sMethod h_uop1sMethods[MAX_GPUS][Uop1sLast];
 		static uop2sMethod h_uop2sMethods[MAX_GPUS][Uop2sLast];
+		static uop3sMethod h_uop3sMethods[MAX_GPUS][Uop3sLast];
 
 		typedef T (BinaryOpF<T,0>::*bop0sMethod)(T,T)const;
 		typedef T (BinaryOpF<T,1>::*bop1sMethod)(T,T)const;

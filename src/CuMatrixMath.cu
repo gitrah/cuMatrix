@@ -18,7 +18,7 @@ template<typename T> __host__ CUDART_DEVICE void CuMatrix<T>::subMeans( CuMatrix
 		 const CuMatrix<T>& means) const {
 	printf("means %p with elements %p and dims %d X %d\n",&means, means.elements, means.m , means.n);
 	DMatrix<T> d_Means, d_X, d_Res;
-	assert(tiler.tileSize == tiler.m_size);
+	//assert(tiler.tileSize >= tiler.m_size);
 	tile0(d_X,true);
 	means.tile0(d_Means,true);
 	if(vectorQ()) {
@@ -34,7 +34,7 @@ template<typename T> __host__ CUDART_DEVICE void CuMatrix<T>::subMeans( CuMatrix
 
 template<typename T> cudaError_t CuMatrix<T>::sqrSubMeans( CuMatrix<T>& res, const CuMatrix<T>& mus) const {
 	DMatrix<T> d_Means, d_X, d_Res;
-	assert(tiler.tileSize == tiler.m_size);
+	//assert(tiler.tileSize >= tiler.m_size);
 	tile0(d_X,true);
 	mus.tile0(d_Means,true);
 	res.tile0(d_Res, false);
@@ -49,7 +49,7 @@ template<typename T> CuMatrix<T> CuMatrix<T>::sqrSubMeans( const CuMatrix<T>& mu
 }
 
 template<typename T> CuMatrix<T> CuMatrix<T>::normalize() const {
-	assert(tiler.tileSize == tiler.m_size);
+	assert(tiler.tileSize >= tiler.m_size);
 	CuMatrix<T> mus = featureMeans(true);
 	CuMatrix<T> subm = subMeans(mus);
 	uint l = m * n;
@@ -73,7 +73,7 @@ template<typename T> __host__ CUDART_DEVICE void  CuMatrix<T>::rowSum(CuMatrix<T
 	if(rowSumM.m != m || rowSumM.n != 1) {
 		setLastError(matricesOfIncompatibleShapeEx);
 	}
-	assert(tiler.tileSize == tiler.m_size);
+	//assert(tiler.tileSize >= tiler.m_size);
 	DMatrix<T> d_rowSum, d_x;
 	tile0(d_x,lastMod == mod_host);
 	rowSumM.tile0(d_rowSum, false);
@@ -86,10 +86,6 @@ template<typename T> __host__ CUDART_DEVICE void  CuMatrix<T>::rowSum(CuMatrix<T
 
 template<typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::rowSum() const {
 	CuMatrix<T> rowSumM(m, 1, false,true);
-#ifndef __CUDA_ARCH__
-	outln("rowSumM " << rowSumM.toShortString());
-#endif
-
 	rowSum(rowSumM);
 	return rowSumM;
 }
@@ -134,7 +130,7 @@ matrixMinorKernel(DMatrix<T> trg, const DMatrix<T> src, int row , int col) {
 
 template<typename T> void CuMatrix<T>::matrixMinorM(CuMatrix<T>& trg, int row, int col) const {
 	validIndicesQ(row, col);
-	assert(tiler.tileSize == tiler.m_size);
+	assert(tiler.tileSize >= tiler.m_size);
 
 	DMatrix<T> d_r, d_this = asDmatrix();
 	trg.tile0(d_r,false);
@@ -190,11 +186,15 @@ template<typename T> T CuMatrix<T>::determinant() const {
 	//outln(toShortString());
 
 	dassert((n == m));
-	dassert((tiler.tileSize == tiler.m_size));
+	dassert((tiler.tileSize >= tiler.m_size));
+	CuTimer timer;
+	timer.start();
 	switch (n) {
 	case 1:
 		T ret;
+
 		checkCudaError(cudaMemcpy(&ret, tiler.currBuffer(), sizeof(T),cudaMemcpyDeviceToHost));
+		//CuMatrix<T>::incDhCopy("CuMatrix<T>::determinant()",sizeof(T),timer.stop());
 		if(checkDebug(debugCopyDh))outln("debugCopyDh " << "CuMatrix<T>::determinant1");
 		DHCopied++;
 		MemDhCopied +=sizeof(T);
@@ -202,14 +202,20 @@ template<typename T> T CuMatrix<T>::determinant() const {
 	case 2:
 		if(sizeof(T) == 8) {
 			double4 ret;
+			CuTimer timer;
+			timer.start();
 			checkCudaError(cudaMemcpy(&ret, tiler.currBuffer(), 4*sizeof(T),cudaMemcpyDeviceToHost));
+			//CuMatrix<T>::incDhCopy("CuMatrix<T>::determinant()", 4*sizeof(T),timer.stop());
 			if(checkDebug(debugCopyDh))outln("debugCopyDh " << "CuMatrix<T>::determinant2");
 			DHCopied++;
 			MemDhCopied +=4*sizeof(T);
 			return ret.x * ret.w - ret.y*ret.z;
 		} else if(sizeof(T) == 4) {
 			float4 ret;
+			CuTimer timer;
+			timer.start();
 			checkCudaError(cudaMemcpy(&ret, tiler.currBuffer(), 4*sizeof(T),cudaMemcpyDeviceToHost));
+			//CuMatrix<T>::incDhCopy("CuMatrix<T>::determinant()", 4*sizeof(T),timer.stop());
 			if(checkDebug(debugCopyDh))outln("debugCopyDh " << "CuMatrix<T>::determinant3");
 			DHCopied++;
 			MemDhCopied +=4*sizeof(T);
@@ -264,11 +270,14 @@ template<typename T> CuMatrix<T> CuMatrix<T>::subFrom(T o) const {
 template<typename T> void CuMatrix<T>::fitGaussians(CuMatrix<T>& sqrdSigmas, CuMatrix<T>& mus) const {
 	outln("fitGaussians sqrdSigmas ss " << sqrdSigmas.toShortString());
 	outln("fitGaussians mus ss " << mus.toShortString());
-	assert(tiler.tileSize == tiler.m_size);
+	assert(tiler.tileSize >= tiler.m_size);
 	DMatrix<T> d_Sigmas, d_X, d_Mus;
 	sqrdSigmas.poseAsRow();
+	outln("aft pose sqrdSigmas ss " << sqrdSigmas.toShortString());
+	cherr(cudaPeekAtLastError());
 	sqrdSigmas.tile0(d_Sigmas, false);
 	cherr(cudaPeekAtLastError());
+	outln("aft tile0 sqrdSigmas ss " << sqrdSigmas.toShortString());
 	outln("bef sqrdSigmas.unPose()");
 	sqrdSigmas.unPose();
 	outln("aft sqrdSigmas.unPose()");
@@ -287,7 +296,7 @@ template<typename T> void CuMatrix<T>::fitGaussians(CuMatrix<T>& sqrdSigmas, CuM
 }
 
 template<typename T> void CuMatrix<T>::variance(CuMatrix<T>& sqrdSigmas, const CuMatrix<T>& mus) const {
-	assert(tiler.tileSize == tiler.m_size);
+	assert(tiler.tileSize >= tiler.m_size);
 	DMatrix<T> d_Sigmas, d_X, d_Mus;
 	sqrdSigmas.poseAsRow();
 	sqrdSigmas.tile0(d_Sigmas, false);
@@ -324,7 +333,7 @@ template<typename T> CuMatrix<T> CuMatrix<T>::toCovariance() const {
 }
 
 template<typename T> void CuMatrix<T>::multivariateGaussianFeatures( CuMatrix<T>& pden, const CuMatrix<T>& sqrdSigmas, const CuMatrix<T>& mu) {
-	assert(tiler.tileSize == tiler.m_size);
+	assert(tiler.tileSize >= tiler.m_size);
 	DMatrix<T> d_sqrdSigmas, d_x, d_mu,d_pden;
 	sqrdSigmas.tile0(d_sqrdSigmas,sqrdSigmas.lastMod == mod_host);
 	tile0(d_x, lastMod == mod_host);
@@ -335,7 +344,7 @@ template<typename T> void CuMatrix<T>::multivariateGaussianFeatures( CuMatrix<T>
 }
 
 template<typename T> void CuMatrix<T>::mvGaussianVectorFromFeatures( CuMatrix<T>& pvec){
-	assert(tiler.tileSize == tiler.m_size);
+	assert(tiler.tileSize >= tiler.m_size);
 	DMatrix<T> d_pvec,d_pdens;
 	tile0(d_pdens,lastMod == mod_host);
 	pvec.tile0(d_pvec,false);
@@ -344,7 +353,7 @@ template<typename T> void CuMatrix<T>::mvGaussianVectorFromFeatures( CuMatrix<T>
 }
 
 template<typename T> void CuMatrix<T>::multivariateGaussianVector( CuMatrix<T>& pvec, const CuMatrix<T>& sqrdSigmas, const CuMatrix<T>& mu) {
-	assert(tiler.tileSize == tiler.m_size);
+	assert(tiler.tileSize >= tiler.m_size);
 	DMatrix<T> d_sqrdSigmas, d_x, d_mu,d_pvec;
 	sqrdSigmas.tile0(d_sqrdSigmas,true);
 	tile0(d_x,true);

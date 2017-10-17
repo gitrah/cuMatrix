@@ -16,9 +16,9 @@ template <typename T> int testSqrMatsMultSmall<T>::operator()(int argc, const ch
 	outln("creating big matrices");
 	checkCudaErrors(cudaDeviceSynchronize());
 	timer.start();
-	CuMatrix<T> ms = CuMatrix<T>::increasingRows(1,128,128) ;
+	CuMatrix<T> ms = CuMatrix<T>::increasingRows(128,128,1) ;
 	DMatrix<T> d_ms = ms.asDmatrix(true);
-	CuMatrix<T> mc = CuMatrix<T>::increasingColumns(1, 128,128);
+	CuMatrix<T> mc = CuMatrix<T>::increasingColumns( 128,128, 1);
 	CuMatrix<T> txmc = mc.transpose();
 	outln("txmc\n"<< txmc.syncHost());
 	DMatrix<T> d_mc = mc.asDmatrix(false);
@@ -89,10 +89,10 @@ template <typename T> int testSqrMatsMult<T>::operator()(int argc, const char **
 	outln("bmult " << bmult.syncBuffers());
 	outln("bmult sum " << bmult.sum());
 	timer.start();
-	CuMatrix<T> ms = CuMatrix<T>::increasingRows(1,1024,1024) ;
+	CuMatrix<T> ms = CuMatrix<T>::increasingRows(1024,1024,(T)1.0) ;
 	outln("ms " << ms.syncBuffers());
 	DMatrix<T> d_ms = ms.asDmatrix(true);
-	CuMatrix<T> mc = CuMatrix<T>::increasingColumns(1, 1024,1024);
+	CuMatrix<T> mc = CuMatrix<T>::increasingColumns(1024,1024,(T)1.0);
 	CuMatrix<T> txmc = mc.transpose();
 	DMatrix<T> d_mc = mc.asDmatrix( true);
 	DMatrix<T> d_txmc = txmc.asDmatrix( true);
@@ -155,7 +155,7 @@ template <typename T> int testProductKernel3<T>::operator()(int argc, const char
     int total = b_util::getCount(argc,argv,1);
 
 	CuMatrix<T> m13by17= CuMatrix<T>::ones(13,17);
-	CuMatrix<T> m17by1 = CuMatrix<T>::fill(2, 17,1);
+	CuMatrix<T> m17by1 = CuMatrix<T>::fill(17,1,(T)2);
 	CuMatrix<T> mm2 = m13by17 * m17by1;
  	outln("m13by17 * m17by1 " << mm2.toShortString());
 
@@ -187,7 +187,7 @@ template <typename T> int testProductKernel3<T>::operator()(int argc, const char
 	timer.start();
 	CuMatrix<T> ms = CuMatrix<T>::ones(1000,1000) ;
 	DMatrix<T> d_ms = ms.asDmatrix(true);
-	CuMatrix<T> mc = CuMatrix<T>::increasingColumns(1, 1000,200);
+	CuMatrix<T> mc = CuMatrix<T>::increasingColumns( 1000,200,1);
 	DMatrix<T> d_mc = mc.asDmatrix(true);
 	CuMatrix<T> msc(1000,200,false,true);
 	DMatrix<T> d_msc;
@@ -262,7 +262,7 @@ template <typename T> int testProductShapes<T>::operator()(int argc, const char 
     int total = b_util::getCount(argc,argv,1);
 
 
-    CuMatrix<T> x = CuMatrix<T>::increasingRows(1,100,1);
+    CuMatrix<T> x = CuMatrix<T>::increasingRows(1,100,(T)1);
 	outln("x:\n" << x.syncBuffers());
     CuMatrix<T> x2 =  2 * x |= 3 * x;
 	outln("x2:\n" << x2.syncBuffers());
@@ -299,7 +299,7 @@ template <typename T> int testProductShapes<T>::operator()(int argc, const char 
 	CuMatrix<T> m13by17= CuMatrix<T>::ones(13,17);
 	outln("m13by17\n" << m13by17.syncBuffers());
 
-	CuMatrix<T> m17by1 = CuMatrix<T>::fill(2, 17,1);
+	CuMatrix<T> m17by1 = CuMatrix<T>::fill(17,1,(T)2);
 	outln("m17by1\n" << m17by1.syncBuffers());
 	CuMatrix<T> mm2 = m13by17 * m17by1;
 	outln("m13by17 * m17by1 " << mm2.toShortString());
@@ -336,7 +336,7 @@ template <typename T> int testProductShapes<T>::operator()(int argc, const char 
 	outln("created ms " <<ms.toShortString());
 	DMatrix<T> d_ms = ms.asDmatrix(true);
 	outln("created d_ms " << util<T>::pdm(d_ms));
-	CuMatrix<T> mc = CuMatrix<T>::increasingColumns(1, 1000,200);
+	CuMatrix<T> mc = CuMatrix<T>::increasingColumns(1000,200,1);
 	outln("created mc " <<mc.syncBuffers());
 	DMatrix<T> d_mc = mc.asDmatrix(true);
 	outln("created d_mc " << util<T>::pdm(d_mc));
@@ -404,7 +404,7 @@ template int testLargeMatProds<ulong>::operator()(int argc, const char **argv) c
 template <typename T> int testLargeMatProds<T>::operator()(int argc, const char **argv) const {
 	dim3 d16( 16,16);
 	ExecCaps* caps = ExecCaps::currCaps();
-	CuMatrix<T> mSnug = CuMatrix<T>::fill((T) 2, caps->maxGrid.y * d16.y, 2);
+	CuMatrix<T> mSnug = CuMatrix<T>::fill(caps->maxGrid.y * d16.y, 2,(T)2);
 	T snugSum = mSnug.sum();
 	assert(snugSum == 2 * ( caps->maxGrid.y * d16.y * 2 ));
 	T ba[] = {1,2,3,4};
@@ -414,7 +414,7 @@ template <typename T> int testLargeMatProds<T>::operator()(int argc, const char 
 	outln("b " << b.toShortString());
 	CuMatrix<T> snugRes = mSnug * b;
 	outln("snugRes " << snugRes.syncBuffers());
-	CuMatrix<T> mOver = CuMatrix<T>::fill((T) 2, factor * caps->maxGrid.y * d16.y, 2);
+	CuMatrix<T> mOver = CuMatrix<T>::fill( factor * caps->maxGrid.y * d16.y, 2,(T)2);
 	outln("mOver " << mOver.toShortString());
 	T overSum = mOver.sum();
 	assert(snugSum * factor == overSum);
@@ -444,7 +444,7 @@ template <typename T> int testHugeMatProds<T>::operator()(int argc, const char *
 
     outln("creating big matrices");
 	CuMatrix<T> ms = CuMatrix<T>::ones(12248,12248) ;
-	memblo;
+	memblo;//
 	outln("ms\n" << ms);
 	outln("ms.tiler\n" << ms.tiler);
 
@@ -454,7 +454,7 @@ template <typename T> int testHugeMatProds<T>::operator()(int argc, const char *
 		outln("prodOnes.sum\n" << prodOnes.sum() << " took " << timer.stop()/1000);
 	}
 
-	CuMatrix<T> mc = CuMatrix<T>::increasingColumns(1, 12248, 12248);
+	CuMatrix<T> mc = CuMatrix<T>::increasingColumns(12248, 12248,1);
 	{
 		CuMatrix<T> prodMc = mc * mc;
 		outln("prodMc.sum\n"<< prodMc.sum());
@@ -554,7 +554,7 @@ template <typename T> int testHugeMatProds3<T>::operator()(int argc, const char 
 	CuMatrix<T> ms = CuMatrix<T>::ones(10000,10000) ;
 	outln("ms\n" << ms);
 	outln("ms.tiler\n" << ms.tiler);
-	CuMatrix<T> mc = CuMatrix<T>::increasingColumns(1, 10000, 10000);
+	CuMatrix<T> mc = CuMatrix<T>::increasingColumns(10000, 10000,1);
 	outln("mc\n"<< mc);
 	outln("mc.tiler\n" << mc.tiler);
 	timer.start();
@@ -584,7 +584,7 @@ template <typename T> int testProductShapesTxB<T>::operator()(int argc, const ch
     int total = b_util::getCount(argc,argv,1);
 
 	CuMatrix<T> m13by17= CuMatrix<T>::ones(13,17);
-	CuMatrix<T> m17by1 = CuMatrix<T>::fill(2, 17,1);
+	CuMatrix<T> m17by1 = CuMatrix<T>::fill( 17,1,(T)2);
 	CuMatrix<T> mm2 = m13by17 * m17by1;
  	outln("m13by17 * m17by1 " << mm2.toShortString());
 
@@ -616,7 +616,7 @@ template <typename T> int testProductShapesTxB<T>::operator()(int argc, const ch
 	timer.start();
 	CuMatrix<T> ms = CuMatrix<T>::ones(1000,1000);
 	DMatrix<T> d_ms = ms.asDmatrix(true);
-	CuMatrix<T> mc = CuMatrix<T>::increasingColumns(1, 1000,200).transpose();
+	CuMatrix<T> mc = CuMatrix<T>::increasingColumns( 1000,200,1).transpose();
 	DMatrix<T> d_mc = mc.asDmatrix(true);
 	CuMatrix<T> msc(1000,200,false,true);
 	DMatrix<T> d_msc;
@@ -722,7 +722,7 @@ template <typename T> int testProductShapesKernelPtr<T>::operator()(int argc, co
 	void (*matProdKptr) (DMatrix<T>,const DMatrix<T>,const DMatrix<T>,int) = &matrixProductKernelTxdB;
 
 	CuMatrix<T> m13by17= CuMatrix<T>::ones(13,17);
-	CuMatrix<T> m17by1 = CuMatrix<T>::fill(2, 17,1);
+	CuMatrix<T> m17by1 = CuMatrix<T>::fill( 17,1,(T)2);
 	CuMatrix<T> mm2 = m13by17 * m17by1;
  	outln("m13by17 * m17by1 " << mm2.toShortString());
 
@@ -754,7 +754,7 @@ template <typename T> int testProductShapesKernelPtr<T>::operator()(int argc, co
 	timer.start();
 	CuMatrix<T> ms = CuMatrix<T>::ones(1000,1000);
 	DMatrix<T> d_ms = ms.asDmatrix(true);
-	CuMatrix<T> mc = CuMatrix<T>::increasingColumns(1, 1000,200).transpose();
+	CuMatrix<T> mc = CuMatrix<T>::increasingColumns(1000,200,1).transpose();
 	CuMatrix<T> mcT = mc.transpose();
 	CuMatrix<T> mcProd = ms * mcT;
 
@@ -827,13 +827,15 @@ template <typename T> int testProductShapesKernelPtr<T>::operator()(int argc, co
 	CuMatrix<T> sqr2 = 2 * sqr1;
 	outln("sqr2 " << sqr2.toShortString());
 	DMatrix<T> dsqr1,dsqr2, txdDsqr2, dRsqr;
-	sqr1.tile0(dsqr1, true);
-	sqr2.tile0(dsqr2, true);
+	sqr1.tile0(dsqr1, sqr1.lastMod == mod_host);
+	outln("dsqr1");
+	sqr2.tile0(dsqr2, sqr2.lastMod == mod_host);
+	outln("dsqr2");
 	CuMatrix<T> txSqr2 = sqr2.transpose();
 
-	txSqr2.tile0(txdDsqr2, true);
+	txSqr2.tile0(txdDsqr2, txSqr2.lastMod == mod_host);
 	CuMatrix<T> rSqr = sqr1 * sqr2;
-	rSqr.tile0(dRsqr, true);
+	rSqr.tile0(dRsqr, rSqr.lastMod == mod_host);
 
 	outln("rSqr " << rSqr.syncBuffers());
 	outln("txSqr2 " << txSqr2.syncBuffers());

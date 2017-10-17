@@ -19,7 +19,7 @@ template <typename T> int testRedux<T>::operator()(int argc, const char **argv) 
 		assert(i == sum);
 	}
 
-	CuMatrix<T> incrRows = CuMatrix<T>::increasingRows(0, 200, 100);
+	CuMatrix<T> incrRows = CuMatrix<T>::increasingRows(200, 100,(T)0);
 	CuMatrix<T> onez = CuMatrix<T>::ones(200, 100);
 	outln("incrRows " << incrRows.syncBuffers());
 	outln("onez " << onez.syncBuffers());
@@ -58,24 +58,32 @@ template <typename T> int testRedux<T>::operator()(int argc, const char **argv) 
 	*/
 	outln("testRedux start " );
 	checkCudaError(cudaGetLastError());
-	CuMatrix<T> incrRows = CuMatrix<T>::increasingRows(0, 200, 100);
+	CuMatrix<T> incrRows = CuMatrix<T>::increasingRows(200, 100,(T)0);
 	CuMatrix<T> onez = CuMatrix<T>::ones(200, 100);
 	outln("incrRows " << incrRows.syncBuffers());
 	outln("onez " << onez.syncBuffers());
 	T incrRowsSum = incrRows.sum();
 	T onezSum = onez.sum();
 	outln("incrRows sum " << incrRowsSum);
+	assert( util<T>::almostEquals(1990000, incrRowsSum));
 	outln("onez sum " << onezSum);
-	CuMatrix<T> longy = CuMatrix<T>::randn(1,33554432/16, 10);
+	cherr(cudaGetLastError());
+	CuMatrix<T> longy = CuMatrix<T>::randn(1,33554432/64, 10);
 	outln("longy " << longy.syncBuffers());
-	CuMatrix<T> col1, col3;
-	incrRows.submatrix(col1,incrRows.m,1,0,0);
-	incrRows.submatrix(col3,incrRows.m,1,0,2);
-	T col1Sum = col1.sum();
-	T col3Sum = col3.sum();
+	CuMatrix<T> col0, col2;
+	incrRows.submatrix(col0,incrRows.m,1,0,0);
+	outln("col0.toss " << col0.toss());
+	outln("col0 " << col0);
+	incrRows.submatrix(col2,incrRows.m,1,0,2);
+	outln("col2.toss " << col2.toss());
+	outln("col2 " << col2);
+	T col0Sum = col0.sum();
+	T col2Sum = col2.sum();
+	outln("col0Sum sum " << col0Sum);
+	outln("col2Sum sum " << col2Sum);
+	assert(col0Sum == 19900);
+	assert(col2Sum == 19900);
 	T longySum  = longy.sum();
-	outln("col1Sum sum " << col1Sum);
-	outln("col3Sum sum " << col3Sum);
 	outln("longy sum " << longySum);
 
 	CuMatrix<T> b = CuMatrix<T>::zeros(60,1);
@@ -117,6 +125,7 @@ template <typename T> int testColumnRedux<T>::operator()(int argc, const char **
 	ulong len =  16 * Mega;
 	CuMatrix<T> ones = CuMatrix<T>::ones(len,1);
 	checkCudaError(cudaGetLastError());
+	ones.syncBuffers();
 	T colOneSum = ones.columnSum(0);
 	checkCudaError(cudaGetLastError());
 	outln("ones.colSum(0) " << colOneSum);
@@ -135,6 +144,7 @@ template <typename T> int testColumnRedux<T>::operator()(int argc, const char **
 	assert(twosum == 2 * onesum);
 	checkCudaError(cudaGetLastError());
 	CuMatrix<T> oneTwos = ones |= twos;
+	oneTwos.syncBuffers();
 	T reduceOneTwoColOneSum = oneTwos.reduceColumn(pbo,0,0);
 	T reduceOneTwoColTwoSum = oneTwos.reduceColumn(pbo,0,1);
 	outln("oneTwos.reduceColumn(plus,0,0) " << reduceOneTwoColOneSum);
@@ -154,6 +164,8 @@ template <typename T> int testColumnRedux<T>::operator()(int argc, const char **
 
 	checkCudaError(cudaGetLastError());
 	CuMatrix<T> oneTwoThrees = oneTwos |= (ones * 3);
+	oneTwoThrees.syncBuffers();
+	outln("onwTwoThrees " << oneTwoThrees);
 	checkCudaError(cudaGetLastError());
 
 	uint count = b_util::getCount(argc,argv,10);
@@ -178,7 +190,8 @@ template <typename T> int testColumnRedux<T>::operator()(int argc, const char **
     sumSum = 0;
     timer.start();
 	for(uint i = 0; i < count; i++) {
-		sumSum += oneTwoThrees.reduceColumn(pbo,0,2);
+		sumSum += oneTwoThrees.columnReduceIndexed( pbo, 2, 0);
+		//sumSum += oneTwoThrees.reduceColumn(pbo,0,2);
 	}
 	reduceColTime = timer.stop();
 	outln(count << " reduceColum took " << reduceColTime << " sumSum " << sumSum);
@@ -243,7 +256,7 @@ template <typename T> int testShuffle<T>::operator()(int argc, const char **argv
 template int testColumnAndRowSum<float>::operator()(int argc, const char **argv) const;
 template int testColumnAndRowSum<double>::operator()(int argc, const char **argv) const;
 template <typename T> int testColumnAndRowSum<T>::operator()(int argc, const char **argv) const {
-	CuMatrix<T> incrRows = CuMatrix<T>::increasingRows(0, 200, 100);
+	CuMatrix<T> incrRows = CuMatrix<T>::increasingRows(200, 100,(T)0);
 	uint count = b_util::getCount(argc,argv,1000);
     CuTimer timer;
     float exeTime;
@@ -525,5 +538,6 @@ template <typename T> int testEtoX<T>::operator()(int argc, const char **argv) c
 */
 	return 0;
 }
+
 
 #include "tests.cc"

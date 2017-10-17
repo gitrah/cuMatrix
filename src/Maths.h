@@ -5,9 +5,7 @@
  *      Author: reid
  */
 
-#ifndef MATHS_H_
-#define MATHS_H_
-
+#pragma once
 
 #include "FuncPtr.h"
 
@@ -19,6 +17,7 @@ extern __device__ int First50KPrimes[];
 __global__ void scanSum(int* d_res, int fin);
 int scanSumL(int fin);
 
+template <typename T>__device__  T qpow (T x,  int y);
 template <typename T>__device__  T cube (T x);
 template <typename T> __host__ __device__ T sign(T x);
 /*
@@ -106,5 +105,10 @@ template<typename T> __global__ void getFunctionPtr(T* fptr, int funcIndex);
 template<typename T> __host__ CUDART_DEVICE T bisection( T* roots, uint* count, uint maxRoots, typename func1<T>::inst fn, T a, T b, T epsilon, uint slices);
 template<typename T> __host__ CUDART_DEVICE T bisection( T* roots, uint* count, uint maxRoots, FuncNums idx, T a, T b, T epsilon, uint slices);
 
+template<typename T> __device__ uint popc( T val);
 
-#endif /* MATHS_H_ */
+/*
+ * taylor series approx (of e^x) of sigmoid
+ */
+template <typename T> __device__ T sigmoid(const T x, const int depth = 5);
+

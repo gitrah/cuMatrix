@@ -12,52 +12,21 @@
 #include "caps.h"
 #include "CuMatrix.h"
 #include "debug.h"
+#include "CuSet.h"
 
 /*
- * initial reduction is between matrices
+ * shuffle-reduce intermediate results accumulated in shared memory for threadblocks <= 1024
+ *
  */
-//template<typename T, template <typename> class Function>
+
 #ifdef  CuMatrix_Enable_KTS
-template<typename T, uint blockSize, bool nIsPow2, template <typename> class BinaryOp1,
-template <typename> class  BinaryOp2>
-__global__ void combineReduceOpKernel(const T* g_idata1, const T* g_idata2,
-		T* g_odata, long n, BinaryOp1<T> mop, BinaryOp2<T> bop, T start)
+template <typename T, template <typename> class  BinaryOp>
+__inline__ __device__ void shreduceShared(T* g_odata, T* sdata, T& myReduction,  uint blockSize, uint tid, const uint blockIdx_x, BinaryOp<T> bop)
 #else
-template<typename T, uint blockSize, bool nIsPow2, int MopDim, int BopDim>
-__global__ void combineReduceOpKernel(const T* g_idata1, const T* g_idata2,
-		T* g_odata, long n, BinaryOpF<T, MopDim> mop, BinaryOpF<T,BopDim> bop, T start)
+template <typename T, int StateDim>
+__inline__ __device__ void shreduceShared(T* g_odata, T* sdata, T& myReduction,  uint blockSize, uint tid, const uint blockIdx_x, BinaryOpF<T,StateDim> bop)
 #endif
 {
-	T* sdata = SharedMemory<T>();
-
-	// perform first level of reduction,
-	// reading from global memory, writing to shared memory
-	uint tid = threadIdx.x;
-	long i = blockIdx.x * blockSize * 2 + threadIdx.x;
-	uint gridSize = blockSize * 2 * gridDim.x;
-	T myReduction = start;
-
-	// we reduce multiple elements per thread.  The number is determined by the
-	// number of active thread blocks (via gridDim).  More blocks will result
-	// in a larger gridSize and therefore fewer elements per thread
-	while (i < n) {
-		myReduction = bop(myReduction, mop(g_idata1[i], g_idata2[i]));
-
-		// ensure we don't read out of bounds -- this is optimized away for powerOf2 sized arrays
-		if (nIsPow2 || i + blockSize < n)
-			myReduction = bop(myReduction,
-					mop(blockSize[i + g_idata1], blockSize[i + g_idata2])); // a[x +b] parses to *(a + x + b)
-		if(checkDebug(debugRedux) && i + blockSize == n -1 ) {
-			flprintf("max i reading g_idata1(%p) and g_idata2(%p)\n", g_idata1 + i + blockSize, g_idata2+i+blockSize);
-		}
-		i += gridSize;
-	}
-	// each thread puts its local sum into shared memory
-	sdata[tid] = myReduction;
-	__syncthreads();
-
-	/* sdata-a */
-
 	// do reduction in shared mem
 	if (blockSize >= 1024) {
 		if (tid < 512) {
@@ -120,21 +89,244 @@ __global__ void combineReduceOpKernel(const T* g_idata1, const T* g_idata2,
 		if (blockSize >= 2) {
 			myReduction =bop(myReduction,  shfl(myReduction, tid + 1));
 		}
+	}
 
+	if (tid == 0)
+		g_odata[blockIdx_x] = myReduction;
+
+}
+template __device__ void shreduceShared<long, 1>(long*, long*, long&, unsigned int, unsigned int, unsigned int, BinaryOpF<long, 1>);
+template __device__ void shreduceShared<unsigned long, 1>(unsigned long*, unsigned long*, unsigned long&, unsigned int, unsigned int, unsigned int, BinaryOpF<unsigned long, 1>);
+
+template __device__ void shreduceShared<int, 1>(int*, int*, int&, unsigned int, unsigned int, unsigned int, BinaryOpF<int, 1>);
+template __device__ void shreduceShared<unsigned int, 1>(unsigned int*, unsigned int*, unsigned int&, unsigned int, unsigned int, unsigned int, BinaryOpF<unsigned int, 1>);
+template __device__ void shreduceShared<float, 1>(float*, float*, float&, unsigned int, unsigned int, unsigned int, BinaryOpF<float, 1>);
+template __device__ void shreduceShared<double, 1>(double*, double*, double&, unsigned int, unsigned int, unsigned int, BinaryOpF<double, 1>);
+
+/*
+ * initial reduction is between matrices
+ */
+//template<typename T, template <typename> class Function>
+#ifdef  CuMatrix_Enable_KTS
+template<typename T, uint blockSize, bool nIsPow2, template <typename> class BinaryOp1,
+template <typename> class  BinaryOp2>
+__global__ void combineReduceOpPitchKernel(T* g_odata, const T* g_idata1, const T* g_idata2, int spitch1, int spitch2, int rows, int cols,
+		 BinaryOp1<T> mop, BinaryOp2<T> bop, T start)
+#else
+template<typename T, uint blockSize, bool nIsPow2, int MopDim, int BopDim>
+__global__ void combineReduceOpPitchKernel(T* g_odata, const T* g_idata1, const T* g_idata2, int spitch1, int spitch2, int rows, int cols,
+		 BinaryOpF<T, MopDim> mop, BinaryOpF<T,BopDim> bop, T start)
+#endif
+{
+	T* sdata = SharedMemory<T>();
+
+	// perform first level of reduction,
+	// reading from global memory, writing to shared memory
+	uint tid = threadIdx.x;
+	long i = blockIdx.x * blockSize * 2 + threadIdx.x;
+	uint gridSize = blockSize * 2 * gridDim.x;
+	T myReduction = start;
+
+	// we reduce multiple elements per thread.  The number is determined by the
+	// number of active thread blocks (via gridDim).  More blocks will result
+	// in a larger gridSize and therefore fewer elements per thread
+	long n = rows * cols;
+	while (i < n) {
+		int row = i / cols;
+		int col = i % cols;
+		long i1 = row * spitch1 + col;
+		long i2 = row * spitch2 + col;
+		myReduction = bop(myReduction, mop(g_idata1[i1], g_idata2[i2]));
+
+		// ensure we don't read out of bounds -- this is optimized away for powerOf2 sized arrays
+		if (nIsPow2 || i + blockSize < n) {
+			row = (i+blockSize) / cols;
+			col = (i + blockSize) % cols;
+			i1 = row * spitch1 + col;
+			i2 = row * spitch2 + col;
+			myReduction = bop(myReduction, mop( g_idata1[i1], g_idata2[i2]));
+		}
+		if(checkDebug(debugRedux) && i + blockSize == n -1 ) {
+			flprintf("max i reading g_idata1(%p) and g_idata2(%p)\n", g_idata1 + i1 + blockSize, g_idata2+i2+blockSize);
+		}
+		i += gridSize;
+	}
+	// each thread puts its local sum into shared memory
+	sdata[tid] = myReduction;
+	__syncthreads();
+
+
+	shreduceShared(g_odata, sdata, myReduction, blockSize, tid, blockIdx.x, bop);
+
+	/* sdata-a */
+
+/*
+	// do reduction in shared mem
+	if (blockSize >= 1024) {
+		if (tid < 512) {
+			sdata[tid] = myReduction = bop(myReduction, sdata[tid + 512]);
+		}
+
+		__syncthreads();
+	}
+
+	if (blockSize >= 512) {
+		if (tid < 256) {
+			sdata[tid] = myReduction = bop(myReduction, sdata[tid + 256]);
+		}
+
+		__syncthreads();
+	}
+
+	if (blockSize >= 256) {
+		if (tid < 128) {
+			sdata[tid] = myReduction = bop(myReduction, sdata[tid + 128]);
+		}
+
+		__syncthreads();
+	}
+
+	if (blockSize >= 128) {
+		if (tid < 64) {
+			sdata[tid] = myReduction = bop(myReduction, sdata[tid + 64]);
+		}
+
+		__syncthreads();
+	}
+
+	if (tid < 32) {
+		// now that we are using warp-synchronous programming (below)
+		// we need to declare our shared memory volatile so that the compiler
+		// doesn'float reorder stores to it and induce incorrect behavior.
+		//volatile T* smem = sdata;
+
+		if (blockSize >= 64) {
+			myReduction = bop(myReduction, sdata[tid + 32]);
+		}
+
+		if (blockSize >= 32) {
+			myReduction =bop(myReduction,  shfl(myReduction, tid + 16));
+		}
+
+		if (blockSize >= 16) {
+			myReduction =bop(myReduction,  shfl(myReduction, tid + 8));
+		}
+
+		if (blockSize >= 8) {
+			myReduction =bop(myReduction,  shfl(myReduction, tid + 4));
+		}
+
+		if (blockSize >= 4) {
+			myReduction =bop(myReduction,  shfl(myReduction, tid + 2));
+		}
+
+		if (blockSize >= 2) {
+			myReduction =bop(myReduction,  shfl(myReduction, tid + 1));
+		}
 	}
 
 	if (tid == 0)
 		g_odata[blockIdx.x] = myReduction;
+*/
+}
+
+
+#ifdef  CuMatrix_Enable_KTS
+template<typename T, uint blockSize, bool nIsPow2, template <typename> class BinaryOp1,
+template <typename> class  BinaryOp2>
+__global__ void combineReduceOpKernel(T* g_odata, const T* g_idata1, const T* g_idata2,
+		long n, BinaryOp1<T> mop, BinaryOp2<T> bop, T start)
+#else
+template<typename T, uint blockSize, bool nIsPow2, int MopDim, int BopDim>
+__global__ void combineReduceOpKernel(T* g_odata, const T* g_idata1, const T* g_idata2,
+		long n, BinaryOpF<T, MopDim> mop, BinaryOpF<T,BopDim> bop, T start)
+#endif
+{
+	T* sdata = SharedMemory<T>();
+
+	// perform first level of reduction,
+	// reading from global memory, writing to shared memory
+	uint tid = threadIdx.x;
+	long i = blockIdx.x * blockSize * 2 + threadIdx.x;
+	uint gridSize = blockSize * 2 * gridDim.x;
+	T myReduction = start;
+
+	// we reduce multiple elements per thread.  The number is determined by the
+	// number of active thread blocks (via gridDim).  More blocks will result
+	// in a larger gridSize and therefore fewer elements per thread
+	while (i < n) {
+		myReduction = bop(myReduction, mop(g_idata1[i], g_idata2[i]));
+
+		// ensure we don't read out of bounds -- this is optimized away for powerOf2 sized arrays
+		if (nIsPow2 || i + blockSize < n)
+			myReduction = bop(myReduction,
+					mop(blockSize[i + g_idata1], blockSize[i + g_idata2])); // a[x +b] parses to *(a + x + b)
+		if(checkDebug(debugRedux) && i + blockSize == n -1 ) {
+			flprintf("max i reading g_idata1(%p) and g_idata2(%p)\n", g_idata1 + i + blockSize, g_idata2+i+blockSize);
+		}
+		i += gridSize;
+	}
+	// each thread puts its local sum into shared memory
+	sdata[tid] = myReduction;
+	__syncthreads();
+
+
+	shreduceShared(g_odata, sdata, myReduction, blockSize, tid, blockIdx.x, bop);
+}
+
+#ifdef  CuMatrix_Enable_KTS
+template<typename T, uint blockSize, bool nIsPow2, template <typename> class BinaryOp1,
+template <typename> class  BinaryOp2>
+__global__ void combineReduceOpKernel(DMatrix<T> d_odata, const DMatrix<T> d_idata1, const DMatrix<T> d_idata2,
+		long n, BinaryOp1<T> mop, BinaryOp2<T> bop, T start)
+#else
+template<typename T, uint blockSize, bool nIsPow2, int MopDim, int BopDim>
+__global__ void combineReduceOpKernel(DMatrix<T> d_odata, const DMatrix<T> d_idata1, const DMatrix<T> d_idata2,
+		long n, BinaryOpF<T, MopDim> mop, BinaryOpF<T,BopDim> bop, T start)
+#endif
+{
+	T* sdata = SharedMemory<T>();
+
+	// perform first level of reduction,
+	// reading from global memory, writing to shared memory
+	uint tid = threadIdx.x;
+	long i = blockIdx.x * blockSize * 2 + threadIdx.x;
+	uint gridSize = blockSize * 2 * gridDim.x;
+	T myReduction = start;
+	const T* g_idata1 = d_idata1.elements;
+	const T* g_idata2 = d_idata2.elements;
+	T* g_odata = d_odata.elements;
+	// we reduce multiple elements per thread.  The number is determined by the
+	// number of active thread blocks (via gridDim).  More blocks will result
+	// in a larger gridSize and therefore fewer elements per thread
+	while (i < n) {
+		myReduction = bop(myReduction, mop(g_idata1[i], g_idata2[i]));
+
+		// ensure we don't read out of bounds -- this is optimized away for powerOf2 sized arrays
+		if (nIsPow2 || i + blockSize < n)
+			myReduction = bop(myReduction,
+					mop(blockSize[i + g_idata1], blockSize[i + g_idata2])); // a[x +b] parses to *(a + x + b)
+		if(checkDebug(debugRedux) && i + blockSize == n -1 ) {
+			flprintf("max i reading g_idata1(%p) and g_idata2(%p)\n", g_idata1 + i + blockSize, g_idata2+i+blockSize);
+		}
+		i += gridSize;
+	}
+	// each thread puts its local sum into shared memory
+	sdata[tid] = myReduction;
+	__syncthreads();
+
+
+	shreduceShared(g_odata, sdata, myReduction, blockSize, tid, blockIdx.x, bop);
 }
 
 
 // input pass works across two matrices via BinaryOp1 'mop' (global to local), subsequent passes are regular self-reductions using binaryop 'op'
 #ifdef  CuMatrix_Enable_KTS
 template<typename T, template <typename> class BinaryOp1, template <typename> class BinaryOp2>
-__host__ CUDART_DEVICE T combineReduceOpLauncher(T* d_odata, const T* d_idata1, const T* d_idata2, long n, BinaryOp1<T> mop, BinaryOp2<T> bop, T start, cudaStream_t stream )
+__host__ CUDART_DEVICE T combineReduceOpLauncher(T* g_odata, const T* g_idata1, const T* g_idata2, int spitch1, int spitch2, int rows, int cols,  BinaryOp1<T> mop, BinaryOp2<T> bop, T start, cudaStream_t stream )
 #else
 template<typename T, int MopDim, int BopDim>
-__host__ CUDART_DEVICE T combineReduceOpLauncher(T* d_odata, const T* d_idata1, const T* d_idata2, long n, BinaryOpF<T,MopDim> mop, BinaryOpF<T,BopDim> bop, T start, cudaStream_t stream )
+__host__ CUDART_DEVICE T combineReduceOpLauncher(T* g_odata, const T* g_idata1, const T* g_idata2, int spitch1, int spitch2, int rows, int cols, BinaryOpF<T,MopDim> mop, BinaryOpF<T,BopDim> bop, T start, cudaStream_t stream )
 #endif
 {
 #ifndef CuMatrix_Enable_KTS
@@ -157,7 +349,9 @@ __host__ CUDART_DEVICE T combineReduceOpLauncher(T* d_odata, const T* d_idata1, 
 	bool firstRedux = true;
 	dim3 dimBlock;
 	dim3 dimGrid;
-
+	long n = rows * cols;
+	int h = rows;
+	int w = cols;
 	while ( n > 1) {
 		powOf2Q = b_util::isPow2(n);
 		getReductionExecContext(blocks,threads, n);
@@ -174,107 +368,109 @@ __host__ CUDART_DEVICE T combineReduceOpLauncher(T* d_odata, const T* d_idata1, 
 		}
 		if(firstRedux) {
 			if (powOf2Q) {
+				//combineReduceOpPitchKernel(T* g_odata, const T* g_idata1, const T* g_idata2,
+				//			int spitch1, int spitch2, int w, int h,
 				switch (threads) {
 #ifdef  CuMatrix_Enable_KTS
 					case 1024:
-					combineReduceOpKernel<T, 1024, true, BinaryOp1, BinaryOp2><<< dimGrid, dimBlock, smemSize, stream>>>(d_idata1, d_idata2, d_odata, n, mop, bop, start); break;
+					combineReduceOpPitchKernel<T, 1024, true, BinaryOp1, BinaryOp2><<< dimGrid, dimBlock, smemSize, stream>>>(g_odata, g_idata1, g_idata2, spitch1, spitch2, h, w, mop, bop, start); break;
 					case 512:
-					combineReduceOpKernel<T, 512, true, BinaryOp1, BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(d_idata1, d_idata2, d_odata, n, mop, bop, start); break;
+					combineReduceOpPitchKernel<T, 512, true, BinaryOp1, BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata, g_idata1, g_idata2, spitch1, spitch2, h, w, mop, bop, start); break;
 					case 256:
-					combineReduceOpKernel<T, 256, true,BinaryOp1, BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(d_idata1, d_idata2, d_odata, n, mop, bop, start); break;
+					combineReduceOpPitchKernel<T, 256, true,BinaryOp1, BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata, g_idata1, g_idata2, spitch1, spitch2, h, w, mop, bop, start); break;
 					case 128:
-					combineReduceOpKernel<T, 128, true,BinaryOp1, BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(d_idata1, d_idata2, d_odata, n, mop, bop, start); break;
+					combineReduceOpPitchKernel<T, 128, true,BinaryOp1, BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata, g_idata1, g_idata2, spitch1, spitch2, h, w, mop, bop, start); break;
 					case 64:
-					combineReduceOpKernel<T, 64, true,BinaryOp1, BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(d_idata1, d_idata2, d_odata, n, mop, bop, start); break;
+					combineReduceOpPitchKernel<T, 64, true,BinaryOp1, BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata, g_idata1, g_idata2, spitch1, spitch2, h, w, mop, bop, start); break;
 					case 32:
-					combineReduceOpKernel<T, 32, true,BinaryOp1, BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(d_idata1, d_idata2, d_odata, n, mop,bop, start); break;
+					combineReduceOpPitchKernel<T, 32, true,BinaryOp1, BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata, g_idata1, g_idata2, spitch1, spitch2, h, w, mop,bop, start); break;
 					case 16:
-					combineReduceOpKernel<T, 16, true,BinaryOp1, BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(d_idata1, d_idata2, d_odata, n, mop, bop, start); break;
+					combineReduceOpPitchKernel<T, 16, true,BinaryOp1, BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata, g_idata1, g_idata2, spitch1, spitch2, h, w, mop, bop, start); break;
 					case 8:
-					combineReduceOpKernel<T, 8, true,BinaryOp1, BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(d_idata1, d_idata2, d_odata, n, mop, bop, start); break;
+					combineReduceOpPitchKernel<T, 8, true,BinaryOp1, BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata, g_idata1, g_idata2, spitch1, spitch2, h, w, mop, bop, start); break;
 					case 4:
-					combineReduceOpKernel<T, 4, true,BinaryOp1, BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(d_idata1, d_idata2, d_odata, n, mop, bop, start); break;
+					combineReduceOpPitchKernel<T, 4, true,BinaryOp1, BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata, g_idata1, g_idata2, spitch1, spitch2, h, w, mop, bop, start); break;
 					case 2:
-					combineReduceOpKernel<T, 2, true,BinaryOp1, BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(d_idata1, d_idata2, d_odata, n, mop, bop, start); break;
+					combineReduceOpPitchKernel<T, 2, true,BinaryOp1, BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata, g_idata1, g_idata2, spitch1, spitch2, h, w, mop, bop, start); break;
 					case 1:
-					combineReduceOpKernel<T, 1, true,BinaryOp1, BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>( d_idata1, d_idata2, d_odata, n, mop, bop, start); break;
+					combineReduceOpPitchKernel<T, 1, true,BinaryOp1, BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>( g_odata, g_idata1, g_idata2, spitch1, spitch2, h, w, mop, bop, start); break;
 #else
 					case 1024:
-					combineReduceOpKernel<T, 1024, true, MopDim, BopDim><<< dimGrid, dimBlock, smemSize, stream>>>(d_idata1, d_idata2, d_odata, n, mop, bop, start); break;
+					combineReduceOpPitchKernel<T, 1024, true, MopDim, BopDim><<< dimGrid, dimBlock, smemSize, stream>>>(g_odata, g_idata1, g_idata2, spitch1, spitch2, h, w, mop, bop, start); break;
 					case 512:
-					combineReduceOpKernel<T, 512, true, MopDim, BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(d_idata1, d_idata2, d_odata, n, mop, bop, start); break;
+					combineReduceOpPitchKernel<T, 512, true, MopDim, BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata, g_idata1, g_idata2, spitch1, spitch2, h, w, mop, bop, start); break;
 					case 256:
-					combineReduceOpKernel<T, 256, true,MopDim, BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(d_idata1, d_idata2, d_odata, n, mop, bop, start); break;
+					combineReduceOpPitchKernel<T, 256, true,MopDim, BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata, g_idata1, g_idata2, spitch1, spitch2, h, w, mop, bop, start); break;
 					case 128:
-					combineReduceOpKernel<T, 128, true,MopDim, BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(d_idata1, d_idata2, d_odata, n, mop, bop, start); break;
+					combineReduceOpPitchKernel<T, 128, true,MopDim, BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata, g_idata1, g_idata2, spitch1, spitch2, h, w, mop, bop, start); break;
 					case 64:
-					combineReduceOpKernel<T, 64, true,MopDim, BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(d_idata1, d_idata2, d_odata, n, mop, bop, start); break;
+					combineReduceOpPitchKernel<T, 64, true,MopDim, BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata, g_idata1, g_idata2, spitch1, spitch2, h, w, mop, bop, start); break;
 					case 32:
-					combineReduceOpKernel<T, 32, true,MopDim, BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(d_idata1, d_idata2, d_odata, n, mop,bop, start); break;
+					combineReduceOpPitchKernel<T, 32, true,MopDim, BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata, g_idata1, g_idata2, spitch1, spitch2, h, w, mop,bop, start); break;
 					case 16:
-					combineReduceOpKernel<T, 16, true,MopDim, BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(d_idata1, d_idata2, d_odata, n, mop, bop, start); break;
+					combineReduceOpPitchKernel<T, 16, true,MopDim, BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata, g_idata1, g_idata2, spitch1, spitch2, h, w, mop, bop, start); break;
 					case 8:
-					combineReduceOpKernel<T, 8, true,MopDim, BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(d_idata1, d_idata2, d_odata, n, mop, bop, start); break;
+					combineReduceOpPitchKernel<T, 8, true,MopDim, BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata, g_idata1, g_idata2, spitch1, spitch2, h, w, mop, bop, start); break;
 					case 4:
-					combineReduceOpKernel<T, 4, true,MopDim, BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(d_idata1, d_idata2, d_odata, n, mop, bop, start); break;
+					combineReduceOpPitchKernel<T, 4, true,MopDim, BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata, g_idata1, g_idata2, spitch1, spitch2, h, w, mop, bop, start); break;
 					case 2:
-					combineReduceOpKernel<T, 2, true,MopDim, BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(d_idata1, d_idata2, d_odata, n, mop, bop, start); break;
+					combineReduceOpPitchKernel<T, 2, true,MopDim, BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata, g_idata1, g_idata2, spitch1, spitch2, h, w, mop, bop, start); break;
 					case 1:
-					combineReduceOpKernel<T, 1, true,MopDim, BopDim><<< dimGrid, dimBlock, smemSize, stream >>>( d_idata1, d_idata2, d_odata, n, mop, bop, start); break;
+					combineReduceOpPitchKernel<T, 1, true,MopDim, BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata, g_idata1, g_idata2, spitch1, spitch2, h, w, mop, bop, start); break;
 #endif
 					}
-				if(checkDebug(debugRedux)){prlocf("launched power-of-2 combineReduceOpKernel\n");}
+				if(checkDebug(debugRedux)){prlocf("launched power-of-2 combineReduceOpPitchKernel\n");}
 			}else {
 				switch (threads) {
 #ifdef  CuMatrix_Enable_KTS
 					case 1024:
-					combineReduceOpKernel<T, 1024, false, BinaryOp1, BinaryOp2> <<< dimGrid, dimBlock, smemSize, stream >>>(d_idata1, d_idata2, d_odata, n, mop, bop, start); break;
+					combineReduceOpPitchKernel<T, 1024, false, BinaryOp1, BinaryOp2> <<< dimGrid, dimBlock, smemSize, stream >>>(g_odata, g_idata1, g_idata2, spitch1, spitch2, h, w, mop, bop, start); break;
 					case 512:
-					combineReduceOpKernel<T, 512, false, BinaryOp1, BinaryOp2> <<< dimGrid, dimBlock, smemSize, stream >>>(d_idata1, d_idata2, d_odata, n, mop, bop, start); break;
+					combineReduceOpPitchKernel<T, 512, false, BinaryOp1, BinaryOp2> <<< dimGrid, dimBlock, smemSize, stream >>>(g_odata, g_idata1, g_idata2, spitch1, spitch2, h, w, mop, bop, start); break;
 					case 256:
-					combineReduceOpKernel<T, 256, false,BinaryOp1, BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(d_idata1, d_idata2, d_odata, n, mop, bop, start); break;
+					combineReduceOpPitchKernel<T, 256, false,BinaryOp1, BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(d_g_odata, g_idata1, g_idata2mop, bop, start); break;
 					case 128:
-					combineReduceOpKernel<T, 128, false,BinaryOp1, BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(d_idata1, d_idata2, d_odata, n, mop, bop, start); break;
+					combineReduceOpPitchKernel<T, 128, false,BinaryOp1, BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata, g_idata1, g_idata2, spitch1, spitch2, h, w, mop, bop, start); break;
 					case 64:
-					combineReduceOpKernel<T, 64, false,BinaryOp1, BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(d_idata1, d_idata2, d_odata, n, mop, bop, start); break;
+					combineReduceOpPitchKernel<T, 64, false,BinaryOp1, BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata, g_idata1, g_idata2, spitch1, spitch2, h, w, mop, bop, start); break;
 					case 32:
-					combineReduceOpKernel<T, 32, false,BinaryOp1, BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(d_idata1, d_idata2, d_odata, n, mop, bop, start); break;
+					combineReduceOpPitchKernel<T, 32, false,BinaryOp1, BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata, g_idata1, g_idata2, spitch1, spitch2, h, w, mop, bop, start); break;
 					case 16:
-					combineReduceOpKernel<T, 16, false,BinaryOp1, BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(d_idata1, d_idata2, d_odata, n, mop, bop, start); break;
+					combineReduceOpPitchKernel<T, 16, false,BinaryOp1, BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata, g_idata1, g_idata2, spitch1, spitch2, h, w, mop, bop, start); break;
 					case 8:
-					combineReduceOpKernel<T, 8, false,BinaryOp1, BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(d_idata1, d_idata2, d_odata, n, mop, bop, start); break;
+					combineReduceOpPitchKernel<T, 8, false,BinaryOp1, BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata, g_idata1, g_idata2, spitch1, spitch2, h, w, mop, bop, start); break;
 					case 4:
-					combineReduceOpKernel<T, 4, false,BinaryOp1, BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(d_idata1, d_idata2, d_odata, n, mop, bop, start); break;
+					combineReduceOpPitchKernel<T, 4, false,BinaryOp1, BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata, g_idata1, g_idata2, spitch1, spitch2, h, w, mop, bop, start); break;
 					case 2:
-					combineReduceOpKernel<T, 2, false,BinaryOp1, BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(d_idata1, d_idata2, d_odata, n, mop, bop, start); break;
+					combineReduceOpPitchKernel<T, 2, false,BinaryOp1, BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata, g_idata1, g_idata2, spitch1, spitch2, h, w, mop, bop, start); break;
 					case 1:
-					combineReduceOpKernel<T, 1, false,BinaryOp1, BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>( d_idata1, d_idata2, d_odata, n, mop, bop, start); break;
+					combineReduceOpPitchKernel<T, 1, false,BinaryOp1, BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>( g_odata, g_idata1, g_idata2, spitch1, spitch2, h, w, mop, bop, start); break;
 #else
 					case 1024:
-					combineReduceOpKernel<T, 1024, false, MopDim, BopDim> <<< dimGrid, dimBlock, smemSize, stream >>>(d_idata1, d_idata2, d_odata, n, mop, bop, start); break;
+					combineReduceOpPitchKernel<T, 1024, false, MopDim, BopDim> <<< dimGrid, dimBlock, smemSize, stream >>>(g_odata, g_idata1, g_idata2, spitch1, spitch2, h, w, mop, bop, start); break;
 					case 512:
-					combineReduceOpKernel<T, 512, false, MopDim, BopDim> <<< dimGrid, dimBlock, smemSize, stream >>>(d_idata1, d_idata2, d_odata, n, mop, bop, start); break;
+					combineReduceOpPitchKernel<T, 512, false, MopDim, BopDim> <<< dimGrid, dimBlock, smemSize, stream >>>(g_odata, g_idata1, g_idata2, spitch1, spitch2, h, w, mop, bop, start); break;
 					case 256:
-					combineReduceOpKernel<T, 256, false,MopDim, BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(d_idata1, d_idata2, d_odata, n, mop, bop, start); break;
+					combineReduceOpPitchKernel<T, 256, false,MopDim, BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata, g_idata1, g_idata2, spitch1, spitch2, h, w, mop, bop, start); break;
 					case 128:
-					combineReduceOpKernel<T, 128, false,MopDim, BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(d_idata1, d_idata2, d_odata, n, mop, bop, start); break;
+					combineReduceOpPitchKernel<T, 128, false,MopDim, BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata, g_idata1, g_idata2, spitch1, spitch2, h, w, mop, bop, start); break;
 					case 64:
-					combineReduceOpKernel<T, 64, false,MopDim, BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(d_idata1, d_idata2, d_odata, n, mop, bop, start); break;
+					combineReduceOpPitchKernel<T, 64, false,MopDim, BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata, g_idata1, g_idata2, spitch1, spitch2, h, w, mop, bop, start); break;
 					case 32:
-					combineReduceOpKernel<T, 32, false,MopDim, BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(d_idata1, d_idata2, d_odata, n, mop, bop, start); break;
+					combineReduceOpPitchKernel<T, 32, false,MopDim, BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata, g_idata1, g_idata2, spitch1, spitch2, h, w, mop, bop, start); break;
 					case 16:
-					combineReduceOpKernel<T, 16, false,MopDim, BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(d_idata1, d_idata2, d_odata, n, mop, bop, start); break;
+					combineReduceOpPitchKernel<T, 16, false,MopDim, BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata, g_idata1, g_idata2, spitch1, spitch2, h, w, mop, bop, start); break;
 					case 8:
-					combineReduceOpKernel<T, 8, false,MopDim, BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(d_idata1, d_idata2, d_odata, n, mop, bop, start); break;
+					combineReduceOpPitchKernel<T, 8, false,MopDim, BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata, g_idata1, g_idata2, spitch1, spitch2, h, w, mop, bop, start); break;
 					case 4:
-					combineReduceOpKernel<T, 4, false,MopDim, BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(d_idata1, d_idata2, d_odata, n, mop, bop, start); break;
+					combineReduceOpPitchKernel<T, 4, false,MopDim, BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata, g_idata1, g_idata2, spitch1, spitch2, h, w, mop, bop, start); break;
 					case 2:
-					combineReduceOpKernel<T, 2, false,MopDim, BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(d_idata1, d_idata2, d_odata, n, mop, bop, start); break;
+					combineReduceOpPitchKernel<T, 2, false,MopDim, BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata, g_idata1, g_idata2, spitch1, spitch2, h, w, mop, bop, start); break;
 					case 1:
-					combineReduceOpKernel<T, 1, false,MopDim, BopDim><<< dimGrid, dimBlock, smemSize, stream >>>( d_idata1, d_idata2, d_odata, n, mop, bop, start); break;
+					combineReduceOpPitchKernel<T, 1, false,MopDim, BopDim><<< dimGrid, dimBlock, smemSize, stream >>>( g_odata, g_idata1, g_idata2, spitch1, spitch2, h, w, mop, bop, start); break;
 #endif
 					}
-				if(checkDebug(debugRedux)){prlocf("launched non-power-of-2 combineReduceOpKernel\n");}
+				if(checkDebug(debugRedux)){prlocf("launched non-power-of-2 combineReduceOpPitchKernel\n");}
 			}
 		}
 		else
@@ -284,51 +480,51 @@ __host__ CUDART_DEVICE T combineReduceOpLauncher(T* d_odata, const T* d_idata1, 
 #ifdef  CuMatrix_Enable_KTS
 				case 1024:
 					//reduceOpKernel(DMatrix<T> out, const DMatrix<T> src, T* g_odata, long n, BinaryOp2 op, T start)
-					reduceOpKernel<T, 1024, true, BinaryOp2> <<< dimGrid, dimBlock, smemSize, stream >>>(d_odata, d_odata, n,bop, start); break;
+					reduceOpKernel<T, 1024, true, BinaryOp2> <<< dimGrid, dimBlock, smemSize, stream >>>(g_odata, g_odata, n,bop, start); break;
 				case 512:
-					reduceOpKernel<T, 512, true, BinaryOp2> <<< dimGrid, dimBlock, smemSize, stream >>>(d_odata,d_odata, n,bop, start); break;
+					reduceOpKernel<T, 512, true, BinaryOp2> <<< dimGrid, dimBlock, smemSize, stream >>>(g_odata,g_odata, n,bop, start); break;
 				case 256:
-					reduceOpKernel<T, 256, true,BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(d_odata,d_odata, n,bop, start); break;
+					reduceOpKernel<T, 256, true,BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata,g_odata, n,bop, start); break;
 				case 128:
-					reduceOpKernel<T, 128, true,BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(d_odata,d_odata, n,bop, start); break;
+					reduceOpKernel<T, 128, true,BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata,g_odata, n,bop, start); break;
 				case 64:
-					reduceOpKernel<T, 64, true,BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(d_odata,d_odata, n,bop, start); break;
+					reduceOpKernel<T, 64, true,BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata,g_odata, n,bop, start); break;
 				case 32:
-					reduceOpKernel<T, 32, true,BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(d_odata,d_odata, n,bop, start); break;
+					reduceOpKernel<T, 32, true,BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata,g_odata, n,bop, start); break;
 				case 16:
-					reduceOpKernel<T, 16, true,BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(d_odata,d_odata, n,bop, start); break;
+					reduceOpKernel<T, 16, true,BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata,g_odata, n,bop, start); break;
 				case 8:
-					reduceOpKernel<T, 8, true,BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(d_odata,d_odata, n,bop, start); break;
+					reduceOpKernel<T, 8, true,BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata,g_odata, n,bop, start); break;
 				case 4:
-					reduceOpKernel<T, 4, true,BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(d_odata,d_odata, n,bop, start); break;
+					reduceOpKernel<T, 4, true,BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata,g_odata, n,bop, start); break;
 				case 2:
-					reduceOpKernel<T, 2, true,BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(d_odata,d_odata, n,bop, start); break;
+					reduceOpKernel<T, 2, true,BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata,g_odata, n,bop, start); break;
 				case 1:
-					reduceOpKernel<T, 1, true,BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(d_odata,d_odata, n,bop, start); break;
+					reduceOpKernel<T, 1, true,BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata,g_odata, n,bop, start); break;
 #else
 				case 1024:
 					//reduceOpKernel(DMatrix<T> out, const DMatrix<T> src, T* g_odata, long n, BinaryOp2 op, T start)
-					reduceOpKernel<T, 1024, true, BopDim> <<< dimGrid, dimBlock, smemSize, stream >>>(d_odata, d_odata, n,bop, start); break;
+					reduceOpKernel<T, 1024, true, BopDim> <<< dimGrid, dimBlock, smemSize, stream >>>(g_odata, g_odata, n,bop, start); break;
 				case 512:
-					reduceOpKernel<T, 512, true, BopDim> <<< dimGrid, dimBlock, smemSize, stream >>>(d_odata,d_odata, n,bop, start); break;
+					reduceOpKernel<T, 512, true, BopDim> <<< dimGrid, dimBlock, smemSize, stream >>>(g_odata,g_odata, n,bop, start); break;
 				case 256:
-					reduceOpKernel<T, 256, true,BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(d_odata,d_odata, n,bop, start); break;
+					reduceOpKernel<T, 256, true,BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata,g_odata, n,bop, start); break;
 				case 128:
-					reduceOpKernel<T, 128, true,BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(d_odata,d_odata, n,bop, start); break;
+					reduceOpKernel<T, 128, true,BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata,g_odata, n,bop, start); break;
 				case 64:
-					reduceOpKernel<T, 64, true,BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(d_odata,d_odata, n,bop, start); break;
+					reduceOpKernel<T, 64, true,BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata,g_odata, n,bop, start); break;
 				case 32:
-					reduceOpKernel<T, 32, true,BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(d_odata,d_odata, n,bop, start); break;
+					reduceOpKernel<T, 32, true,BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata,g_odata, n,bop, start); break;
 				case 16:
-					reduceOpKernel<T, 16, true,BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(d_odata,d_odata, n,bop, start); break;
+					reduceOpKernel<T, 16, true,BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata,g_odata, n,bop, start); break;
 				case 8:
-					reduceOpKernel<T, 8, true,BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(d_odata,d_odata, n,bop, start); break;
+					reduceOpKernel<T, 8, true,BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata,g_odata, n,bop, start); break;
 				case 4:
-					reduceOpKernel<T, 4, true,BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(d_odata,d_odata, n,bop, start); break;
+					reduceOpKernel<T, 4, true,BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata,g_odata, n,bop, start); break;
 				case 2:
-					reduceOpKernel<T, 2, true,BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(d_odata,d_odata, n,bop, start); break;
+					reduceOpKernel<T, 2, true,BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata,g_odata, n,bop, start); break;
 				case 1:
-					reduceOpKernel<T, 1, true,BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(d_odata,d_odata, n,bop, start); break;
+					reduceOpKernel<T, 1, true,BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata,g_odata, n,bop, start); break;
 #endif
 					}
 				if(checkDebug(debugRedux))prlocf("launched power-of-2 reduceOpKernel\n");
@@ -336,50 +532,50 @@ __host__ CUDART_DEVICE T combineReduceOpLauncher(T* d_odata, const T* d_idata1, 
 				switch (threads) {
 #ifdef  CuMatrix_Enable_KTS
 				case 1024:
-					reduceOpKernel<T, 1024, false, BinaryOp2> <<< dimGrid, dimBlock, smemSize, stream >>>(d_odata,d_odata, n,bop, start); break;
+					reduceOpKernel<T, 1024, false, BinaryOp2> <<< dimGrid, dimBlock, smemSize, stream >>>(g_odata,g_odata, n,bop, start); break;
 				case 512:
-					reduceOpKernel<T, 512, false, BinaryOp2> <<< dimGrid, dimBlock, smemSize, stream >>>(d_odata,d_odata, n,bop, start); break;
+					reduceOpKernel<T, 512, false, BinaryOp2> <<< dimGrid, dimBlock, smemSize, stream >>>(g_odata,g_odata, n,bop, start); break;
 				case 256:
-					reduceOpKernel<T, 256, false,BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(d_odata,d_odata, n,bop, start); break;
+					reduceOpKernel<T, 256, false,BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata,g_odata, n,bop, start); break;
 				case 128:
-					reduceOpKernel<T, 128, false,BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(d_odata,d_odata, n,bop, start); break;
+					reduceOpKernel<T, 128, false,BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata,g_odata, n,bop, start); break;
 				case 64:
-					reduceOpKernel<T, 64, false,BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(d_odata,d_odata, n,bop, start); break;
+					reduceOpKernel<T, 64, false,BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata,g_odata, n,bop, start); break;
 				case 32:
-					reduceOpKernel<T, 32, false,BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(d_odata,d_odata, n,bop, start); break;
+					reduceOpKernel<T, 32, false,BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata,g_odata, n,bop, start); break;
 				case 16:
-					reduceOpKernel<T, 16, false,BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(d_odata,d_odata, n,bop, start); break;
+					reduceOpKernel<T, 16, false,BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata,g_odata, n,bop, start); break;
 				case 8:
-					reduceOpKernel<T, 8, false,BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(d_odata,d_odata, n,bop, start); break;
+					reduceOpKernel<T, 8, false,BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata,g_odata, n,bop, start); break;
 				case 4:
-					reduceOpKernel<T, 4, false,BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(d_odata,d_odata, n,bop, start); break;
+					reduceOpKernel<T, 4, false,BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata,g_odata, n,bop, start); break;
 				case 2:
-					reduceOpKernel<T, 2, false,BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(d_odata,d_odata, n,bop, start); break;
+					reduceOpKernel<T, 2, false,BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata,g_odata, n,bop, start); break;
 				case 1:
-					reduceOpKernel<T, 1, false,BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(d_odata,d_odata, n,bop, start); break;
+					reduceOpKernel<T, 1, false,BinaryOp2><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata,g_odata, n,bop, start); break;
 #else
 				case 1024:
-					reduceOpKernel<T, 1024, false, BopDim> <<< dimGrid, dimBlock, smemSize, stream >>>(d_odata,d_odata, n,bop, start); break;
+					reduceOpKernel<T, 1024, false, BopDim> <<< dimGrid, dimBlock, smemSize, stream >>>(g_odata,g_odata, n,bop, start); break;
 				case 512:
-					reduceOpKernel<T, 512, false, BopDim> <<< dimGrid, dimBlock, smemSize, stream >>>(d_odata,d_odata, n,bop, start); break;
+					reduceOpKernel<T, 512, false, BopDim> <<< dimGrid, dimBlock, smemSize, stream >>>(g_odata,g_odata, n,bop, start); break;
 				case 256:
-					reduceOpKernel<T, 256, false,BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(d_odata,d_odata, n,bop, start); break;
+					reduceOpKernel<T, 256, false,BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata,g_odata, n,bop, start); break;
 				case 128:
-					reduceOpKernel<T, 128, false,BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(d_odata,d_odata, n,bop, start); break;
+					reduceOpKernel<T, 128, false,BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata,g_odata, n,bop, start); break;
 				case 64:
-					reduceOpKernel<T, 64, false,BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(d_odata,d_odata, n,bop, start); break;
+					reduceOpKernel<T, 64, false,BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata,g_odata, n,bop, start); break;
 				case 32:
-					reduceOpKernel<T, 32, false,BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(d_odata,d_odata, n,bop, start); break;
+					reduceOpKernel<T, 32, false,BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata,g_odata, n,bop, start); break;
 				case 16:
-					reduceOpKernel<T, 16, false,BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(d_odata,d_odata, n,bop, start); break;
+					reduceOpKernel<T, 16, false,BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata,g_odata, n,bop, start); break;
 				case 8:
-					reduceOpKernel<T, 8, false,BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(d_odata,d_odata, n,bop, start); break;
+					reduceOpKernel<T, 8, false,BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata,g_odata, n,bop, start); break;
 				case 4:
-					reduceOpKernel<T, 4, false,BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(d_odata,d_odata, n,bop, start); break;
+					reduceOpKernel<T, 4, false,BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata,g_odata, n,bop, start); break;
 				case 2:
-					reduceOpKernel<T, 2, false,BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(d_odata,d_odata, n,bop, start); break;
+					reduceOpKernel<T, 2, false,BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata,g_odata, n,bop, start); break;
 				case 1:
-					reduceOpKernel<T, 1, false,BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(d_odata,d_odata, n,bop, start); break;
+					reduceOpKernel<T, 1, false,BopDim><<< dimGrid, dimBlock, smemSize, stream >>>(g_odata,g_odata, n,bop, start); break;
 #endif
 					}
 				if(checkDebug(debugRedux))prlocf("launched non-power-of-2 reduceOpKernel\n");
@@ -406,62 +602,65 @@ __host__ CUDART_DEVICE T combineReduceOpLauncher(T* d_odata, const T* d_idata1, 
 
 	// copy final sum from device to host
 #ifndef __CUDA_ARCH__
+	CuTimer timer;
+	timer.start();
 	if(checkDebug(debugRedux)){prlocf("host copying result to gpu_result and retoining\n");}
-	cudaError_t cuda_error = cudaMemcpy(&gpu_result, d_odata, sizeof(T), cudaMemcpyDeviceToHost);
+	cudaError_t cuda_error = cudaMemcpy(&gpu_result, g_odata, sizeof(T), cudaMemcpyDeviceToHost);
+	//CuMatrix<T>::incDhCopy("combineReduceOpLauncher", sizeof(T),timer.stop());
 	checkCudaError(cuda_error);
 	return gpu_result;
 #else
-	if(checkDebug(debugRedux)){prlocf("dev return d_odata[0]\n");}
-	return d_odata[0];
+	if(checkDebug(debugRedux)){prlocf("dev return g_odata[0]\n");}
+	return g_odata[0];
 #endif
 }
 
 #ifdef  CuMatrix_Enable_KTS
 
-template __host__ CUDART_DEVICE long combineReduceOpLauncher<long, equalsBinaryOp, plusBinaryOp>(long*, long const*, long const*, long, equalsBinaryOp<long>, plusBinaryOp<long>, long, CUstream_st*);
-template __host__ CUDART_DEVICE  float combineReduceOpLauncher<float, equalsBinaryOp, andBinaryOp>(float*, float const*, float const*, long, equalsBinaryOp<float>, andBinaryOp<float>, float, CUstream_st*);
-template __host__ CUDART_DEVICE  unsigned long combineReduceOpLauncher<unsigned long, multBinaryOp, plusBinaryOp>(unsigned long*, unsigned long const*, unsigned long const*, long, multBinaryOp<unsigned long>, plusBinaryOp<unsigned long>, unsigned long, CUstream_st*);
-template __host__ CUDART_DEVICE  unsigned int combineReduceOpLauncher<unsigned int, diffSquaredBinaryOp, plusBinaryOp>(unsigned int*, unsigned int const*, unsigned int const*, long, diffSquaredBinaryOp<unsigned int>, plusBinaryOp<unsigned int>, unsigned int, CUstream_st*);
-template __host__ CUDART_DEVICE  double combineReduceOpLauncher<double, diffSquaredBinaryOp, plusBinaryOp>(double*, double const*, double const*, long, diffSquaredBinaryOp<double>, plusBinaryOp<double>, double, CUstream_st*);
-template __host__ CUDART_DEVICE  int combineReduceOpLauncher<int, almostEqualsBinaryOp, andBinaryOp>(int*, int const*, int const*, long, almostEqualsBinaryOp<int>, andBinaryOp<int>, int, CUstream_st*);
-template __host__ CUDART_DEVICE  unsigned long combineReduceOpLauncher<unsigned long, equalsBinaryOp, andBinaryOp>(unsigned long*, unsigned long const*, unsigned long const*, long, equalsBinaryOp<unsigned long>, andBinaryOp<unsigned long>, unsigned long, CUstream_st*);
-template __host__ CUDART_DEVICE  unsigned int combineReduceOpLauncher<unsigned int, equalsBinaryOp, andBinaryOp>(unsigned int*, unsigned int const*, unsigned int const*, long, equalsBinaryOp<unsigned int>, andBinaryOp<unsigned int>, unsigned int, CUstream_st*);
-template __host__ CUDART_DEVICE  double combineReduceOpLauncher<double, equalsBinaryOp, andBinaryOp>(double*, double const*, double const*, long, equalsBinaryOp<double>, andBinaryOp<double>, double, CUstream_st*);
-template __host__ CUDART_DEVICE  float combineReduceOpLauncher<float, diffSquaredBinaryOp, plusBinaryOp>(float*, float const*, float const*, long, diffSquaredBinaryOp<float>, plusBinaryOp<float>, float, CUstream_st*);
-template __host__ CUDART_DEVICE  double combineReduceOpLauncher<double, multBinaryOp, plusBinaryOp>(double*, double const*, double const*, long, multBinaryOp<double>, plusBinaryOp<double>, double, CUstream_st*);
-template __host__ CUDART_DEVICE  int combineReduceOpLauncher<int, equalsBinaryOp, plusBinaryOp>(int*, int const*, int const*, long, equalsBinaryOp<int>, plusBinaryOp<int>, int, CUstream_st*);
-template __host__ CUDART_DEVICE  unsigned long combineReduceOpLauncher<unsigned long, diffSquaredBinaryOp, plusBinaryOp>(unsigned long*, unsigned long const*, unsigned long const*, long, diffSquaredBinaryOp<unsigned long>, plusBinaryOp<unsigned long>, unsigned long, CUstream_st*);
-template __host__ CUDART_DEVICE  unsigned int combineReduceOpLauncher<unsigned int, equalsBinaryOp, plusBinaryOp>(unsigned int*, unsigned int const*, unsigned int const*, long, equalsBinaryOp<unsigned int>, plusBinaryOp<unsigned int>, unsigned int, CUstream_st*);
-template __host__ CUDART_DEVICE  double combineReduceOpLauncher<double, equalsBinaryOp, plusBinaryOp>(double*, double const*, double const*, long, equalsBinaryOp<double>, plusBinaryOp<double>, double, CUstream_st*);
-template __host__ CUDART_DEVICE  long combineReduceOpLauncher<long, multBinaryOp, plusBinaryOp>(long*, long const*, long const*, long, multBinaryOp<long>, plusBinaryOp<long>, long, CUstream_st*);
-template __host__ CUDART_DEVICE  long combineReduceOpLauncher<long, equalsBinaryOp, andBinaryOp>(long*, long const*, long const*, long, equalsBinaryOp<long>, andBinaryOp<long>, long, CUstream_st*);
-template __host__ CUDART_DEVICE  float combineReduceOpLauncher<float, almostEqualsBinaryOp, andBinaryOp>(float*, float const*, float const*, long, almostEqualsBinaryOp<float>, andBinaryOp<float>, float, CUstream_st*);
-template __host__ CUDART_DEVICE  int combineReduceOpLauncher<int, diffSquaredBinaryOp, plusBinaryOp>(int*, int const*, int const*, long, diffSquaredBinaryOp<int>, plusBinaryOp<int>, int, CUstream_st*);
-template __host__ CUDART_DEVICE  unsigned int combineReduceOpLauncher<unsigned int, almostEqualsBinaryOp, andBinaryOp>(unsigned int*, unsigned int const*, unsigned int const*, long, almostEqualsBinaryOp<unsigned int>, andBinaryOp<unsigned int>, unsigned int, CUstream_st*);
-template __host__ CUDART_DEVICE  long combineReduceOpLauncher<long, diffSquaredBinaryOp, plusBinaryOp>(long*, long const*, long const*, long, diffSquaredBinaryOp<long>, plusBinaryOp<long>, long, CUstream_st*);
-template __host__ CUDART_DEVICE  float combineReduceOpLauncher<float, equalsBinaryOp, plusBinaryOp>(float*, float const*, float const*, long, equalsBinaryOp<float>, plusBinaryOp<float>, float, CUstream_st*);
-template __host__ CUDART_DEVICE  int combineReduceOpLauncher<int, equalsBinaryOp, andBinaryOp>(int*, int const*, int const*, long, equalsBinaryOp<int>, andBinaryOp<int>, int, CUstream_st*);
-template __host__ CUDART_DEVICE  unsigned long combineReduceOpLauncher<unsigned long, equalsBinaryOp, plusBinaryOp>(unsigned long*, unsigned long const*, unsigned long const*, long, equalsBinaryOp<unsigned long>, plusBinaryOp<unsigned long>, unsigned long, CUstream_st*);
-template __host__ CUDART_DEVICE  float combineReduceOpLauncher<float, multBinaryOp, plusBinaryOp>(float*, float const*, float const*, long, multBinaryOp<float>, plusBinaryOp<float>, float, CUstream_st*);
-template __host__ CUDART_DEVICE  unsigned long combineReduceOpLauncher<unsigned long, almostEqualsBinaryOp, andBinaryOp>(unsigned long*, unsigned long const*, unsigned long const*, long, almostEqualsBinaryOp<unsigned long>, andBinaryOp<unsigned long>, unsigned long, CUstream_st*);
-template __host__ CUDART_DEVICE  double combineReduceOpLauncher<double, almostEqualsBinaryOp, andBinaryOp>(double*, double const*, double const*, long, almostEqualsBinaryOp<double>, andBinaryOp<double>, double, CUstream_st*);
-template __host__ CUDART_DEVICE  unsigned int combineReduceOpLauncher<unsigned int, multBinaryOp, plusBinaryOp>(unsigned int*, unsigned int const*, unsigned int const*, long, multBinaryOp<unsigned int>, plusBinaryOp<unsigned int>, unsigned int, CUstream_st*);
-template __host__ CUDART_DEVICE  long combineReduceOpLauncher<long, almostEqualsBinaryOp, andBinaryOp>(long*, long const*, long const*, long, almostEqualsBinaryOp<long>, andBinaryOp<long>, long, CUstream_st*);
-template __host__ CUDART_DEVICE  int combineReduceOpLauncher<int, multBinaryOp, plusBinaryOp>(int*, int const*, int const*, long, multBinaryOp<int>, plusBinaryOp<int>, int, CUstream_st*);
+template __host__ CUDART_DEVICE long combineReduceOpLauncher<long, equalsBinaryOp, plusBinaryOp>(long*, long const*, long const*, int,int,int,int, equalsBinaryOp<long>, plusBinaryOp<long>, long, CUstream_st*);
+template __host__ CUDART_DEVICE  float combineReduceOpLauncher<float, equalsBinaryOp, andBinaryOp>(float*, float const*, float const*, int,int,int,int, equalsBinaryOp<float>, andBinaryOp<float>, float, CUstream_st*);
+template __host__ CUDART_DEVICE  unsigned long combineReduceOpLauncher<unsigned long, multBinaryOp, plusBinaryOp>(unsigned long*, unsigned long const*, unsigned long const*, int,int,int,int, multBinaryOp<unsigned long>, plusBinaryOp<unsigned long>, unsigned long, CUstream_st*);
+template __host__ CUDART_DEVICE  unsigned int combineReduceOpLauncher<unsigned int, diffSquaredBinaryOp, plusBinaryOp>(unsigned int*, unsigned int const*, unsigned int const*, int,int,int,int, diffSquaredBinaryOp<unsigned int>, plusBinaryOp<unsigned int>, unsigned int, CUstream_st*);
+template __host__ CUDART_DEVICE  double combineReduceOpLauncher<double, diffSquaredBinaryOp, plusBinaryOp>(double*, double const*, double const*, int,int,int,int, diffSquaredBinaryOp<double>, plusBinaryOp<double>, double, CUstream_st*);
+template __host__ CUDART_DEVICE  int combineReduceOpLauncher<int, almostEqualsBinaryOp, andBinaryOp>(int*, int const*, int const*, int,int,int,int, almostEqualsBinaryOp<int>, andBinaryOp<int>, int, CUstream_st*);
+template __host__ CUDART_DEVICE  unsigned long combineReduceOpLauncher<unsigned long, equalsBinaryOp, andBinaryOp>(unsigned long*, unsigned long const*, unsigned long const*, int,int,int,int, equalsBinaryOp<unsigned long>, andBinaryOp<unsigned long>, unsigned long, CUstream_st*);
+template __host__ CUDART_DEVICE  unsigned int combineReduceOpLauncher<unsigned int, equalsBinaryOp, andBinaryOp>(unsigned int*, unsigned int const*, unsigned int const*, int,int,int,int, equalsBinaryOp<unsigned int>, andBinaryOp<unsigned int>, unsigned int, CUstream_st*);
+template __host__ CUDART_DEVICE  double combineReduceOpLauncher<double, equalsBinaryOp, andBinaryOp>(double*, double const*, double const*, int,int,int,int, equalsBinaryOp<double>, andBinaryOp<double>, double, CUstream_st*);
+template __host__ CUDART_DEVICE  float combineReduceOpLauncher<float, diffSquaredBinaryOp, plusBinaryOp>(float*, float const*, float const*, int,int,int,int, diffSquaredBinaryOp<float>, plusBinaryOp<float>, float, CUstream_st*);
+template __host__ CUDART_DEVICE  double combineReduceOpLauncher<double, multBinaryOp, plusBinaryOp>(double*, double const*, double const*, int,int,int,int, multBinaryOp<double>, plusBinaryOp<double>, double, CUstream_st*);
+template __host__ CUDART_DEVICE  int combineReduceOpLauncher<int, equalsBinaryOp, plusBinaryOp>(int*, int const*, int const*, int,int,int,int, equalsBinaryOp<int>, plusBinaryOp<int>, int, CUstream_st*);
+template __host__ CUDART_DEVICE  unsigned long combineReduceOpLauncher<unsigned long, diffSquaredBinaryOp, plusBinaryOp>(unsigned long*, unsigned long const*, unsigned long const*, int,int,int,int, diffSquaredBinaryOp<unsigned long>, plusBinaryOp<unsigned long>, unsigned long, CUstream_st*);
+template __host__ CUDART_DEVICE  unsigned int combineReduceOpLauncher<unsigned int, equalsBinaryOp, plusBinaryOp>(unsigned int*, unsigned int const*, unsigned int const*, int,int,int,int, equalsBinaryOp<unsigned int>, plusBinaryOp<unsigned int>, unsigned int, CUstream_st*);
+template __host__ CUDART_DEVICE  double combineReduceOpLauncher<double, equalsBinaryOp, plusBinaryOp>(double*, double const*, double const*, int,int,int,int, equalsBinaryOp<double>, plusBinaryOp<double>, double, CUstream_st*);
+template __host__ CUDART_DEVICE  long combineReduceOpLauncher<long, multBinaryOp, plusBinaryOp>(long*, long const*, long const*, int,int,int,int, multBinaryOp<long>, plusBinaryOp<long>, long, CUstream_st*);
+template __host__ CUDART_DEVICE  long combineReduceOpLauncher<long, equalsBinaryOp, andBinaryOp>(long*, long const*, long const*, int,int,int,int, equalsBinaryOp<long>, andBinaryOp<long>, long, CUstream_st*);
+template __host__ CUDART_DEVICE  float combineReduceOpLauncher<float, almostEqualsBinaryOp, andBinaryOp>(float*, float const*, float const*, int,int,int,int, almostEqualsBinaryOp<float>, andBinaryOp<float>, float, CUstream_st*);
+template __host__ CUDART_DEVICE  int combineReduceOpLauncher<int, diffSquaredBinaryOp, plusBinaryOp>(int*, int const*, int const*, int,int,int,int, diffSquaredBinaryOp<int>, plusBinaryOp<int>, int, CUstream_st*);
+template __host__ CUDART_DEVICE  unsigned int combineReduceOpLauncher<unsigned int, almostEqualsBinaryOp, andBinaryOp>(unsigned int*, unsigned int const*, unsigned int const*, int,int,int,int, almostEqualsBinaryOp<unsigned int>, andBinaryOp<unsigned int>, unsigned int, CUstream_st*);
+template __host__ CUDART_DEVICE  long combineReduceOpLauncher<long, diffSquaredBinaryOp, plusBinaryOp>(long*, long const*, long const*, int,int,int,int, diffSquaredBinaryOp<long>, plusBinaryOp<long>, long, CUstream_st*);
+template __host__ CUDART_DEVICE  float combineReduceOpLauncher<float, equalsBinaryOp, plusBinaryOp>(float*, float const*, float const*, int,int,int,int, equalsBinaryOp<float>, plusBinaryOp<float>, float, CUstream_st*);
+template __host__ CUDART_DEVICE  int combineReduceOpLauncher<int, equalsBinaryOp, andBinaryOp>(int*, int const*, int const*, int,int,int,int, equalsBinaryOp<int>, andBinaryOp<int>, int, CUstream_st*);
+template __host__ CUDART_DEVICE  unsigned long combineReduceOpLauncher<unsigned long, equalsBinaryOp, plusBinaryOp>(unsigned long*, unsigned long const*, unsigned long const*, int,int,int,int, equalsBinaryOp<unsigned long>, plusBinaryOp<unsigned long>, unsigned long, CUstream_st*);
+template __host__ CUDART_DEVICE  float combineReduceOpLauncher<float, multBinaryOp, plusBinaryOp>(float*, float const*, float const*, int,int,int,int, multBinaryOp<float>, plusBinaryOp<float>, float, CUstream_st*);
+template __host__ CUDART_DEVICE  unsigned long combineReduceOpLauncher<unsigned long, almostEqualsBinaryOp, andBinaryOp>(unsigned long*, unsigned long const*, unsigned long const*, int,int,int,int, almostEqualsBinaryOp<unsigned long>, andBinaryOp<unsigned long>, unsigned long, CUstream_st*);
+template __host__ CUDART_DEVICE  double combineReduceOpLauncher<double, almostEqualsBinaryOp, andBinaryOp>(double*, double const*, double const*, int,int,int,int, almostEqualsBinaryOp<double>, andBinaryOp<double>, double, CUstream_st*);
+template __host__ CUDART_DEVICE  unsigned int combineReduceOpLauncher<unsigned int, multBinaryOp, plusBinaryOp>(unsigned int*, unsigned int const*, unsigned int const*, int,int,int,int, multBinaryOp<unsigned int>, plusBinaryOp<unsigned int>, unsigned int, CUstream_st*);
+template __host__ CUDART_DEVICE  long combineReduceOpLauncher<long, almostEqualsBinaryOp, andBinaryOp>(long*, long const*, long const*, int,int,int,int, almostEqualsBinaryOp<long>, andBinaryOp<long>, long, CUstream_st*);
+template __host__ CUDART_DEVICE  int combineReduceOpLauncher<int, multBinaryOp, plusBinaryOp>(int*, int const*, int const*, int,int,int,int, multBinaryOp<int>, plusBinaryOp<int>, int, CUstream_st*);
 
 #else
-template __host__ CUDART_DEVICE float combineReduceOpLauncher<float, 0, 1>(float*, float const*, float const*, long, BinaryOpF<float, 0>, BinaryOpF<float, 1>, float, CUstream_st*);
-template __host__ CUDART_DEVICE float combineReduceOpLauncher<float, 1, 1>(float*, float const*, float const*, long, BinaryOpF<float, 1>, BinaryOpF<float, 1>, float, CUstream_st*);
-template __host__ CUDART_DEVICE double combineReduceOpLauncher<double, 0, 1>(double*, double const*, double const*, long, BinaryOpF<double, 0>, BinaryOpF<double, 1>, double, CUstream_st*);
-template __host__ CUDART_DEVICE double combineReduceOpLauncher<double, 1, 1>(double*, double const*, double const*, long, BinaryOpF<double, 1>, BinaryOpF<double, 1>, double, CUstream_st*);
-template __host__ CUDART_DEVICE int combineReduceOpLauncher<int, 0, 1>(int*, int const*, int const*, long, BinaryOpF<int, 0>, BinaryOpF<int, 1>, int, CUstream_st*);
-template __host__ CUDART_DEVICE int combineReduceOpLauncher<int, 1, 1>(int*, int const*, int const*, long, BinaryOpF<int, 1>, BinaryOpF<int, 1>, int, CUstream_st*);
-template __host__ CUDART_DEVICE uint combineReduceOpLauncher<uint, 0, 1>(uint*, uint const*, uint const*, long, BinaryOpF<uint, 0>, BinaryOpF<uint, 1>, uint, CUstream_st*);
-template __host__ CUDART_DEVICE uint combineReduceOpLauncher<uint, 1, 1>(uint*, uint const*, uint const*, long, BinaryOpF<uint, 1>, BinaryOpF<uint, 1>, uint, CUstream_st*);
-template __host__ CUDART_DEVICE long combineReduceOpLauncher<long, 0, 1>(long*, long const*, long const*, long, BinaryOpF<long, 0>, BinaryOpF<long, 1>, long, CUstream_st*);
-template __host__ CUDART_DEVICE long combineReduceOpLauncher<long, 1, 1>(long*, long const*, long const*, long, BinaryOpF<long, 1>, BinaryOpF<long, 1>, long, CUstream_st*);
-template __host__ CUDART_DEVICE ulong combineReduceOpLauncher<ulong, 0, 1>(ulong*, ulong const*, ulong const*, long, BinaryOpF<ulong, 0>, BinaryOpF<ulong, 1>, ulong, CUstream_st*);
-template __host__ CUDART_DEVICE ulong combineReduceOpLauncher<ulong, 1, 1>(ulong*, ulong const*, ulong const*, long, BinaryOpF<ulong, 1>, BinaryOpF<ulong, 1>, ulong, CUstream_st*);
+template __host__ CUDART_DEVICE float combineReduceOpLauncher<float, 0, 1>(float*, float const*, float const*, int,int,int,int, BinaryOpF<float, 0>, BinaryOpF<float, 1>, float, CUstream_st*);
+template __host__ CUDART_DEVICE float combineReduceOpLauncher<float, 1, 1>(float*, float const*, float const*, int,int,int,int, BinaryOpF<float, 1>, BinaryOpF<float, 1>, float, CUstream_st*);
+template __host__ CUDART_DEVICE double combineReduceOpLauncher<double, 0, 1>(double*, double const*, double const*, int,int,int,int, BinaryOpF<double, 0>, BinaryOpF<double, 1>, double, CUstream_st*);
+template __host__ CUDART_DEVICE double combineReduceOpLauncher<double, 1, 1>(double*, double const*, double const*, int,int,int,int, BinaryOpF<double, 1>, BinaryOpF<double, 1>, double, CUstream_st*);
+template __host__ CUDART_DEVICE int combineReduceOpLauncher<int, 0, 1>(int*, int const*, int const*, int,int,int,int, BinaryOpF<int, 0>, BinaryOpF<int, 1>, int, CUstream_st*);
+template __host__ CUDART_DEVICE int combineReduceOpLauncher<int, 1, 1>(int*, int const*, int const*, int,int,int,int, BinaryOpF<int, 1>, BinaryOpF<int, 1>, int, CUstream_st*);
+template __host__ CUDART_DEVICE uint combineReduceOpLauncher<uint, 0, 1>(uint*, uint const*, uint const*, int,int,int,int, BinaryOpF<uint, 0>, BinaryOpF<uint, 1>, uint, CUstream_st*);
+template __host__ CUDART_DEVICE uint combineReduceOpLauncher<uint, 1, 1>(uint*, uint const*, uint const*, int,int,int,int, BinaryOpF<uint, 1>, BinaryOpF<uint, 1>, uint, CUstream_st*);
+template __host__ CUDART_DEVICE long combineReduceOpLauncher<long, 0, 1>(long*, long const*, long const*, int,int,int,int, BinaryOpF<long, 0>, BinaryOpF<long, 1>, long, CUstream_st*);
+template __host__ CUDART_DEVICE long combineReduceOpLauncher<long, 1, 1>(long*, long const*, long const*, int,int,int,int, BinaryOpF<long, 1>, BinaryOpF<long, 1>, long, CUstream_st*);
+template __host__ CUDART_DEVICE ulong combineReduceOpLauncher<ulong, 0, 1>(ulong*, ulong const*, ulong const*, int,int,int,int, BinaryOpF<ulong, 0>, BinaryOpF<ulong, 1>, ulong, CUstream_st*);
+template __host__ CUDART_DEVICE ulong combineReduceOpLauncher<ulong, 1, 1>(ulong*, ulong const*, ulong const*, int,int,int,int, BinaryOpF<ulong, 1>, BinaryOpF<ulong, 1>, ulong, CUstream_st*);
 #endif
 
 
@@ -499,82 +698,18 @@ __global__ void reduceOpKernel( T* g_odata, const T* g_idata, long n,
 	// each thread puts its local sum into shared memory
 	sdata[tid] = myReduction;
 	__syncthreads();
+//	template <typename T, int MopDim, int BopDim>
+//	__inline__ __device__ void shreduceShared(T* g_odata, T* sdata, T& myReduction,  uint blockSize, uint tid, const uint blockIdx_x, BinaryOpF<T,BopDim> bop)
 
-	/* sdata-a */
-
-	// do reduction in shared mem
-	if (blockSize >= 1024) {
-		if (tid < 512) {
-			sdata[tid] = myReduction = op(myReduction, sdata[tid + 512]);
-		}
-
-		__syncthreads();
-	}
-
-	if (blockSize >= 512) {
-		if (tid < 256) {
-			sdata[tid] = myReduction = op(myReduction, sdata[tid + 256]);
-		}
-
-		__syncthreads();
-	}
-
-	if (blockSize >= 256) {
-		if (tid < 128) {
-			sdata[tid] = myReduction = op(myReduction, sdata[tid + 128]);
-		}
-
-		__syncthreads();
-	}
-
-	if (blockSize >= 128) {
-		if (tid < 64) {
-			sdata[tid] = myReduction = op(myReduction, sdata[tid + 64]);
-		}
-
-		__syncthreads();
-	}
-
-	if (tid < 32) {
-		// now that we are using warp-synchronous programming (below)
-		// we need to declare our shared memory volatile so that the compiler
-		// doesn'float reorder stores to it and induce incorrect behavior.
-		if (blockSize >= 64) {
-				myReduction = op(myReduction, sdata[tid + 32]);
-		}
-
-		if (blockSize >= 32) {
-			myReduction =op(myReduction,  shfl(myReduction, tid + 16));
-		}
-
-		if (blockSize >= 16) {
-			myReduction =op(myReduction,  shfl(myReduction, tid + 8));
-		}
-
-		if (blockSize >= 8) {
-			myReduction =op(myReduction,  shfl(myReduction, tid + 4));
-		}
-
-		if (blockSize >= 4) {
-			myReduction =op(myReduction,  shfl(myReduction, tid + 2));
-		}
-
-		if (blockSize >= 2) {
-			myReduction =op(myReduction,  shfl(myReduction, tid + 1));
-		}
-
-	}
-
-	if (tid == 0)
-		g_odata[blockIdx.x] = myReduction;
+	shreduceShared  (g_odata, sdata, myReduction, blockSize, tid, blockIdx.x, op);
 }
 
 #ifdef  CuMatrix_Enable_KTS
 template<typename T, uint blockSize, bool nIsPow2, template <typename> class BinaryOp>
-__global__ void reduceOpKernel(DMatrix<T> out, const DMatrix<T> src, long n, BinaryOp<T> op, T start, uint stride, uint offset)
+__global__ void reduceOpKernel(DMatrix<T> out, const DMatrix<T> src, long n, BinaryOp<T> op, T start, uint offset)
 #else
 template<typename T, uint blockSize, bool nIsPow2, int StateDim>
-__global__ void reduceOpKernel(DMatrix<T> out, const DMatrix<T> src, long n, BinaryOpF<T,StateDim> op, T start, uint stride, uint offset)
+__global__ void reduceOpKernel(DMatrix<T> out, const DMatrix<T> src, long n, BinaryOpF<T,StateDim> op, T start, uint offset)
 #endif
 {
 
@@ -590,7 +725,7 @@ __global__ void reduceOpKernel(DMatrix<T> out, const DMatrix<T> src, long n, Bin
 
 	FirstThread {
 		if(checkDebug(debugRedux))
-			flprintf("in reduceOpKernel blockSize %d n %d, src.elements %p last %p\n",blockSize,  n, src.elements + offset, src.elements + (n-1) * stride);
+			flprintf("in reduceOpKernel blockSize %d n %d, src.elements %p last %p\n",blockSize,  n, src.elements + offset, src.elements + (n-1) * src.p);
 	}
 
 	// we reduce multiple elements per thread.  The number is determined by the
@@ -599,94 +734,31 @@ __global__ void reduceOpKernel(DMatrix<T> out, const DMatrix<T> src, long n, Bin
 	while (i < n) {
 		myReduction = op(myReduction, get(src, offset + i )); // in effect, there may be two pitches; one for matrix itself, and the other for the column if stride > 1
 		if(checkDebug(debugRedux) && i == n - 1 )
-	 			flprintf("i == n - 1!, i %lu reading src(%p)\n", i, src.elements + i);
+	 			flprintf("i == n - 1!, i %lu reading src(%p) %f\n", i, src.elements + i, (double)src.elements[i]);
 		//if(tid==0)printf("reduceOpKernel i %d op(%f, %f) \n", i, myReduction,get(src,i));
 		//printf("%f\n", myReduction  );
 		// ensure we don'float read out of bounds -- this is optimized away for powerOf2 sized arrays
 		if (nIsPow2 ||i + blockSize < n)
 			myReduction = op(myReduction, get(src,offset + (i + blockSize)));
+/*
 		if(checkDebug(debugRedux) && i + blockSize== n - 1 )
 			flprintf("i + blockSize== n - 1!, i %lu reading src(%p)\n", i, src.elements + offset + (i + blockSize) * stride);
+*/
 		i += gridSize;
 	}
 	// each thread puts its local sum into shared memory
 	sdata[tid] = myReduction;
 	__syncthreads();
 
-	/* sdata-a */
-
-	// do reduction in shared mem
-	if (blockSize >= 1024) {
-		if (tid < 512) {
-			sdata[tid] = myReduction = op(myReduction, sdata[tid + 512]);
-		}
-		__syncthreads();
-	}
-
-	if (blockSize >= 512) {
-		if (tid < 256) {
-			sdata[tid] = myReduction = op(myReduction, sdata[tid + 256]);
-		}
-
-		__syncthreads();
-	}
-
-	if (blockSize >= 256) {
-		if (tid < 128) {
-			sdata[tid] = myReduction = op(myReduction, sdata[tid + 128]);
-		}
-
-		__syncthreads();
-	}
-
-	if (blockSize >= 128) {
-		if (tid < 64) {
-			sdata[tid] = myReduction = op(myReduction, sdata[tid + 64]);
-		}
-
-		__syncthreads();
-	}
-
-	if (tid < 32) {
-		if (blockSize >= 64) {
-				myReduction = op(myReduction, sdata[tid + 32]);
-		}
-
-		if (blockSize >= 32) {
-			myReduction =op(myReduction,  shfl(myReduction, tid + 16));
-		}
-
-		if (blockSize >= 16) {
-			myReduction =op(myReduction,  shfl(myReduction, tid + 8));
-		}
-
-		if (blockSize >= 8) {
-			myReduction =op(myReduction,  shfl(myReduction, tid + 4));
-		}
-
-		if (blockSize >= 4) {
-			myReduction =op(myReduction,  shfl(myReduction, tid + 2));
-		}
-
-		if (blockSize >= 2) {
-			myReduction =op(myReduction,  shfl(myReduction, tid + 1));
-		}
-
-	}
-
-	if (tid == 0) {
-		out.elements[blockIdx.x] = myReduction;
-		if(checkDebug(debugRedux))
-			flprintf("reduceOpKernel setting %p[%d] to %f\n", out.elements, blockIdx.x, myReduction);
-	}
+	shreduceShared(out.elements, sdata, myReduction, blockSize, tid, blockIdx.x, op);
 }
 
 #ifdef  CuMatrix_Enable_KTS
 template<typename T, template <typename> class BinaryOp> __host__ CUDART_DEVICE void reduceLauncher(T* result, DMatrix<T> buff, long n, const DMatrix<T> src,
-		BinaryOp<T> op, T start, int stride, int offset, cudaStream_t stream)
+		BinaryOp<T> op, T start, int offset, cudaStream_t stream)
 #else
 template<typename T, int StateDim> __host__ CUDART_DEVICE void reduceLauncher(T* result, DMatrix<T> buff, long n, const DMatrix<T> src,
-		MonoidF<T,StateDim> op, T start, int stride, int offset, cudaStream_t stream)
+		MonoidF<T,StateDim> op, T start, int offset, cudaStream_t stream)
 #endif
 {
  	if(!result) {
@@ -709,8 +781,8 @@ template<typename T, int StateDim> __host__ CUDART_DEVICE void reduceLauncher(T*
 		dimBlock.x = threads;
 		dimGrid.x = blocks;
 		if(checkDebug(debugRedux)) {
-			flprintf("reduceLauncher smemSize %d buff %p buff.elems %p bl %d th %d n %u stride %u, src.elements %p last %p\n",
-				smemSize, &buff,buff.elements, blocks,threads,n, stride, src.elements, src.elements - 1 + n);
+			flprintf("reduceLauncher smemSize %d buff %p buff.elems %p bl %d th %d n %u src.p %d, src.elements %p last %p\n",
+				smemSize, &buff,buff.elements, blocks,threads,n, src.p, src.elements, src.elements - 1 + n);
 		}
 #ifndef __CUDA_ARCH__
 		checkCudaError(cudaGetLastError());
@@ -722,31 +794,31 @@ template<typename T, int StateDim> __host__ CUDART_DEVICE void reduceLauncher(T*
 #ifdef  CuMatrix_Enable_KTS
 			case 1024:
 				//reduceOpKernel(DMatrix<T> out, const DMatrix<T> src, T* g_odata, long n, BinaryOp op, T start)
-				reduceOpKernel<T, 1024, true, BinaryOp> <<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start,stride, offset); break;
+				reduceOpKernel<T, 1024, true, BinaryOp> <<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start, offset); break;
 			case 512:
-				reduceOpKernel<T, 512, true, BinaryOp> <<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start,stride, offset); break;
+				reduceOpKernel<T, 512, true, BinaryOp> <<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start, offset); break;
 			case 256:
-				reduceOpKernel<T, 256, true,BinaryOp><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start,stride, offset); break;
+				reduceOpKernel<T, 256, true,BinaryOp><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start, offset); break;
 			case 128:
-				reduceOpKernel<T, 128, true,BinaryOp><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start,stride, offset); break;
+				reduceOpKernel<T, 128, true,BinaryOp><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start, offset); break;
 			case 64:
-				reduceOpKernel<T, 64, true,BinaryOp><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start,stride, offset); break;
+				reduceOpKernel<T, 64, true,BinaryOp><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start, offset); break;
 			case 32:
-				reduceOpKernel<T, 32, true,BinaryOp><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start,stride, offset); break;
+				reduceOpKernel<T, 32, true,BinaryOp><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start, offset); break;
 #else
 			case 1024:
 				//reduceOpKernel(DMatrix<T> out, const DMatrix<T> src, T* g_odata, long n, BinaryOp op, T start)
-				reduceOpKernel<T, 1024, true, StateDim> <<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start,stride, offset); break;
+				reduceOpKernel<T, 1024, true, StateDim> <<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start, offset); break;
 			case 512:
-				reduceOpKernel<T, 512, true, StateDim> <<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start,stride, offset); break;
+				reduceOpKernel<T, 512, true, StateDim> <<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start, offset); break;
 			case 256:
-				reduceOpKernel<T, 256, true, StateDim><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start,stride, offset); break;
+				reduceOpKernel<T, 256, true, StateDim><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start, offset); break;
 			case 128:
-				reduceOpKernel<T, 128, true, StateDim><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start,stride, offset); break;
+				reduceOpKernel<T, 128, true, StateDim><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start, offset); break;
 			case 64:
-				reduceOpKernel<T, 64, true, StateDim><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start,stride, offset); break;
+				reduceOpKernel<T, 64, true, StateDim><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start, offset); break;
 			case 32:
-				reduceOpKernel<T, 32, true, StateDim><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start,stride, offset); break;
+				reduceOpKernel<T, 32, true, StateDim><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start, offset); break;
 #endif
 			case 16:
 			case 8:
@@ -786,61 +858,60 @@ template<typename T, int StateDim> __host__ CUDART_DEVICE void reduceLauncher(T*
 				return;
 			}
 		} else {
-			if(checkDebug(debugRedux)){flprintf("!power of 2 threads %d, buff.elements %p, rSrc.elements %p\n", threads,buff.elements, rSrc.elements);}
+			if(checkDebug(debugRedux)){flprintf("!power of 2 n %ld -> threads %d, buff.elements %p, rSrc.elements %p\n", n, threads,buff.elements, rSrc.elements);}
 			cherr(cudaDeviceSynchronize());
 			cherr(cudaPeekAtLastError());
 			switch (threads) {
 #ifdef  CuMatrix_Enable_KTS
 			case 1024:
-				reduceOpKernel<T, 1024, false, BinaryOp> <<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start,stride, offset); break;
+				reduceOpKernel<T, 1024, false, BinaryOp> <<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start, offset); break;
 			case 512:
-				reduceOpKernel<T, 512, false, BinaryOp> <<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start,stride, offset); break;
+				reduceOpKernel<T, 512, false, BinaryOp> <<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start, offset); break;
 			case 256:
-				reduceOpKernel<T, 256, false,BinaryOp><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start,stride, offset); break;
+				reduceOpKernel<T, 256, false,BinaryOp><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start, offset); break;
 			case 128:
-				reduceOpKernel<T, 128, false,BinaryOp><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start,stride, offset); break;
+				reduceOpKernel<T, 128, false,BinaryOp><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start, offset); break;
 			case 64:
-				reduceOpKernel<T, 64, false,BinaryOp><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start,stride, offset); break;
+				reduceOpKernel<T, 64, false,BinaryOp><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start, offset); break;
 			case 32:
-				reduceOpKernel<T, 32, false,BinaryOp><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start,stride, offset); break;
+				reduceOpKernel<T, 32, false,BinaryOp><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start, offset); break;
 			case 16:
-				reduceOpKernel<T, 16, false,BinaryOp><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start,stride, offset); break;
+				reduceOpKernel<T, 16, false,BinaryOp><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start, offset); break;
 			case 8:
-				reduceOpKernel<T, 8, false,BinaryOp><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start,stride, offset); break;
+				reduceOpKernel<T, 8, false,BinaryOp><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start, offset); break;
 			case 4:
-				reduceOpKernel<T, 4, false,BinaryOp><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start,stride, offset); break;
+				reduceOpKernel<T, 4, false,BinaryOp><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start, offset); break;
 			case 2:
-				reduceOpKernel<T, 2, false,BinaryOp><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start,stride, offset); break;
+				reduceOpKernel<T, 2, false,BinaryOp><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start, offset); break;
 			case 1:
-				reduceOpKernel<T, 1, false,BinaryOp><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start,stride, offset); break;
+				reduceOpKernel<T, 1, false,BinaryOp><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start, offset); break;
 #else
 			case 1024:
-				reduceOpKernel<T, 1024, false, StateDim> <<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start,stride, offset); break;
+				reduceOpKernel<T, 1024, false, StateDim> <<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start, offset); break;
 			case 512:
-				reduceOpKernel<T, 512, false, StateDim> <<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start,stride, offset); break;
+				reduceOpKernel<T, 512, false, StateDim> <<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start, offset); break;
 			case 256:
-				reduceOpKernel<T, 256, false, StateDim><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start,stride, offset); break;
+				reduceOpKernel<T, 256, false, StateDim><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start, offset); break;
 			case 128:
-				reduceOpKernel<T, 128, false, StateDim><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start,stride, offset); break;
+				reduceOpKernel<T, 128, false, StateDim><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start, offset); break;
 			case 64:
-				reduceOpKernel<T, 64, false, StateDim><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start,stride, offset); break;
+				reduceOpKernel<T, 64, false, StateDim><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start, offset); break;
 			case 32:
-				reduceOpKernel<T, 32, false, StateDim><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start,stride, offset); break;
+				reduceOpKernel<T, 32, false, StateDim><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start, offset); break;
 			case 16:
-				reduceOpKernel<T, 16, false, StateDim><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start,stride, offset); break;
+				reduceOpKernel<T, 16, false, StateDim><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start, offset); break;
 			case 8:
-				reduceOpKernel<T, 8, false, StateDim><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start,stride, offset); break;
+				reduceOpKernel<T, 8, false, StateDim><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start, offset); break;
 			case 4:
-				reduceOpKernel<T, 4, false, StateDim><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start,stride, offset); break;
+				reduceOpKernel<T, 4, false, StateDim><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start, offset); break;
 			case 2:
-				reduceOpKernel<T, 2, false, StateDim><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start,stride, offset); break;
+				reduceOpKernel<T, 2, false, StateDim><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start, offset); break;
 			case 1:
-				reduceOpKernel<T, 1, false, StateDim><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start,stride, offset); break;
+				reduceOpKernel<T, 1, false, StateDim><<< dimGrid, dimBlock, smemSize, stream >>>(buff, rSrc, n,op, start, offset); break;
 #endif
 			}
 		}
 
-		stride =1; // only meaningful for first pass
 		offset =0;
 #ifndef __CUDA_ARCH__
 		checkCudaError(cudaGetLastError());
@@ -858,7 +929,7 @@ template<typename T, int StateDim> __host__ CUDART_DEVICE void reduceLauncher(T*
 			rSrc.elements  = buff.elements;
 
 			rSrc.m = buff.m;
-			rSrc.p = buff.p;
+			rSrc.p = 1;  // buff.p only meaningful for first pass; intermediate results ignore source pitch
 			rSrc.n = buff.n;
 			firstRedux = false;
 		}
@@ -892,8 +963,11 @@ template<typename T, int StateDim> __host__ CUDART_DEVICE void reduceLauncher(T*
 	checkCudaError(cudaMalloc(&devLocal,sizeof(T)));
 	checkCudaError(
 			cudaMemcpy/*Async*/(&localRes, devLocal, sizeof(T), cudaMemcpyDeviceToHost/*, stream*/));
+	CuTimer timer;
+	timer.start();
 	checkCudaError(
 			cudaMemcpy/*Async*/(&localRes, buff.elements, sizeof(T), cudaMemcpyDeviceToHost/*, stream*/));
+	//CuMatrix<T>::incDhCopy("reduceLauncher", sizeof(T),timer.stop());
 
 	checkCudaError(cudaFree(devLocal));
 
@@ -910,59 +984,59 @@ template<typename T, int StateDim> __host__ CUDART_DEVICE void reduceLauncher(T*
 
 #ifdef  CuMatrix_Enable_KTS
 
-template __host__ CUDART_DEVICE void reduceLauncher<float,plusBinaryOp>( float*, DMatrix<float>,  long, const DMatrix<float>, plusBinaryOp<float>, float, int,int,cudaStream_t);
-template __host__ CUDART_DEVICE void reduceLauncher<double,plusBinaryOp>(double*, DMatrix<double>,  long, const DMatrix<double>, plusBinaryOp<double>, double,int,int,cudaStream_t);
-template __host__ CUDART_DEVICE void reduceLauncher<ulong,plusBinaryOp>(ulong*, DMatrix<ulong>,  long, const DMatrix<ulong>, plusBinaryOp<ulong>, ulong,int,int,cudaStream_t);
-template __host__ CUDART_DEVICE void reduceLauncher<long, plusBinaryOp>(long*, DMatrix<long>, long, DMatrix<long>, plusBinaryOp<long>, long, int,int, CUstream_st*);
+template __host__ CUDART_DEVICE void reduceLauncher<float,plusBinaryOp>( float*, DMatrix<float>,  long, const DMatrix<float>, plusBinaryOp<float>, float, int,cudaStream_t);
+template __host__ CUDART_DEVICE void reduceLauncher<double,plusBinaryOp>(double*, DMatrix<double>,  long, const DMatrix<double>, plusBinaryOp<double>, double,int,cudaStream_t);
+template __host__ CUDART_DEVICE void reduceLauncher<ulong,plusBinaryOp>(ulong*, DMatrix<ulong>,  long, const DMatrix<ulong>, plusBinaryOp<ulong>, ulong,int,cudaStream_t);
+template __host__ CUDART_DEVICE void reduceLauncher<long, plusBinaryOp>(long*, DMatrix<long>, long, DMatrix<long>, plusBinaryOp<long>, long, int,CUstream_st*);
 
-template __host__ CUDART_DEVICE void reduceLauncher<float,multBinaryOp>(float*, DMatrix<float>,  long, const DMatrix<float>,multBinaryOp<float>,float, int,int,cudaStream_t);
-template __host__ CUDART_DEVICE void reduceLauncher<double,multBinaryOp>(double*, DMatrix<double>,  long, const DMatrix<double>, multBinaryOp<double>, double,int,int,cudaStream_t);
-template __host__ CUDART_DEVICE void reduceLauncher<ulong, multBinaryOp>(ulong*, DMatrix<ulong>, long, DMatrix<ulong>, multBinaryOp<ulong>, ulong, int,int, CUstream_st*);
-template __host__ CUDART_DEVICE void reduceLauncher<long, multBinaryOp>(long*, DMatrix<long>, long, DMatrix<long>, multBinaryOp<long>, long, int,int, CUstream_st*);
+template __host__ CUDART_DEVICE void reduceLauncher<float,multBinaryOp>(float*, DMatrix<float>,  long, const DMatrix<float>,multBinaryOp<float>,float, int,cudaStream_t);
+template __host__ CUDART_DEVICE void reduceLauncher<double,multBinaryOp>(double*, DMatrix<double>,  long, const DMatrix<double>, multBinaryOp<double>, double,int,cudaStream_t);
+template __host__ CUDART_DEVICE void reduceLauncher<ulong, multBinaryOp>(ulong*, DMatrix<ulong>, long, DMatrix<ulong>, multBinaryOp<ulong>, ulong, int,CUstream_st*);
+template __host__ CUDART_DEVICE void reduceLauncher<long, multBinaryOp>(long*, DMatrix<long>, long, DMatrix<long>, multBinaryOp<long>, long, int,CUstream_st*);
 
-template __host__ CUDART_DEVICE void reduceLauncher<float,maxBinaryOp>(float*, DMatrix<float>,  long, const DMatrix<float>, maxBinaryOp<float>,float, int,int,cudaStream_t);
-template __host__ CUDART_DEVICE void reduceLauncher<double,maxBinaryOp>(double*, DMatrix<double>,  long, const DMatrix<double>, maxBinaryOp<double>, double,int,int,cudaStream_t);
-template __host__ CUDART_DEVICE void reduceLauncher<ulong,maxBinaryOp>(ulong*, DMatrix<ulong>,  long, const DMatrix<ulong>, maxBinaryOp<ulong>, ulong,int,int,cudaStream_t);
+template __host__ CUDART_DEVICE void reduceLauncher<float,maxBinaryOp>(float*, DMatrix<float>,  long, const DMatrix<float>, maxBinaryOp<float>,float, int,cudaStream_t);
+template __host__ CUDART_DEVICE void reduceLauncher<double,maxBinaryOp>(double*, DMatrix<double>,  long, const DMatrix<double>, maxBinaryOp<double>, double,int,cudaStream_t);
+template __host__ CUDART_DEVICE void reduceLauncher<ulong,maxBinaryOp>(ulong*, DMatrix<ulong>,  long, const DMatrix<ulong>, maxBinaryOp<ulong>, ulong,int,cudaStream_t);
 
-template __host__ CUDART_DEVICE void reduceLauncher<float,minBinaryOp>(float*, DMatrix<float>,  long, const DMatrix<float>, minBinaryOp<float>,float, int,int,cudaStream_t);
-template __host__ CUDART_DEVICE void reduceLauncher<double,minBinaryOp>(double*, DMatrix<double>,  long, const DMatrix<double>, minBinaryOp<double>, double,int,int,cudaStream_t);
-template __host__ CUDART_DEVICE void reduceLauncher<ulong,minBinaryOp>(ulong*, DMatrix<ulong>,  long, const DMatrix<ulong>, minBinaryOp<ulong>, ulong,int,int,cudaStream_t);
+template __host__ CUDART_DEVICE void reduceLauncher<float,minBinaryOp>(float*, DMatrix<float>,  long, const DMatrix<float>, minBinaryOp<float>,float, int,cudaStream_t);
+template __host__ CUDART_DEVICE void reduceLauncher<double,minBinaryOp>(double*, DMatrix<double>,  long, const DMatrix<double>, minBinaryOp<double>, double,int,cudaStream_t);
+template __host__ CUDART_DEVICE void reduceLauncher<ulong,minBinaryOp>(ulong*, DMatrix<ulong>,  long, const DMatrix<ulong>, minBinaryOp<ulong>, ulong,int,cudaStream_t);
 
-template __host__ CUDART_DEVICE void reduceLauncher<float, andBinaryOp>(float*, DMatrix<float>, long, DMatrix<float>, andBinaryOp<float>, float, int,int, CUstream_st*);
-template __host__ CUDART_DEVICE void reduceLauncher<double, andBinaryOp>(double*, DMatrix<double>, long, DMatrix<double>, andBinaryOp<double>, double,int,int, CUstream_st*);
-template __host__ CUDART_DEVICE void reduceLauncher<ulong, andBinaryOp>(ulong*, DMatrix<ulong>, long, DMatrix<ulong>, andBinaryOp<ulong>, ulong,int,int, CUstream_st*);
-template __host__ CUDART_DEVICE void reduceLauncher<long, andBinaryOp>(long*, DMatrix<long>, long, DMatrix<long>, andBinaryOp<long>, long, int, int, CUstream_st*);
+template __host__ CUDART_DEVICE void reduceLauncher<float, andBinaryOp>(float*, DMatrix<float>, long, DMatrix<float>, andBinaryOp<float>, float, int, CUstream_st*);
+template __host__ CUDART_DEVICE void reduceLauncher<double, andBinaryOp>(double*, DMatrix<double>, long, DMatrix<double>, andBinaryOp<double>, double,int, CUstream_st*);
+template __host__ CUDART_DEVICE void reduceLauncher<ulong, andBinaryOp>(ulong*, DMatrix<ulong>, long, DMatrix<ulong>, andBinaryOp<ulong>, ulong,int, CUstream_st*);
+template __host__ CUDART_DEVICE void reduceLauncher<long, andBinaryOp>(long*, DMatrix<long>, long, DMatrix<long>, andBinaryOp<long>, long, int, CUstream_st*);
 
-template __host__ CUDART_DEVICE void reduceLauncher<float, orBinaryOp>(float*, DMatrix<float>, long, DMatrix<float>, orBinaryOp<float>, float, int,int, CUstream_st*);
-template __host__ CUDART_DEVICE void reduceLauncher<double, orBinaryOp>(double*, DMatrix<double>, long, DMatrix<double>, orBinaryOp<double>, double,int,int, CUstream_st*);
-template __host__ CUDART_DEVICE void reduceLauncher<ulong, orBinaryOp>(ulong*, DMatrix<ulong>, long, DMatrix<ulong>, orBinaryOp<ulong>, ulong,int,int, CUstream_st*);
-template __host__ CUDART_DEVICE void reduceLauncher<long, orBinaryOp>(long*, DMatrix<long>, long, DMatrix<long>, orBinaryOp<long>, long,int,int, CUstream_st*);
-template __host__ CUDART_DEVICE void reduceLauncher<int, orBinaryOp>(int*, DMatrix<int>, long, DMatrix<int>, orBinaryOp<int>, int, int, int, CUstream_st*);
-template __host__ CUDART_DEVICE void reduceLauncher<unsigned int, orBinaryOp>(unsigned int*, DMatrix<unsigned int>, long, DMatrix<unsigned int>, orBinaryOp<unsigned int>, unsigned int, int, int, CUstream_st*);
+template __host__ CUDART_DEVICE void reduceLauncher<float, orBinaryOp>(float*, DMatrix<float>, long, DMatrix<float>, orBinaryOp<float>, float, int, CUstream_st*);
+template __host__ CUDART_DEVICE void reduceLauncher<double, orBinaryOp>(double*, DMatrix<double>, long, DMatrix<double>, orBinaryOp<double>, double,int,CUstream_st*);
+template __host__ CUDART_DEVICE void reduceLauncher<ulong, orBinaryOp>(ulong*, DMatrix<ulong>, long, DMatrix<ulong>, orBinaryOp<ulong>, ulong,int,CUstream_st*);
+template __host__ CUDART_DEVICE void reduceLauncher<long, orBinaryOp>(long*, DMatrix<long>, long, DMatrix<long>, orBinaryOp<long>, long,int,CUstream_st*);
+template __host__ CUDART_DEVICE void reduceLauncher<int, orBinaryOp>(int*, DMatrix<int>, long, DMatrix<int>, orBinaryOp<int>, int, int,  CUstream_st*);
+template __host__ CUDART_DEVICE void reduceLauncher<unsigned int, orBinaryOp>(unsigned int*, DMatrix<unsigned int>, long, DMatrix<unsigned int>, orBinaryOp<unsigned int>, unsigned int, int,  CUstream_st*);
 
-template __host__ CUDART_DEVICE void reduceLauncher<int, maxBinaryOp>(int*, DMatrix<int>, long, DMatrix<int>, maxBinaryOp<int>, int, int,int, CUstream_st*);
-template __host__ CUDART_DEVICE void reduceLauncher<int, minNotZeroBinaryOp>(int*, DMatrix<int>, long, DMatrix<int>, minNotZeroBinaryOp<int>, int, int,int, CUstream_st*);
-template __host__ CUDART_DEVICE void reduceLauncher<long, maxBinaryOp>(long*, DMatrix<long>, long, DMatrix<long>, maxBinaryOp<long>, long, int, int, CUstream_st*);
-template __host__ CUDART_DEVICE void reduceLauncher<long, minBinaryOp>(long*, DMatrix<long>, long, DMatrix<long>, minBinaryOp<long>, long, int, int, CUstream_st*);
+template __host__ CUDART_DEVICE void reduceLauncher<int, maxBinaryOp>(int*, DMatrix<int>, long, DMatrix<int>, maxBinaryOp<int>, int, int, CUstream_st*);
+template __host__ CUDART_DEVICE void reduceLauncher<int, minNotZeroBinaryOp>(int*, DMatrix<int>, long, DMatrix<int>, minNotZeroBinaryOp<int>, int, int, CUstream_st*);
+template __host__ CUDART_DEVICE void reduceLauncher<long, maxBinaryOp>(long*, DMatrix<long>, long, DMatrix<long>, maxBinaryOp<long>, long, int, CUstream_st*);
+template __host__ CUDART_DEVICE void reduceLauncher<long, minBinaryOp>(long*, DMatrix<long>, long, DMatrix<long>, minBinaryOp<long>, long, int,  CUstream_st*);
 
-template __host__ CUDART_DEVICE void reduceLauncher<int, plusBinaryOp>(int*, DMatrix<int>, long, DMatrix<int>, plusBinaryOp<int>, int, int,int, CUstream_st*);
-template __host__ CUDART_DEVICE void reduceLauncher<unsigned int, plusBinaryOp>(unsigned int*, DMatrix<unsigned int>, long, DMatrix<unsigned int>, plusBinaryOp<unsigned int>, uint,int, int, CUstream_st*);
-template __host__ CUDART_DEVICE void reduceLauncher<int, multBinaryOp>(int*, DMatrix<int>, long, DMatrix<int>, multBinaryOp<int>, int, int,int, CUstream_st*);
-template __host__ CUDART_DEVICE void reduceLauncher<unsigned int, multBinaryOp>(unsigned int*, DMatrix<unsigned int>, long, DMatrix<unsigned int>, multBinaryOp<unsigned int>, uint,int, int, CUstream_st*);
+template __host__ CUDART_DEVICE void reduceLauncher<int, plusBinaryOp>(int*, DMatrix<int>, long, DMatrix<int>, plusBinaryOp<int>, int, int, CUstream_st*);
+template __host__ CUDART_DEVICE void reduceLauncher<unsigned int, plusBinaryOp>(unsigned int*, DMatrix<unsigned int>, long, DMatrix<unsigned int>, plusBinaryOp<unsigned int>, uint,int, CUstream_st*);
+template __host__ CUDART_DEVICE void reduceLauncher<int, multBinaryOp>(int*, DMatrix<int>, long, DMatrix<int>, multBinaryOp<int>, int, int, CUstream_st*);
+template __host__ CUDART_DEVICE void reduceLauncher<unsigned int, multBinaryOp>(unsigned int*, DMatrix<unsigned int>, long, DMatrix<unsigned int>, multBinaryOp<unsigned int>, uint,int,  CUstream_st*);
 
-template __host__ CUDART_DEVICE void reduceLauncher<int, andBinaryOp>(int*, DMatrix<int>, long, DMatrix<int>, andBinaryOp<int>, int, int,int, CUstream_st*);
-template __host__ CUDART_DEVICE void reduceLauncher<unsigned int, andBinaryOp>(unsigned int*, DMatrix<unsigned int>, long, DMatrix<unsigned int>, andBinaryOp<unsigned int>, uint,int, int, CUstream_st*);
-template __host__ CUDART_DEVICE void reduceLauncher<int, minBinaryOp>(int*, DMatrix<int>, long, DMatrix<int>, minBinaryOp<int>, int, int,int, CUstream_st*);
-template __host__ CUDART_DEVICE void reduceLauncher<unsigned int, maxBinaryOp>(unsigned int*, DMatrix<unsigned int>, long, DMatrix<unsigned int>, maxBinaryOp<unsigned int>, uint,int, int, CUstream_st*);
-template __host__ CUDART_DEVICE void reduceLauncher<unsigned int, minBinaryOp>(unsigned int*, DMatrix<unsigned int>, long, DMatrix<unsigned int>, minBinaryOp<unsigned int>, uint,int, int, CUstream_st*);
+template __host__ CUDART_DEVICE void reduceLauncher<int, andBinaryOp>(int*, DMatrix<int>, long, DMatrix<int>, andBinaryOp<int>, int, int,  CUstream_st*);
+template __host__ CUDART_DEVICE void reduceLauncher<unsigned int, andBinaryOp>(unsigned int*, DMatrix<unsigned int>, long, DMatrix<unsigned int>, andBinaryOp<unsigned int>, uint, int, CUstream_st*);
+template __host__ CUDART_DEVICE void reduceLauncher<int, minBinaryOp>(int*, DMatrix<int>, long, DMatrix<int>, minBinaryOp<int>, int, int,CUstream_st*);
+template __host__ CUDART_DEVICE void reduceLauncher<unsigned int, maxBinaryOp>(unsigned int*, DMatrix<unsigned int>, long, DMatrix<unsigned int>, maxBinaryOp<unsigned int>, uint,int, CUstream_st*);
+template __host__ CUDART_DEVICE void reduceLauncher<unsigned int, minBinaryOp>(unsigned int*, DMatrix<unsigned int>, long, DMatrix<unsigned int>, minBinaryOp<unsigned int>, uint,int, CUstream_st*);
 
 #else
-template __host__ CUDART_DEVICE void reduceLauncher<float,1>(float*, DMatrix<float>,  long, const DMatrix<float>, MonoidF<float,1>, float, int,int,cudaStream_t);
-template __host__ CUDART_DEVICE void reduceLauncher<double,1>(double*, DMatrix<double>,  long, const DMatrix<double>, MonoidF<double,1>, double, int,int,cudaStream_t);
-template __host__ CUDART_DEVICE void reduceLauncher<long,1>(long*, DMatrix<long>,  long, const DMatrix<long>, MonoidF<long,1>, long, int,int,cudaStream_t);
-template __host__ CUDART_DEVICE void reduceLauncher<ulong,1>(ulong*, DMatrix<ulong>,  long, const DMatrix<ulong>, MonoidF<ulong,1>, ulong, int,int,cudaStream_t);
-template __host__ CUDART_DEVICE void reduceLauncher<int,1>(int*, DMatrix<int>,  long, const DMatrix<int>, MonoidF<int,1>, int, int,int,cudaStream_t);
-template __host__ CUDART_DEVICE void reduceLauncher<uint,1>(uint*, DMatrix<uint>,  long, const DMatrix<uint>, MonoidF<uint,1>, uint, int,int,cudaStream_t);
+template __host__ CUDART_DEVICE void reduceLauncher<float,1>(float*, DMatrix<float>,  long, const DMatrix<float>, MonoidF<float,1>, float, int,cudaStream_t);
+template __host__ CUDART_DEVICE void reduceLauncher<double,1>(double*, DMatrix<double>,  long, const DMatrix<double>, MonoidF<double,1>, double, int,cudaStream_t);
+template __host__ CUDART_DEVICE void reduceLauncher<long,1>(long*, DMatrix<long>,  long, const DMatrix<long>, MonoidF<long,1>, long, int,cudaStream_t);
+template __host__ CUDART_DEVICE void reduceLauncher<ulong,1>(ulong*, DMatrix<ulong>,  long, const DMatrix<ulong>, MonoidF<ulong,1>, ulong, int, cudaStream_t);
+template __host__ CUDART_DEVICE void reduceLauncher<int,1>(int*, DMatrix<int>,  long, const DMatrix<int>, MonoidF<int,1>, int, int,cudaStream_t);
+template __host__ CUDART_DEVICE void reduceLauncher<uint,1>(uint*, DMatrix<uint>,  long, const DMatrix<uint>, MonoidF<uint,1>, uint, int,cudaStream_t);
 #endif
 
 #ifdef  CuMatrix_Enable_KTS
@@ -1001,3 +1075,279 @@ template<typename T, int StateDim> __global__ void reduceLauncherG(T* result, DM
 	#endif
 #endif
 
+template<typename T> __device__ void shuffsort(uint* cnt,  T* elems, int n) {
+	T currVal = 0;
+	uint tid = threadIdx.x;
+	bool working= true;
+	if(tid < n) {
+		currVal = elems[tid];
+	}
+	const int width =MIN(n,32) ;
+	uint count = 0;
+	bool oddCycle;
+	uint otid; // other thread id to test/exchange with
+	T otherVal;
+	if(tid <  width ){
+		while(__any_sync(0xffffffff,working) ) {
+			//
+			count = *cnt;
+			oddCycle = count & 1;
+			if(oddCycle) { // down for evens
+				if(tid == 0) {
+					otid = width-1;
+				} else {
+					// up for odds
+					if(tid & 1) {
+						if(tid == width -1)
+							otid = 0;
+						else
+							otid = tid + 1;
+					}
+					else
+						otid = tid - 1;
+				}
+			} else { // up for evens, down for odds (wrapping ends)
+				if(tid & 1)
+					otid = tid - 1;
+				else {
+					if(tid == width -1)
+						otid = 0;
+					else
+						otid = tid + 1;
+				}
+
+			}
+			otherVal = shfl(currVal, otid) ;
+			if(otid > tid && currVal > otherVal) {
+				currVal = otherVal;
+				working = true;
+			}else if(otid < tid && currVal < otherVal) {
+				currVal = otherVal;
+				working = true;
+			}else{
+				working = false;
+			}
+			elems[tid] = currVal;
+			__syncthreads();
+			if(tid == 0)
+				atomicExch(cnt, count+1);
+		}
+	}
+}
+
+template<typename T> __device__ void shuffleSort( T* elems, int n) {
+	T currVal = 0;
+	uint tid = threadIdx.x;
+	bool working= true;
+	if(tid < n) {
+		currVal = elems[tid];
+	}
+	const int width =MIN(n,32) ;
+	uint count = 0;
+	bool oddCycle;
+	uint otid; // other thread id to test/exchange with
+	T otherVal;
+	if(tid <  width ){
+		while(__any_sync(0xffffffff,working) ) {
+			//
+			if(tid == 0) {
+				oddCycle = count & 1;
+				printf("tid %u cycle %u\n", tid, count);
+			}
+			__syncthreads();
+			if(oddCycle) { // down for evens
+				if(tid == 0) {
+					otid = width-1;
+				} else {
+					// up for odds
+					if(tid & 1) {
+						if(tid == width -1)
+							otid = 0;
+						else
+							otid = tid + 1;
+					}
+					else
+						otid = tid - 1;
+				}
+			} else { // up for evens
+				if(tid & 1)
+					otid = tid - 1;
+				else {
+					//  up for odds, mind the edge
+					if(tid == width -1)
+						otid = 0;
+					else
+						otid = tid + 1;
+				}
+			}
+			otherVal = shfl(currVal, otid) ;
+			if(otid > tid && currVal > otherVal) {
+				currVal = otherVal;
+				working = true;
+			}else if(otid < tid && currVal < otherVal) {
+				currVal = otherVal;
+				working = true;
+			}else{
+				working = false;
+			}
+			elems[tid] = currVal;
+			if(tid == 0) {
+				count++;
+			}
+			__syncthreads();
+		}
+	}
+}
+
+template<typename T> __device__ void mergeWarps( T* out, int* nOut, T const * elems1, T const * elems2) {
+	/*
+	 * two warps full of sorted (but not necly distinct) elems
+	 *
+	 */
+
+}
+
+template<typename T> __device__ void shuffsortOCS(uint* cnt,  OrderedCountedSet<T>& elems) {
+	T currVal = 0;
+	int currCount = 0;
+	uint tid = threadIdx.x;
+	bool working= true;
+	if(tid < elems.n) {
+		currVal = elems[tid];
+	}
+	const int width =MIN(elems.n,32) ;
+	uint count = 0;
+	bool oddCycle;
+	uint otid; // other thread id to test/exchange with
+	T otherVal;
+	int otherCount = 0;
+	if(tid <  width ){
+		while(__any_sync(0xffffffff,working) ) {
+			//
+			count = *cnt;
+			oddCycle = count & 1;
+			if(oddCycle) { // down for evens
+				if(tid == 0) {
+					otid = width-1;
+				} else {
+					// up for odds
+					if(tid & 1) {
+						if(tid == width -1)
+							otid = 0;
+						else
+							otid = tid + 1;
+					} else
+						otid = tid - 1;
+				}
+			} else { // up for evens, down for odds (wrapping ends)
+				if(tid & 1)
+					otid = tid - 1;
+				else {
+					if(tid == width -1)
+						otid = 0;
+					else
+						otid = tid + 1;
+				}
+
+			}
+			otherVal = shfl(currVal, otid) ;
+			if(otid > tid && currVal > otherVal) {
+				currVal = otherVal;
+				working = true;
+			}else if(otid < tid && currVal < otherVal) {
+				currVal = otherVal;
+				working = true;
+			}else{
+				working = false;
+			}
+			elems[tid] = currVal;
+			__syncthreads();
+			if(tid == 0)
+				atomicExch(cnt, count+1);
+		}
+	}
+}
+
+template<typename T> __host__  __device__ T simgoid(T x) {
+	return 1.0/(1.0 + expf(-x));
+}
+template<typename T> __global__ void shufftest(uint* cnt, T* elems, int n) {
+	T* sdata = SharedMemory<T>();
+	uint tid = threadIdx.x;
+	T smgd2 = simgoid((T)2);
+	T sgmd2_1 = sigmoid((T)2,1);
+	T sgmd2_2 = sigmoid((T)2,2);
+	T sgmd2_3 = sigmoid((T)2,3);
+	T sgmd2_4 = sigmoid((T)2,4);
+	T sgmd2_10 = sigmoid((T)2,10);
+	T sgmd4 = sigmoid((T)4);
+	T sgmd4_10 = sigmoid((T)4,10);
+	T smgd4 = simgoid((T)4);
+	T sgmd4_20 = sigmoid((T)4,20);
+	T sgmd4_50 = sigmoid((T)4,50);
+	T sgmd4_100 = sigmoid((T)4,100);
+
+	if(tid < n) {
+		sdata[tid]=elems[tid];
+	}
+	__syncthreads();
+	shuffsort(cnt,sdata,n);
+	__syncthreads();
+	if(tid < n) {
+		elems[tid]=sdata[tid];
+	}
+}
+template<typename T> __global__ void shuffleSortTest( T* elems, int n) {
+	T* sdata = SharedMemory<T>();
+	uint tid = threadIdx.x;
+	if(tid < n) {
+		sdata[tid]=elems[tid];
+	}
+	shuffleSort(sdata,n);
+	if(tid < n) {
+		elems[tid]=sdata[tid];
+	}
+}
+
+template<typename T> void shufftestLauncher() {
+	uint* dcnt = nullptr;
+	uint cnt = 0;
+	cherr(cudaMalloc(&dcnt,sizeof(uint)));
+	cherr(cudaMemcpy(dcnt,&cnt,sizeof(uint), cudaMemcpyHostToDevice));
+	T valsh[] = {14, 79, 8, 48, 34, 86, 4, 7, 4, 43, 26, 10, 1, 79, 14, 61, 20, 91, 75, 72, 14, 59, 25, 91, 47, 84, 92, 65, 75, 84, 68, 22};
+	int n = sizeof(valsh)/sizeof(T);
+	flprintf("before sorting %d\n:", n);
+	printColoArray(valsh, n);
+	T* valsd;
+	cherr(cudaMalloc( &valsd, sizeof(valsh)));
+	cherr(cudaMemcpy(valsd, valsh, sizeof(valsh), cudaMemcpyHostToDevice));
+	shufftest<T><<<1,32,n >>>(dcnt, valsd, n);
+	//shuffleSortTest<T><<<1,32,n >>>(valsd, n);
+	cherr(cudaDeviceSynchronize());
+	cherr(cudaMemcpy(valsh, valsd, sizeof(valsh), cudaMemcpyDeviceToHost));
+	flprintf("after sorting %d\n:", n);
+	printColoArray(valsh, n);
+
+}
+template void shufftestLauncher<float>();
+template void shufftestLauncher<double>();
+template void shufftestLauncher<ulong>();
+
+template<typename T> void shuffleSortTestLauncher() {
+	T valsh[] = {14, 79, 8, 48, 34, 86, 4, 7, 4, 43, 26, 10, 1, 79, 14, 61, 20, 91, 75, 72, 14, 59, 25, 91, 47, 84, 92, 65, 75, 84, 68, 22};
+	int n = sizeof(valsh)/sizeof(T);
+	flprintf("before sorting %d\n:", n);
+	printColoArray(valsh, n);
+	T* valsd;
+	cherr(cudaMalloc( &valsd, sizeof(valsh)));
+	cherr(cudaMemcpy(valsd, valsh, sizeof(valsh), cudaMemcpyHostToDevice));
+	shuffleSortTest<T><<<1,32,n >>>(valsd, n);
+	cherr(cudaDeviceSynchronize());
+	cherr(cudaMemcpy(valsh, valsd, sizeof(valsh), cudaMemcpyDeviceToHost));
+	flprintf("after sorting %d\n:", n);
+	printColoArray(valsh, n);
+
+}
+template void shuffleSortTestLauncher<float>();
+template void shuffleSortTestLauncher<double>();
+template void shuffleSortTestLauncher<ulong>();

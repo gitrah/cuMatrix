@@ -27,10 +27,11 @@ template<typename T>
 		int input_layer_size, int hidden_layer_size, int num_labels,
 		const CuMatrix<T>& xBiased, const CuMatrix<T>& yBiased, T lambda, bool colMajor) {
 
-	if(checkDebug(debugNn)) {
-		outln("entre xBiased " <<xBiased.toShortString());
-		outln("entre lambda " << lambda);
-		outln("entre nn_params " <<nn_params);
+	if(checkDebug(debugNn | debugCg)) {
+		flprintf("entre xBiased %s\n", xBiased.toss().c_str());
+		flprintf("entre grad %s\n", grad.toss().c_str());
+		flprintf("entre lambda %.2f\n", (double) lambda);
+		flprintf("entre nn_params %s\n" , nn_params.toss().c_str());
 		outln("input_layer_size " <<input_layer_size);
 		outln("hidden_layer_size " <<hidden_layer_size);
 		outln("num_labels " <<num_labels);
@@ -40,13 +41,16 @@ template<typename T>
 	nn_params.unconcat(theta1, hidden_layer_size,input_layer_size + 1,input_layer_size + 1, 0, colMajor);
 	theta1.syncBuffers();
 	if(checkDebug(debugNn))if(theta1.size < (long) 100 * (int)sizeof(T))outln("theta1 " << theta1);
-	if(checkDebug(debugNn))outln("theta1.sum " << theta1.sum());
+	if(checkDebug(debugNn| debugCg))outln("aft uncon theta1.sum " << theta1.sum());
+	if(checkDebug(debugNn))outln("xBiased.sum " << xBiased.sum());
 
 	nn_params.unconcat(theta2, num_labels, hidden_layer_size + 1, hidden_layer_size + 1,(hidden_layer_size * (input_layer_size + 1)), colMajor);
 	theta2.syncBuffers();
+	if(checkDebug(debugNn| debugCg))outln("aft uncon theta2.sum " << theta2.sum());
+	if(checkDebug(debugNn| debugCg))outln("aft uncon xt.sum " << (xBiased.transpose()).sum());
 
 	checkCudaError(cudaGetLastError());
-	if(true || checkDebug(debugNn))if(theta2.size < 100 * (int)sizeof(T))outln("theta2 " << theta2);
+	if(checkDebug(debugNn) && theta2.size < 100 * (int)sizeof(T))outln("theta2 " << theta2);
 	//if(checkDebug(debugNn))outln("theta2 col sums " << ((T)theta2.m * theta2.featureMeans(true)).syncBuffers());
 	if(checkDebug(debugNn))outln("theta2.sum " << theta2.sum());
 
@@ -59,7 +63,7 @@ template<typename T>
 	if(checkDebug(debugNn))flprintf("z02 = theta1 ( %uX%u) * xBiased' (%u x %u)\n", theta1.m, theta1.n, xBiased.n, xBiased.m);
 	CuMatrix<T> z02 = (theta1 * xBiased.transpose());
 	if(checkDebug(debugNn))flprintf("z02  %u X %u\n", z02.m, z02.n);
-	if(checkDebug(debugNn))flprintf("z02.sum %.20g\n", (double)z02.sum());
+	if(checkDebug(debugNn | debugCg))flprintf("z02.sum %.20g\n", (double)z02.sum());
 
 	CuMatrix<T> z2 = z02.transpose();
 	if(checkDebug(debugNn))flprintf("z2  %u X %u\n", z2.m, z2.n);
@@ -70,7 +74,7 @@ template<typename T>
 	CuMatrix<T> a2 = CuMatrix<T>::ones(m, 1) |= z2.sigmoid();
 	if(checkDebug(debugNn))outln("a2 " << a2.toShortString());
 	checkCudaError(cudaGetLastError());
-	if(checkDebug(debugNn))flprintf("a2.sum %.20g\n", a2.sum());
+	if(checkDebug(debugNn | debugCg))flprintf("a2.sum %.20g\n", (double)a2.sum());
 
 	if(checkDebug(debugNn))flprintf("z3 = (theta2 ( %uX%u) * a2' (%u x %u))'\n", theta2.m, theta2.n, a2.n, a2.m);
 	CuMatrix<T> z3 = (theta2 * a2.transpose()).transpose();
@@ -94,59 +98,32 @@ template<typename T>
 	cost  = ( -1./m * (yBiased % a3.log() + (1. - yBiased) % ((1. - a3).log()))).sum();
 
 	if(checkDebug(debugNn))flprintf("cost no reg %.20g\n",(double) cost);
-	//CuMatrix<T> h  = ((theta2 * a2.transpose()).transpose()).sigmoid();
-	//h1 = sigmoid( (Theta2 * [ ones(m,1) sigmoid(  Theta1 * X' )]')'  )
-	//
-	//(theta2 *( CuMatrix<T>::ones(m,1) |= (  theta1 * X.transpose() ).sigmoid().transpose()).transpose()
-	//if(checkDebug(debugNn))if(h.size < 100 * sizeof(T))outln("h " << h.syncBuffers());
-	//if(checkDebug(debugNn))flprintf("h.sum %.20g\n", h.sum());
-
-	//CuMatrix<T> h1 = (theta2 * ( CuMatrix<T>::ones(m,1) |= (  theta1 * xBiased.transpose() ).sigmoid().transpose()).transpose()).transpose().sigmoid();
-	//if(checkDebug(debugNn))if(h1.size < 100 * sizeof(T))outln("h1 " << h1.syncBuffers());
-	//if(checkDebug(debugNn))flprintf("h1.sum %.20g\n", h1.sum());
-
 
 	// these should be views
 	CuMatrix<T> tempTheta2 = theta2.dropFirst(true).syncBuffers();
 
-	if(checkDebug(debugNn))flprintf("tempTheta2.sum() %.20g\n",(double) tempTheta2.sum());
+	if(checkDebug(debugNn| debugCg))flprintf("tempTheta2.sum() %.20g\n",(double) tempTheta2.sum());
 	//if(checkDebug(debugNn))outln("tempTheta2 " <<tempTheta2);
 	//CuMatrix<T> tempTheta2Means = tempTheta2.featureMeans(true) * ((T)theta2.m);
 	//if(checkDebug(debugNn))outln("tempTheta2 col sums " << tempTheta2Means.syncBuffers());
 
 	T jreg3 =  ((tempTheta2 ^ ((T)2)) * (lambda / (2. * m))).sum();
-	if(checkDebug(debugNn))outln("jreg3 " << jreg3);
+	if(checkDebug(debugNn| debugCg))outln("jreg3 " << jreg3);
 	cost  += jreg3;
 	CuMatrix<T> tempTheta1 = theta1.dropFirst();
 
 	T jreg2 =   ((tempTheta1 ^ ((T)2)) * (lambda / (2. * m))).sum();
-	if(checkDebug(debugNn))outln("jreg2 " << jreg2);
+	if(checkDebug(debugNn| debugCg))outln("jreg2 " << jreg2);
 	cost  += jreg2;
 	if(checkDebug(debugNn))outln("ybiased " << yBiased.toShortString());
 
-	/*
-	outln("a3 " << a3.toShortString());
-
-	T* pa3_currBuffer = a3.currBuffer();
-	T* pyBiased = yBiased.tiler.currBuffer();
-
-	MemMgr<T>::checkValid(pa3_currBuffer, "pa3_currBuffer");
-	outln("pa3_currBuffer passed");
-	MemMgr<T>::checkValid(pa3_currBuffer + a3.m * a3.n - 1, "pa3_currBuffer + m * n");
-	outln("pa3_currBuffer + m * n passed");
-	MemMgr<T>::checkValid(pyBiased, "pyBiased");
-	outln("pyBiased passed");
-	MemMgr<T>::checkValid(pyBiased+ yBiased.m * yBiased.n - 1, "pyBiased + yBiased.m * yBiased.n");
-	outln("pyBiased + passed");
-*/
-
 
 	CuMatrix<T> delta_3 = a3 - yBiased;
-	if(checkDebug(debugNn))outln("delta_3 " << delta_3.sum());
+	if(checkDebug(debugNn| debugCg))outln("delta_3 " << delta_3.sum());
 	if(checkDebug(debugNn))outln("z2.sigmoidGradient() " << z2.sigmoidGradient().sum());
 
 	CuMatrix<T> delta_2 = (delta_3 * tempTheta2) % z2.sigmoidGradient();
-	if(checkDebug(debugNn))outln("delta_2 " << delta_2.sum());
+	if(checkDebug(debugNn | debugCg))outln("delta_2 " << delta_2.sum());
 
 	CuMatrix<T> bigDelta2 = delta_3.transpose() * a2;
 	if(checkDebug(debugNn))outln("bigDelta2 " << bigDelta2.sum());
@@ -357,7 +334,7 @@ T NeuralNet<T>::checkNnGradients(T lambda) {
 	T theta2Sum = theta2.sum();
 	if(checkDebug(debugNn))outln("theta2\n" << theta2);
 	printDevArray<T>(theta1.currBuffer(), __FILE__ " imm bef concat theta2 dev ", __LINE__, MAX(theta2.m,theta2.n));
-	CuMatrix<T> nn_params((theta1.size + theta2.size)/sizeof(T),1,false,true);
+	CuMatrix<T> nn_params(1,(theta1.size + theta2.size)/sizeof(T),false,true);
 	const CuMatrix<T> * parts[] = {&theta1,&theta2};
 	CuMatrix<T>::concat(nn_params,2, parts);
 	printDevArray<T>(nn_params.currBuffer(), __FILE__ " imm after concat nn_params dev ", __LINE__, MAX(nn_params.m,nn_params.n));
@@ -458,10 +435,10 @@ template<typename T> template<typename CostFunction> CuMatrix<T> NeuralNet<T>::g
 		//::set(perturb.d_elements, perturb.m, perturb.n, perturb.p, i, static_cast<T>(epsilon));
 		//outln("theta " << theta.toShortString());
 		jMinus = costFn(theta - perturb);
-		flprintf("jMinus %.20g\n",(double) jMinus);
+		printf("jMinus %.20g\n",(double) jMinus);
 		jPlus = costFn(theta + perturb);
-		flprintf("jPlus %.20g\n", (double)jPlus);
-		flprintf("numgrad(%d) %.20g\n", i,(double)((jPlus - jMinus) / (2. * epsilon)));
+		printf("jPlus %.20g\n", (double)jPlus);
+		printf("numgrad(%ld) %.20g\n", i,(double)((jPlus - jMinus) / (2. * epsilon)));
 		gradApprox.set(i, (jPlus - jMinus) / (2. * epsilon));
 		//::set(gradApprox.d_elements, gradApprox.m, gradApprox.n,gradApprox.p, i, static_cast<T>((jPlus - jMinus) / (2. * epsilon)));
 		perturb.set(i, 0);
@@ -610,12 +587,12 @@ template<typename T> void NeuralNet<T>::back(CuMatrix<T>& grad, uint2*& dims,
 	//  sigma i = theta_i' * sigma(i+1) * sigGrad(z_i)
 	while (i > 0) {
 		curr_theta = thetas.at(i);
-		if(checkDebug(debugNn))outln("theta" << i + i<< ": " << curr_theta.toShortString() );
+		if(checkDebug(debugNn))outln("theta" << i + i<< ": " << curr_theta.toss() );
 		curr_z = zs.top();
 		zs.pop();
 		if(checkDebug(debugNn))outln("z" << i + i<< ": "  << curr_z.toShortString() );
-		CuMatrix<T> temp = curr_theta.dropFirst();
-		if(checkDebug(debugNn))outln("tempTheta"<< i +1 <<": " << temp.toShortString() );
+		CuMatrix<T> temp = curr_theta.dropFirst().syncBuffers();
+		if(checkDebug(debugNn))outln("temp "<< i +1 <<": " << temp.toShortString() );
 		if(checkDebug(debugNn))outln("tempTheta"<< i +1 <<".sum " << temp.sum() );
 		CuMatrix<T> sigmaTheta = curr_sigma * temp;
 		if(checkDebug(debugNn))outln("sigmaTheta" << i + i<< ": "  << sigmaTheta.toShortString() );
@@ -720,7 +697,7 @@ template<typename T>
 NNPrediction<T> NeuralNet<T>::forward(const vector<CuMatrix<T> >& weights,
 		const CuMatrix<T>& inputs, const CuMatrix<T>& y, T lambda) {
 	CuMatrix<T> ones = CuMatrix<T>::ones(10,10);
-	auto mats{inputs, y, ones};
+	auto mats = {inputs, y, ones};
 	map<int,long> devOx;
 	bool coQ=  b_util::onCurrDeviceQ(inputs, y, ones);
 	if(checkDebug(debugNn))outln("coQ " << coQ);
@@ -747,6 +724,7 @@ NNPrediction<T> NeuralNet<T>::forward(const vector<CuMatrix<T> >& weights,
 	}
 
 */
+/*
 	int waytzOx = 	CuMatrix<T>::devByOccupancy( weights );
 	if(checkDebug(debugNn))outln("CuMatrix<T>::devByOccupancy " << waytzOx);
 
@@ -760,6 +738,8 @@ NNPrediction<T> NeuralNet<T>::forward(const vector<CuMatrix<T> >& weights,
 
 	if(checkDebug(debugNn))outln("enter inputs " << inputs.toShortString() << " samedev " << sameDev);
 	CuMatrix<T> x = inputs.biasedQ() ? inputs : inputs.addBiasColumn();
+*/
+	CuMatrix<T> x = inputs; //.biasedQ() ? inputs : inputs.addBiasColumn();
 	CuMatrix<T> yBiased = y.n > 1 ? y : y.toBinaryCategoryMatrix();
 	uint idx = 0;
 	CuMatrix<T> lastA = x;
@@ -773,8 +753,10 @@ NNPrediction<T> NeuralNet<T>::forward(const vector<CuMatrix<T> >& weights,
 		if(checkDebug(debugNn))outln("idx " << idx+1);
 		if(checkDebug(debugNn))outln("b_util::onCurrDeviceQ(weight, x, yBiased) " << b_util::onCurrDeviceQ(weight, x, yBiased));
 		if(checkDebug(debugNn))outln("theta" << idx+1 << ".sum " << weight.sum());
+/*
 		bool lastaABiasedQ = lastA.biasedQ();
 		lastA = lastaABiasedQ ? lastA : lastA.addBiasColumn();
+*/
 		CuMatrix<T> z = (weight * lastA.transpose()).transpose();
 		if(checkDebug(debugNn))flprintf("z%d (%u x %u) = theta%d ( %uX%u) * xBiased' (%u x %u)\n",  idx+2, z.m, z.n, idx+1, weight.m, weight.n, x.n, x.m);
 		if(checkDebug(debugNn))outln("z" << idx+2 << ".sum " << z.sum());

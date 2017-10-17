@@ -1,4 +1,5 @@
 # /mnt/rd is a (mounted) ram disk
+THIS_FILE := $(lastword $(MAKEFILE_LIST))
 INC_PATH   ?= /mnt/rd/include
 CUDA_RD_PATH    ?= /mnt/rd/cuda
 #CUDA_PATH       ?= /usr/local/cuda
@@ -8,8 +9,9 @@ NVML_LIB_PATH ?=/usr/src/gdk/nvml/lib
 CUDA_COMMON_INC_PATH   ?= $(CUDA_RD_PATH)/src/common/inc
 CUDA_LIB_PATH   ?= $(CUDA_RD_PATH)/lib
 CUDA_BIN_PATH   ?= $(CUDA_RD_PATH)/bin
-OCTAVE_364_INC_PATH ?= /usr/include/octave-3.6.4
-OCTAVE_382_INC_PATH ?= /usr/include/octave-3.8.2
+OCTAVE_INC_PATH=
+OCTAVE_INC_PATH=$(shell test -d /usr/include/octave && echo /usr/include/octave) 
+DNAS_PROCESSED=0
 
 #FREETYPE2_INC_PATH  ?= /usr/include/freetype2
 NVCC            ?= $(CUDA_BIN_PATH)/nvcc
@@ -24,6 +26,8 @@ GENCODE_SM30    := -gencode arch=compute_30,code=sm_30
 GENCODE_SM35    := -gencode arch=compute_35,code=sm_35 
 GENCODE_SM50   	:= -gencode arch=compute_50,code=sm_50 
 GENCODE_SM52   	:= -gencode arch=compute_52,code=sm_52 
+GENCODE_SM60   	:= -gencode arch=compute_60,code=sm_60 
+GENCODE_SM61   	:= -gencode arch=compute_61,code=sm_61 
 
 # keep it lean by only compiling/linking for the gpus you have
 ARCHS = $(shell ./tools/gpuArchs)
@@ -34,34 +38,44 @@ ifneq ($(filter 3.5,$(ARCHS)),)
     GENCODE_FLAGS += $(GENCODE_SM35)
 endif
 ifneq ($(filter 5.0,$(ARCHS)),)
+    @echo This is some text $(OCTAVE_INC_PATH)
     GENCODE_FLAGS += $(GENCODE_SM50)
 endif
 ifneq ($(filter 5.2,$(ARCHS)),)
     GENCODE_FLAGS += $(GENCODE_SM52)
 endif
+ifneq ($(filter 6.1,$(ARCHS)),)
+    GENCODE_FLAGS += $(GENCODE_SM61)
+    #echo  $(GENCODE_SM61)
+endif
 
-CPPFLAGS= -Wall -m64 -Wno-switch -fpic -Wstrict-aliasing=0 -Wno-unused-function -std=c++11 -fopenmp 
+#GENCODE_FLAGS :=  $(GENCODE_SM61)$(GENCODE_SM50)
+
+CPPFLAGS= -Wall -m64 -Wno-switch -fopt-info-vec-all -fpic -Wstrict-aliasing=0 -Wno-unused-function -std=c++11 -fopenmp 
 AGXXFLAGS= -Wunused-function
-# -DCuMatrix_Maxwell_Workaround1
-NVCPPFLAGS := -m64 -Xcompiler '-fpic' -dc -std=c++11  --expt-relaxed-constexpr
+NVCPPFLAGS := -Xcompiler -D_FORCE_INLINES -D__CORRECT_ISO_CPP11_MATH_H_PROTO -m64 -Xcompiler '-fpic' -dc -std=c++11  --expt-relaxed-constexpr
+LDFLAGS=-lgomp  -lnvidia-ml -L$(CUDA_RD_PATH)/lib64 -L$(NVML_LIB_PATH) 
 SRCDIR := src
 OGLSRCDIR := src/ogl
 TESTDIR := src/test
+
 CUDA_MEMCHECK_FILES:=cuda-memcheck.file*
 CUDA_KEEP_FILES=*.cpp?.i? *.cudafe?.* *.cuobjdump *.fatbin?? *.hash *.module_id *.ptx *.cubin
 
-LDFLAGS=-lgomp  -lnvidia-ml -L$(CUDA_RD_PATH)/lib64 -L$(NVML_LIB_PATH) 
-DBG_EXECUTABLE := cumatrest
-RLS_EXECUTABLE := cumatrel
+DBG_NAME := cumatrest
+EXISTS_DBG_TEST_NAME :=$(shell test -f cumatrest && echo exists) 
+RLS_NAME := cumatrel
+EXISTS_RLS_TEST_NAME :=$(shell test -f cumatrel && echo exists) 
+
 CONSOLE_OUTPUT := res.txt
 SIDEXPS := sidexps
 DMG_TOOL := dmg
-SAMPLE_DATA_FILES := ex*data*.txt ex4weights.txt ct*.txt
+SAMPLE_DATA_FILES := ex*data*.txt ex4weights.txt ct*.txt train*ubyte
 
 DEBUG := debug
 RELEASE := release
 
-FILES_TO_CLEAN = $(DEBUG) $(RELEASE) $(RLS_EXECUTABLE) $(DBG_EXECUTABLE) $(CUDA_MEMCHECK_FILES) $(CUDA_KEEP_FILES) a.out
+FILES_TO_CLEAN = $(DEBUG) $(RELEASE) $(RLS_NAME) $(DBG_NAME) $(CUDA_MEMCHECK_FILES) $(CUDA_KEEP_FILES) a.out
 
 # keep (kep) retains ptx files for seeing things like kernel register counts
 ifeq ($(kep),1)
@@ -82,6 +96,7 @@ ifeq ($(nvml),1)
 	NVCPPFLAGS += -DCuMatrix_NVML
 endif
 
+# flag to use CuBLAS for some routines (eg matrix product)
 ifeq ($(blas),1)
     CPPFLAGS +=  -DCuMatrix_UseCublas
 	NVCPPFLAGS += -DCuMatrix_UseCublas
@@ -97,9 +112,9 @@ ifeq ($(statFunc),1)
 endif
 
 #disable ribosome so makefile generates only binaries
-ifeq ($(ngen),1)
-	RIBOSOME = echo
-endif
+#ifeq ($(ngen),1)
+#	RIBOSOME = echo
+#endif
 
 # compile functor kernels templated by functor type polymorphism with static methods (ie function pointers)
 ifeq ($(kts),1)
@@ -111,26 +126,36 @@ endif
 #debug
 ifeq ($(dbg),1)
 	OUT_DIR := $(DEBUG)
-    CPPFLAGS +=  -g3 -g -rdynamic -ggdb
-    NVCPPFLAGS += -O0 -g -G -lineinfo -odir $(OUT_DIR) -DCuMatrix_DebugBuild
+    CPPFLAGS +=  -g3 -g -rdynamic -ggdb -DCuMatrix_DebugBuild
+    #  -lineinfo conflicts with device debug in cuda9
+    NVCPPFLAGS += -O0 -g -G -odir $(OUT_DIR) -DCuMatrix_DebugBuild
     LDFLAGS += -g
     OBJDIR := $(DEBUG)
-    EXECUTABLE := $(DBG_EXECUTABLE)
+    BASE_NAME := $(DBG_NAME)
+    EXISTS_TEST_NAME := $(EXISTS_DBG_TEST_NAME)
 else
 	OUT_DIR := $(RELEASE)
     NVCPPFLAGS += -odir $(OUT_DIR) 
     CPPFLAGS += -O2 
 	OBJDIR := $(RELEASE)
-    EXECUTABLE := $(RLS_EXECUTABLE)
+    BASE_NAME := $(RLS_NAME)
+    EXISTS_TEST_NAME := $(EXISTS_RLS_TEST_NAME)
 endif
+
+# output filenames
+LIB_NAME := $(OUT_DIR)/$(BASE_NAME).a
+SO_NAME := $(OUT_DIR)/lib$(BASE_NAME).so.1.0.1
+TEST_NAME := $(BASE_NAME)
+# holds date of .so file (used in test to determine whether executable needs rebuilding)
+BEFORE_DATE := `stat -c %y $(SO_NAME)`
 
 
 # build version using cuda dynamic parallelism 
 ifeq ($(cdp),1)
 	LDFLAGS += -lcudadevrt -lcudart
-	NVCPPFLAGS += -DCuMatrix_Enable_Cdp 
+	NVCPPFLAGS += -DCuMatrix_Enable_Cdp
 else
-	LDFLAGS += -lcudart -lcublas 
+	LDFLAGS += -lcudart -lcublas
 endif
 
 # opengl
@@ -140,7 +165,6 @@ ifeq ($(ogl),1)
 	LDFLAGS += -lGL -lglut -lGLU
 else
 	BASE_OGL_SOURCES =
-	
 endif
 
 # don't optimize
@@ -150,7 +174,7 @@ ifeq ($(nopt),1)
 endif
 
 
-# omp
+# enable OMP
 ifeq ($(omp),1)
     CPPFLAGS += -DCuMatrix_UseOmp 
     NVCPPFLAGS += -DCuMatrix_UseOmp 
@@ -167,70 +191,115 @@ endif
 BASE_SOURCES := $(wildcard $(SRCDIR)/*.cc)
 DNA_SOURCES := $(wildcard $(SRCDIR)/*.dna)
 BASE_CU_SOURCES = $(wildcard $(SRCDIR)/*.cu)
+GEN_CU_SOURCES =$(wildcard $(SRCDIR)/*_Gen.cu) 
+GEN_HEADERS =$(wildcard $(SRCDIR)/*_Gen.h) 
 #BASE_HEADERS := $(wildcard $(SRCDIR)/*.h)
+BUILD_SOURCES= $(BASE_SOURCES) $(BASE_CU_SOURCES) $(BASE_OGL_SOURCES) 
+
 TEST_RUNNERS = testRunner.cc suiteRunner.cc 
 TEST_SOURCES= $(filter-out  $(addprefix $(TESTDIR)/, $(TEST_RUNNERS)), \
 							 $(wildcard $(TESTDIR)/*.cc))
-TEST_CU_SOURCES= $(filter-out  $(addprefix $(TESTDIR)/, $(TEST_RUNNERS)), \
-							 $(wildcard $(TESTDIR)/*.cu))
-#TEST_HEADERS= $(filter-out  $(addprefix $(TESTDIR)/, $(TEST_RUNNERS)), $(wildcard $(TESTDIR)/*.h))
-UNIT_TEST_SOURCES= $(BASE_SOURCES) $(BASE_CU_SOURCES) $(BASE_OGL_SOURCES) $(TEST_SOURCES) $(TEST_CU_SOURCES) $(addprefix $(TESTDIR)/,testRunner.cc)
-SUITE_TEST_SOURCES= $(BASE_SOURCES) $(BASE_CU_SOURCES) $(TEST_SOURCES) $(TEST_CU_SOURCES) $(addprefix $(TESTDIR)/,suiteRunner.cc)
-
-ifeq ($(suite),1)
-	BUILD_SOURCES= $(SUITE_TEST_SOURCES)
-else
-	BUILD_SOURCES= $(UNIT_TEST_SOURCES)
-endif  
-
+							 
 ifeq ($(ogl),0)
 	TEST_SOURCES= $(filter-out *ogl*, $(TEST_SOURCES))
 endif
+							 
+TEST_CU_SOURCES= $(filter-out  $(addprefix $(TESTDIR)/, $(TEST_RUNNERS)), \
+							 $(wildcard $(TESTDIR)/*.cu))
+#TEST_HEADERS= $(filter-out  $(addprefix $(TESTDIR)/, $(TEST_RUNNERS)), $(wildcard $(TESTDIR)/*.h))
+UNIT_TEST_SOURCES=  $(TEST_SOURCES) $(TEST_CU_SOURCES) $(addprefix $(TESTDIR)/,testRunner.cc)
+SUITE_TEST_SOURCES= $(TEST_SOURCES) $(TEST_CU_SOURCES) $(addprefix $(TESTDIR)/,suiteRunner.cc)
+
+ifeq ($(suite),1)
+	EXEC_TEST_SOURCES= $(SUITE_TEST_SOURCES)
+else
+	EXEC_TEST_SOURCES= $(UNIT_TEST_SOURCES) 
+endif  
+
 
 # to print the contents of any makefile variable, make echoVar-<<varname>>
 echoVar-%  : ; @echo $($*)
 
-HEADERS := $(BUILD_SOURCES:.cc=.h) $(BUILD_SOURCES:.cu=.h)  
+HEADERS := $(BUILD_SOURCES:.cc=.h) $(BUILD_SOURCES:.cu=.h)
+TEST_HEADERS := $(EXEC_TEST_SOURCES:.cc=.h) $(EXEC_TEST_SOURCES:.cu=.h)  
+  
 ASPECTS := $(wildcard $(SRCDIR)/**.ah)
 
 # is there a way to do this in one step?
 OBJECTS_CC_PASS=$(addprefix $(OBJDIR)/, $(notdir $(BUILD_SOURCES:.cc=.o)))
 OBJECTS=$(OBJECTS_CC_PASS:.cu=.o)
 
-# Common includes and paths for CUDA
-INCLUDES      := -I. -I.. -I$(CUDA_RD_PATH)/samples/common/inc -I$(CUDA_INC_PATH) -I$(NVML_INC_PATH) -I$(OCTAVE_364_INC_PATH) -I$(OCTAVE_382_INC_PATH) -I$(CUDA_COMMON_INC_PATH) -I$(INC_PATH) 
+TEST_OBJECTS_CC_PASS=$(addprefix $(OBJDIR)/, $(notdir $(EXEC_TEST_SOURCES:.cc=.o)))
+TEST_OBJECTS=$(TEST_OBJECTS_CC_PASS:.cu=.o)
 
-all: $(BUILD_SOURCES) $(EXECUTABLE)
+# Common includes and paths for CUDA
+#-I$(OCTAVE_364_INC_PATH) -I$(OCTAVE_382_INC_PATH) -I$(OCTAVE_401_INC_PATH)
+INCLUDES      := -I. -I.. -I$(CUDA_RD_PATH)/samples/common/inc -I$(CUDA_INC_PATH) -I$(NVML_INC_PATH) -I$(OCTAVE_INC_PATH) -I$(CUDA_COMMON_INC_PATH) -I$(INC_PATH) 
+
+all: $(BUILD_SOURCES) $(LIB_NAME)
 	
 -include $(OBJECTS:.o=.d)
 
+
 .PHONY : gen_sources
-gen_sources : 
-	$(RIBOSOME) $(DNA_SOURCES)
+gen_sources:
+	@echo $@  # print target name
+	@echo GENCODE_FLAGS $(GENCODE_FLAGS)
+ifeq (,$(wildcard ./src/*_Gen.*)) 
+	$(RIBOSOME) $(DNA_SOURCES)  # generated files don't exist
+else	
+	@$(MAKE) -f $(THIS_FILE) dna_sources  # generated files exist; test age
+endif		
 	
-# if first execution, first generate sources, then call make again to ensure that the generated (unless ngen=1 is specified) 
+.PHONY : dna_sources 
+dna_sources: src/BaseUnaryOpIndexF_Gen.h
+
+src/BaseUnaryOpIndexF_Gen.h :  $(DNA_SOURCES)  # arbitrarily test one generated file against the dna file(s) 
+	$(RIBOSOME) $(DNA_SOURCES)
+
+# if first execution, first generate functor sources using ribosome, then call make again to ensure that the generated (unless ngen=1 is specified) 
 # source files become part of the build 
 ifeq ($(MAKELEVEL),0) 
-$(EXECUTABLE): gen_sources
+$(LIB_NAME): gen_sources
 	@$(MAKE) -s $@
 else	
-$(EXECUTABLE): $(OBJECTS) | $(HEADERS)
+$(LIB_NAME): $(OBJECTS) | $(HEADERS)
 ifeq ($(cdp),1)
-	$(NVCC) -g $(GENCODE_FLAGS) -rdc=true -dlink $(OBJECTS) -lcudadevrt -o $(OUT_DIR)/link.o
-	$(GCC) -rdynamic $(OBJECTS) $(OUT_DIR)/link.o $(LDFLAGS) -o $@
+	$(NVCC) -ccbin g++ -lib -o $(LIB_NAME) $(OBJECTS)
+	$(GCC) -shared -o $(SO_NAME) $(OBJECTS)
 else
-	$(NVCC) $(GENCODE_FLAGS) -Xcompiler '-fPIC' -dlink $(OBJECTS) -o $(OUT_DIR)/link.o
-	$(GCC) $(OBJECTS) $(OUT_DIR)/link.o $(LDFLAGS) -lcudart -o $@
+	$(GCC) -shared -o $(SO_NAME)  $(OBJECTS)
+	@echo cdp off EXISTS_TEST_NAME: $(EXISTS_TEST_NAME) 
+endif
+	@echo built:  $(SO_NAME)
+ifneq ( $(BEFORE_DATE), `stat -c %y $(SO_NAME)` ) 
+ifeq ($(EXISTS_TEST_NAME),exists )
+	rm $(TEST_NAME)
+	@echo Removed stale test executable $(TEST_NAME)
+endif
 endif
 endif
 
-test: $(EXECUTABLE)
-	$(EXECUTABLE)
+test: $(TEST_NAME) $(SO_NAME)
+ifeq ($(EXISTS_TEST_NAME),exists )
+	@printf "\nreplaced: $(TEST_NAME)"
+else
+	@printf "\nbuilt: $(TEST_NAME)"
+endif
+
+$(TEST_NAME): $(TEST_OBJECTS) | $(TEST_HEADERS) 
+ifeq ($(cdp),1)
+	@echo cdptestname: $(TEST_NAME)
+	$(NVCC) -ccbin g++ $(GENCODE_FLAGS) $(TEST_OBJECTS) $(LIB_NAME) $(LDFLAGS) -o $@
+else
+	@echo basename: $(BASE_NAME)
+	$(NVCC) -ccbin g++ $(GENCODE_FLAGS) $(TEST_OBJECTS) $(LIB_NAME) $(LDFLAGS) -o $@
+endif
 	
 VPATH = $(SRCDIR):$(OGLSRCDIR):$(TESTDIR)
 
-# supposed to compile dependent sources when header files change (for .cc sources anyway)
-# 'touchImporters.sh' effects forces this for both architectures 
+# supposed to compile dependent sources when header files change (only works for .cc sources however)
+# 'touchImporters.sh' effects this for both architectures (.cu and .cc) using an embedded scala script ich
 $(OBJDIR)/%.o : %.cc
 	$(GCC) -c $(CPPFLAGS) $(INCLUDES) $^ -o $(OBJDIR)/$*.o
 	$(GCC) -MM $(CPPFLAGS) $^ > $(OBJDIR)/$*.d
@@ -239,17 +308,18 @@ $(OBJDIR)/%.o : %.cc
 	  sed -e 's/^ *//' -e 's/$$/:/' >> $(OBJDIR)/$*.d
 	@rm -f $(OBJDIR)/$*.d.tmp
 
-
 $(OBJDIR)/%.o : %.cu
 	$(NVCC) $(NVCPPFLAGS) $(EXTRA_NVCCFLAGS) $(GENCODE_FLAGS) $(INCLUDES) -c $^ -o $(OBJDIR)/$*.o
 
 $(OBJECTS) : | $(OBJDIR)
+$(TEST_OBJECTS) : | $(OBJDIR)
 
 $(OBJDIR):
 	mkdir $(OBJDIR)
 
 #.PHONY : $(HEADERS)
 $(HEADERS):
+$(TEST_HEADERS):
 	
 .PHONY : clean
 clean:

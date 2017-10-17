@@ -37,20 +37,22 @@ using std::ifstream;
 using std::back_inserter;
 using std::cout;
 
+#define T_ARRAY_SIZE(a) (sizeof(a)/sizeof(T))
+
 #define REGISTER_HEADROOM_FACTOR (0.87)
 extern __host__ __device__ const char *__cudaGetErrorEnum(cudaError_t error);
 
 #define cherr(exp) if((exp)!= cudaSuccess) {printf( "\n\n%s : %d --> %s\n\n", __FILE__, __LINE__ , __cudaGetErrorEnum(exp));assert(0);}
-#define chnerr(exp) if((exp)!= NVML_SUCCESS) {printf( "\n\n%s : %d --> %s\n\n", __FILE__, __LINE__ , getNvmlErrorEnum(exp));assert(0);}
+#define chnerr(exp) if((exp)!= NVML_SUCCESS) {printf( "\n\n%s : %d --> %s\n\n", __FILE__, __LINE__ , getNvmlErrorEnum(exp));/*assert(0);*/}
 
 #define chblerr(exp) if((exp)!= CUBLAS_STATUS_SUCCESS) {printf( "\n\n%s : %d --> %s\n\n", __FILE__, __LINE__ , __cublasGetErrorEnum(exp));assert(0);}
 
 const char* getNvmlErrorEnum(int en);
 
-template <typename T> inline __host__ __device__ void printColoArray(const T* array, int n, int direction = 1);
-template <typename T> inline __host__ __device__ void prtColoArrayDiag(const T* array,const char*msg, int line,  int pitch, int n, int direction = 1, T notEqual = 0);
-template <typename T> inline __host__ __device__ void cntColoArrayDiag(const T* array,const char*msg, int line,  int pitch, int n, int direction = 1, T notEqual = 0);
-template <typename T> inline __host__ __device__ void prtColoArrayInterval(const T* array, const char* msg, long n, int sampleElemCount, int sampleCount);
+template <typename T> __host__ __device__ void printColoArray(const T* array, int n, int direction = 1);
+template <typename T> __host__ __device__ void prtColoArrayDiag(const T* array,const char*msg, int line,  int pitch, int n, int direction = 1, T notEqual = 0);
+template <typename T> __host__ __device__ void cntColoArrayDiag(const T* array,const char*msg, int line,  int pitch, int n, int direction = 1, T notEqual = 0);
+template <typename T> __host__ __device__ void prtColoArrayInterval(const T* array, const char* msg, long n, int sampleElemCount, int sampleCount);
 #define printColoArrayDiag( array, pitch, n ) prtColoArrayDiag( array, __PRETTY_FUNCTION__, __LINE__, pitch,  n )
 #define printColoArrayDiagNe( array, pitch, n, notEq) prtColoArrayDiag( array, __PRETTY_FUNCTION__, __LINE__, pitch,  n , 1, notEq)
 #define countColoArrayDiagNe( array, pitch, n, notEq) cntColoArrayDiag( array, __PRETTY_FUNCTION__, __LINE__, pitch,  n , 1, notEq)
@@ -93,9 +95,7 @@ enum BuildType {
 	btUnknown, debug, release,
 };
 
-enum TileDirection {
-	tdNeither = 1, tdRows = 2, tdCols = 4, tdBoth = tdRows | tdCols,
-};
+extern BuildType g_BuildType;
 
 enum Padding {
 	padWarp, padEven
@@ -103,7 +103,7 @@ enum Padding {
 
 
 extern const char* GpuCriteriaNames[];
-enum GpuCriteria { gcCoolest, gcFreeest, gcFastest };
+enum GpuCriteria { gcCoolest, gcFreeest, gcFastest, gcAll };
 GpuCriteria operator++(GpuCriteria& x);
 GpuCriteria operator*(GpuCriteria c);
 GpuCriteria begin(GpuCriteria r);
@@ -118,6 +118,7 @@ template<typename T> struct Test;
 
 
 typedef unsigned int uint;
+typedef unsigned char uchar;
 typedef pair<int,int> intPair;
 typedef unsigned long ulong;
 typedef pair<long,long> longPair;
@@ -127,12 +128,14 @@ string print_stacktrace(unsigned int max_frames = 63);
 
 extern string parry(const int* arry, int cnt);
 template<typename T> __host__ __device__ T sqrt_p(T);
+template<typename T> __host__ __device__ void prry(T* ry);
 
 // printf with prepended thread id
 void tprintf(const char *__restrict __format, ...);
 
 struct b_util {
 
+	// printing
 	static inline __host__ __device__ void printBinary(char* out, int v, int widthBits) {
 		for(int i = 0; i < widthBits; i++) {
 			out[widthBits - 1 - i] = (v >> i & 1) ? '1' : '0';
@@ -151,73 +154,31 @@ struct b_util {
 	static __host__ __device__ void printBinLong(char* out, long c) {
 		printBinary(out,c,64);
 	}
-
-
-
-	static __device__ int sumRec(int s);
-	static __host__ CUDART_DEVICE int countSpanrows( int m, int n, uint warpSize = WARP_SIZE);
-	static __host__ __device__ bool spanrowQ( int row, int n, uint warpSize = WARP_SIZE);
-	static __host__ void freeOnDevice(void * mem);
-
-	static __host__ void warmupL();
-
-	/*
-	 * headroom- nax per matrix allocation as fraction of total device gmem
-	 */
-
-	static inline ulong twoDTo1D(dim3& idx3, dim3& basis) { return idx3.x + idx3.y * basis.x; }
-	static inline ulong threeDTo1D(dim3& idx3, dim3& basis) { return idx3.x + idx3.y * basis.x + idx3.z * basis.x * basis.y; }
-	static void to1D(dim3& d3);
-
-	static int countLines(const char* path, int headerLength = 1);
-	static vector<string> readLines(const char * );
-	static vector<string> split(string);
-
+	static __host__ __device__ const char* tileDir(TileDirection tileD);
 	static __host__ __device__ const char * modStr(Modification lastMod);
 	static __device__ __host__ void printModStr(Modification lastMod);
-
-	static void deCap(char* s);
-	static string deCap(const string& s);
-	static string cap(const string& s);
-	static double diffclock(clock_t clock1,clock_t clock2);
 	template<typename T> static string pvec(vector<T>& v);
 	static string pxd(const dim3& grid,const  dim3& block);
 
 	static string sPtrAtts(const cudaPointerAttributes& atts);
-	template<typename T> static __host__ __device__ void pPtrAtts(T * ptr);
-	template<typename T> static __host__ __device__ void pFuncPtrAtts(T * ptr);
+	template<typename T> static __host__ __device__ void pPtrAtts(const T * ptr);
+	template<typename T> static __host__ __device__ enum cudaMemcpyKind copyKind( T * dst,  T const * const src );
+
+	static __host__ CUDART_DEVICE bool validLaunchQ(const void* pKernel, dim3 grid, dim3 block);
+	static __host__ CUDART_DEVICE void validLaunch( dim3& block, const void* pKernel);
+	static __host__ __device__ void pFuncPtrAtts(const void * kernelPtr);
+	static __host__ __device__ int maxBlockThreads( const void * kernelPtr);
 	static string pexec(const dim3& grid,const  dim3& block, uint smem);
-	static __host__ CUDART_DEVICE bool validLaunchQ( void* pKernel, dim3 grid, dim3 block);
 	static string pd3(const dim3& d3);
 	static __host__ __device__ void prd3( const dim3& d3,const char *msg = null);
 	static string pd3(const dim3* d3);
 	static string pd3(const dim3* d3, const char* msg);
 	static string pd3(const dim3* d3, string msg);
 	static string toStr(const intPair& p);
-	static void syncGpu(const char * msg = null);
-	__device__ __host__ static inline uint maskShifts(uint x) {
-		x |= x >> 1;
-		x |= x >> 2;
-		x |= x >> 4;
-		x |= x >> 8;
-		x |= x >> 16;
-		return x;
-	}
-	__device__ __host__ static uint nextPowerOf2(uint x);
-	__device__ __host__ static uint prevPowerOf2(uint x);
-
-	template<typename T> static inline T nextFactorable(T start, uint factor) {
-		return static_cast<T>( ceilf(start*1./factor)*factor);
-	}
-	static __host__ __device__ bool isPow2(uint x);
-	static __host__ __device__ bool onGpuQ();
-
-	static __host__ __device__ void vectorExecContext(int threads, int count, dim3& dBlocks,
-			dim3& dThreads);
-	static void vectorExecContext(int threads, uint count, uint spacePerThread,
-			dim3& dBlocks, dim3& dThreads, uint& smem);
-	static inline uint vol(dim3& d3) { return d3.x * d3.y *d3.z; }
-
+	static void _printCudaError(const char* file, int line, cudaError_t val);
+	static void deCap(char* s);
+	static string deCap(const string& s);
+	static string cap(const string& s);
 	inline static string plz(const char* s, int c){
 
 		stringstream ss;
@@ -231,11 +192,103 @@ struct b_util {
 		return (ss.str());
 	}
 
+	static const char* lastErrStr();
+	static void dumpAnyErr(string file, int line);
+	static void dumpError(cudaError_t err);
+
 	static string expNotation(long val);
+	static string expNotationMem(long val);
 	static __host__ __device__ void expNotation(char* buff, long val);
+	static __host__ void expNotationMem(char* buff, long val);
+	static __host__ string expNotationMemStr( long val);
+
+
+	// math
+	static __device__ int sumRec(int s);
+	static __host__ CUDART_DEVICE int countSpanrows( int m, int n, uint warpSize = WARP_SIZE);
+	static __host__ __device__ bool spanrowQ( int row, int n, uint warpSize = WARP_SIZE);
+	static inline ulong twoDTo1D(dim3& idx3, dim3& basis) { return idx3.x + idx3.y * basis.x; }
+	static inline ulong threeDTo1D(dim3& idx3, dim3& basis) { return idx3.x + idx3.y * basis.x + idx3.z * basis.x * basis.y; }
+	static void to1D(dim3& d3);
+	template<typename T> static inline T nextFactorable(T start, uint factor) {
+		return static_cast<T>( ceilf(start*1./factor)*factor);
+	}
+	static int pad(int start, int width);
+
+	static inline uint vol(dim3& d3) { return d3.x * d3.y *d3.z; }
+	static void randSequence(vector<int>& ret, int count, int start = 0);
+	static void randSequenceIA(IndexArray& ret, int count, int start = 0);
+
+	// mem
+	static __host__ void freeOnDevice(void * mem);
+	static __host__ CUDART_DEVICE double currMemRatio();
+	static __host__ CUDART_DEVICE double usedMemRatio(bool allDevices = false);
+	static __host__ CUDART_DEVICE void usedDmem(bool allDevices = false);
+	template<typename T, typename... Args> static __host__ int migrate(int dev, T& first, Args ... args) {
+		printf("util_migrate argslen %d\n", (int)sizeof...(args));
+
+		if(sizeof...(args) == 0) {
+			printf("util_migrate dev to %d\n",dev);
+			return 0;
+	    } else {
+	    	return migrate(dev, first ) +
+	    	migrate( dev, args...);
+	    }
+	}
+	template<typename T> static __host__ int migrate(int dev, T& m) {
+		outln("m " << m.toShortString());
+		return m.getMgr().migrate(dev,m);
+		//return 0;
+	}
+	template<typename T> static void toArray( T* arry, const vector<T>& v, int start, int count);
+
+	// kernel exec
+	static __host__ void warmupL();
+
+	__device__ __host__ static uint nextPowerOf2(uint x);
+	__device__ __host__ static uint prevPowerOf2(uint x);
+
+	static __host__ __device__ bool isPow2(uint x);
+	static __host__ __device__ int threadIdx1D();
+	static __host__ __device__ int threadIdx1Dblock(uint blocksize);
+
+	static __host__ __device__ bool onGpuQ();
+
+	static __host__ __device__ void vectorExecContext(int threads, int count, dim3& dBlocks,
+			dim3& dThreads, const void* kernel = nullptr);
+	static void vectorExecContext(int threads, uint count, uint spacePerThread,
+			dim3& dBlocks, dim3& dThreads, uint& smem);
+	static void syncGpu(const char * msg = null);
+#ifdef CuMatrix_NVML
+	static __host__ void enableGpuMode();
+#endif
+	static int kernelOccupancy( void * kernel, int* maxBlocks, int blockSize);
+	static __host__ __device__ bool adjustExpectations(dim3& grid, dim3& block, const cudaFuncAttributes& atts);
+
+	/*
+	 * headroom- nax per matrix allocation as fraction of total device gmem
+	 */
+
+	// file
+	static int countLines(const char* path, int headerLength = 1);
+	static vector<string> readLines(const char * );
+	static vector<string> split(string);
+
+	// timing
+	static double diffclock(clock_t clock1,clock_t clock2);
+	__device__ __host__ static inline uint maskShifts(uint x) {
+		x |= x >> 1;
+		x |= x >> 2;
+		x |= x >> 4;
+		x |= x >> 8;
+		x |= x >> 16;
+		return x;
+	}
+
+	// stackagi
 	static string unmangl(const char* mangl);
-	static string stackString(string msg, int start, int depth = -1) ;
-	static string stackString(int start = 0, int depth = -1);
+	static std::string stackString(string msg, int start, int depth = -1) ;
+	static std::string stackString(int start = 0, int depth = -1);
 	static string caller();
 	static string caller2();
 	static string callerN(int n);
@@ -244,48 +297,24 @@ struct b_util {
 	static void dumpStack(const char * msg,  int depth = -1) ;
 	static void dumpStackIgnoreHere(int depth) ;
 	static void dumpStackIgnoreHere(string msg, int depth = -1);
+
 	static void waitEnter();
 
-	static const char* lastErrStr();
-	static void dumpAnyErr(string file, int line);
-	static void dumpError(cudaError_t err);
-	static __host__ CUDART_DEVICE double currMemRatio();
-	static __host__ CUDART_DEVICE double usedMemRatio(bool allDevices = false);
-	static __host__ CUDART_DEVICE void usedDmem(bool allDevices = false);
 	static __host__ __device__ void  _checkCudaError(const char* file, int line, cudaError_t val);
 
-	static void _printCudaError(const char* file, int line, cudaError_t val);
-
+	// timing
 	static void announceTime();
 	static void announceDuration(float exeTime);
 	static long nowMillis();
+	static time_t timeReps( void(*fn)(), int reps) ;
 
 	//static int allDevices(void (*ftor)());
+	// device stats
 	static uint getDeviceTemp(int dev);
-
 	static int getDeviceThatIs( GpuCriteria );
-
-	static void dumpGpuStats();
-
-	template<typename T> static bool onCurrDeviceQ(T& m);
-	template<typename T> static int deviceOfResidence(T& m);
-	template<typename T> static bool onDeviceQ(int dev, T& m);
-	template<typename T, typename... Args> static bool onCurrDeviceQ(T& first, Args... args) {
-		//printf("onCurrDeviceQ argslen %d\n", sizeof...(args));
-		return  onCurrDeviceQ(first ) && onCurrDeviceQ(args...);
-	}
-
-	template<typename T, typename... Args> static bool onDeviceQ(int dev, T& first, Args... args) {
-		return  onDeviceQ(dev, first ) && onDeviceQ(dev, args...);
-	}
-
-	template<typename T, typename... Args> static bool colocatedQ(T& first, Args... args) {
-		static int dev = deviceOfResidence(first);
-	    return onDeviceQ(dev, args...);
-	}
-
+	static void dumpAllGpuStats();
+	static void dumpGpuStats(int gpu);
 	template<typename T> static int devByMaxOccupancy( map<int,long>& devOx, T& m);
-
 	template<typename T, typename... Args> static int devByMaxOccupancy(map<int,long>& devOx, T& first, Args... args) {
 		printf("b_util_devByMaxOccupancy argslen %d\n", sizeof...(args));
 		int devCount = -1;
@@ -315,28 +344,30 @@ struct b_util {
 	    }
 	}
 
-	template<typename T> static __host__ int migrate(int dev, T& m) {
-		outln("m " << m.toShortString());
-		return m.getMgr().migrate(dev,m);
-		//return 0;
+	// location
+	template<typename MatrixT> static bool onCurrDeviceQ(MatrixT& m);
+	template<typename MatrixT> static int deviceOfResidence(MatrixT& m);
+	template<typename MatrixT> static bool onDeviceQ(int dev, MatrixT& m);
+	template<typename MatrixT, typename... Args> static bool onCurrDeviceQ(MatrixT& first, Args... args) {
+		return  onCurrDeviceQ(first ) && onCurrDeviceQ(args...);
 	}
 
-	template<typename T, typename... Args> static __host__ int migrate(int dev, T& first, Args ... args) {
-		printf("util_migrate argslen %d\n", sizeof...(args));
-
-		if(sizeof...(args) == 0) {
-			printf("util_migrate dev to %d\n",dev);
-			return 0;
-	    } else {
-	    	return migrate(dev, first ) +
-	    	migrate( dev, args...);
-	    }
+	template<typename MatrixT, typename... Args> static bool onDeviceQ(int dev, MatrixT& first, Args... args) {
+		return  onDeviceQ(dev, first ) && onDeviceQ(dev, args...);
 	}
 
+	template<typename MatrixT, typename... Args> static bool colocatedQ(MatrixT& first, Args... args) {
+		static int dev = deviceOfResidence(first);
+	    return onDeviceQ(dev, args...);
+	}
+	static int getDevice(void* ptr);
+	static bool onDevice(void* ptr, int dev);
 
+	// function mapping
 	static int allDevices(function<void()>ftor);
 	static bool anyDevice(function<bool()>ftor);
 
+	// debug exec
 	static void abortDumper(int level = -1);
 	static void fpeDumper(int level = -1);
 	static void segvDumper(int level = -1);
@@ -346,30 +377,24 @@ struct b_util {
 	static int getIntArg(int argc, const char** argv,const char* argName, int defaultVal = 1);
 	static int getStart(int argc, const char** argv,int defaultStart = 1);
 	static string getPath(int argc, const char** argv,const char* defaultPath);
-	static time_t timeReps( void(*fn)(), int reps) ;
 
-	static void randSequence(vector<int>& ret, int count, int start = 0);
-	static void randSequenceIA(IndexArray& ret, int count, int start = 0);
-	template<typename T> static void toArray( T* arry, const vector<T>& v, int start, int count);
-	static void intersects(int** indices, const float2* segments);
-	static void intersects(int** indices, const double2* segments);
 	static __device__ __forceinline__ void laneid(uint&  lid) {
 		asm("{\n\tmov.u32 %0, %%laneid ;\n\t}" : "=r"(lid));
 	}
 
-	static int kernelOccupancy( void * kernel, int* maxBlocks, int blockSize);
-
-	static __host__ __device__ bool adjustExpectations(dim3& grid, dim3& block, const cudaFuncAttributes& atts);
-
+	// list / permutation functions
 	static list<uint> rangeL( uint2 range , int step =1);
 	static list<list<uint>> rangeLL( uint2* ranges, int count, int step = 1 );
-
 	template <typename E> static void print(list<E> l);
 	template <typename E> static string toString(list<E> l);
 	template <typename E> static void printAll(list<list<E>> listOfLists, list<E> sol);
 	template <typename E> static int countAll(list<list<E>> listOfLists, list<E> sol);
 
+	static const char* cardinalToOrdinal(int cardinalNo);
+
+
 };
+
 #define anyErr()  b_util::dumpAnyErr(__FILE__,__LINE__)
 #define checkCudaError(exp) b_util::_checkCudaError(__FILE__, __LINE__, exp)
 #define printCudaError(exp) b_util::_printCudaError(__FILE__, __LINE__, exp)
@@ -378,32 +403,33 @@ struct b_util {
 #define dthrowm(msg,exp) { cout << "Exception: " << msg << endl << "\\/   at " << __FILE__ << "("<< __LINE__ << ")\n" << b_util::stackString(2) << endl; throw(exp);}
 #define dassert(exp) { if(!(exp)) { cout << "assertion failed " << endl << "\\/   at " << __FILE__ << "("<< __LINE__ << ")\n" << b_util::stackString() << endl; assert(exp); exit(-1);}}
 
+template <typename T> __host__ __device__ int tSz(int sz) { return sz * sizeof(T); }
+
 template <typename T> struct util {
-	static __host__ __device__ T minValue();
+
+	// stats
 	static __host__ float vAddGflops(int device);
-	static inline __host__ __device__ uint vol(dim3& d3) { return d3.x * d3.y *d3.z * sizeof(T); }
+	static __host__ __device__ T minValue();
 	static __host__ __device__ T maxValue();
-	static bool almostEquals(T t1, T t2, T epsilon = 1e-6);
+	static __device__ __host__ T epsilon();
+
+	// mem
 	template <typename K> static  int deletePtrMap( map<K, T*>&  m);
 	template <typename K> static void deletePtrArray( K**  m, int size);
 	template <typename K> static void deleteDevPtrArray( K**  m, int size);
 	static  int deleteVector( vector<T*>&  v);
 	static  int cudaFreeVector( vector<T*>&  v, bool device = true);
 	static  cudaError_t copyRange(T* targ, ulong targOff, T* src, ulong srcOff, ulong count);
-	static  T sumCPU(T* vals, ulong count);
-	static string pdm(const DMatrix<T>& md);
-
-	static bool onDevice(T* ptr, int dev);
 	static bool onCurrentDevice(T* ptr);
-	static int getDevice(T* ptr);
+	__host__ __device__ void colMajorCopy( T* dest, const T* srcInRowMajor, int m, int n ) {
+		int len = m*n;
+		for(int i =0; i < len; i++){
+			int colIdx = i % n * m + i / n;
+			dest[i] = srcInRowMajor[colIdx];
+		}
+	}
 
-	static __host__ __device__ void prdm(const char* msg, const DMatrix<T>& md);
-	static __host__ __device__ void prdm( const DMatrix<T>& md) { prdm("",md);}
-	static __host__ __device__ void prdmln(const char* msg, const DMatrix<T>& md);
-	static __host__ __device__ void prdmln( const DMatrix<T>& md) { prdmln("",md);}
-	static __host__ __device__ void printDm( const DMatrix<T>& dm, const char* msg = null);
-	static __host__ __device__ void printRow(const DMatrix<T>& dm, int row = 0);
-
+	//		fill
 	static void setNDev(T* trg, T val, long n) {
 		switch (sizeof(T)) {
 		case 4: {
@@ -477,7 +503,6 @@ template <typename T> struct util {
 		}
 		}
 	}
-
 	static void setNI( T* trg, T val, long n) {
 		switch(sizeof(T)) {
 			case 4: {
@@ -493,7 +518,6 @@ template <typename T> struct util {
 			}
 		}
 	}
-
 	static void setNI2( T* trg, T val, long n) {
 		switch(sizeof(T)) {
 			case 4: {
@@ -526,18 +550,16 @@ template <typename T> struct util {
 			}
 		}
 	}
+	static  __host__ __device__ void fillNDev(T* trg, T val, long n);
 
-	static void fillNDev(T* trg, T val, long n);
-
-	static T timeMain( int(*mainLike)(int, char**), const char* name, int argv, char** args, int* theResult ) ;
-	static T timeReps( CuMatrix<T> (CuMatrix<T>::*unaryFn)(), const char* name, CuMatrix<T>* mPtr, int reps) ;
-	static __device__ __host__ T epsilon();
+	// math
+	static  T sumCPU(T* vals, ulong count);
+	static inline __host__ __device__ uint vol(dim3& d3) { return d3.x * d3.y *d3.z * sizeof(T); }
+	static __host__ __device__ bool almostEquals(T t1, T t2, T epsilon = 1e-6);
+	static  __host__ __device__ bool almostEqualsNormalized(T t1, T t2, T epsilon = 1e-6);
 	static inline T relDiff(T v1, T v2) {
 		return (v2-v1)/(1.0*v1);
 	}
-	static string parry(const T* arry, int cnt);
-	static __host__ __device__ void pDarry(const T* arry, int cnt);
-
 	inline static __host__ __device__ T dot(const T* u, const T* v) {
 		return u[0] * v[0] + u[1] * v[1] + u[2]* v[2];
 	}
@@ -558,13 +580,37 @@ template <typename T> struct util {
 		out3 = u1 * v2 - u2 * v1;
 	}
 
-	__host__ __device__ void colMajorCopy( T* dest, const T* srcInRowMajor, int m, int n ) {
-		int len = m*n;
-		for(int i =0; i < len; i++){
-			int colIdx = i % n * m + i / n;
-			dest[i] = srcInRowMajor[colIdx];
-		}
+	// debug
+	static string pdm(const DMatrix<T>& md);
+	static __host__ __device__ void prdm(const char* msg, const DMatrix<T>& md);
+	static __host__ __device__ void prdm( const DMatrix<T>& md) { prdm("",md);}
+	static __host__ __device__ void prdmln(const char* msg, const DMatrix<T>& md);
+	static __host__ __device__ void prdmln( const DMatrix<T>& md) { prdmln("",md);}
+	static __host__ __device__ void printDm( const DMatrix<T>& dm, const char* msg = null);
+	static __host__ __device__ void printRow(const DMatrix<T>& dm, int row = 0);
+	static string parry(const T* arry, int cnt);
+	static __host__ __device__ void pDarry(const T* arry, int cnt);
+	static __host__ int hCountNe(const T* elems, T val, long n) {
+		int cnt =0;
+		long idx =0;
+		while(idx++ < n)
+			if(!almostEquals(val, elems[idx]))
+				cnt++;
+		return cnt;
 	}
+	static __host__ int hCountNe2D(const T* elems, T val, int p, int w, int h) {
+		int cnt =0;
+		for(int m = 0; m < h; m++)
+			for(int n = 0; n < w; n++)
+				if(!almostEquals(val, elems[m * p + n]))
+					cnt++;
+		return cnt;
+	}
+
+	// timing
+	static T timeMain( int(*mainLike)(int, char**), const char* name, int argv, char** args, int* theResult ) ;
+	static T timeReps( CuMatrix<T> (CuMatrix<T>::*unaryFn)(), const char* name, CuMatrix<T>* mPtr, int reps) ;
+
 };
 
 struct IndexArray {
@@ -576,7 +622,7 @@ struct IndexArray {
 	__host__ __device__ IndexArray(uint* _indices, uint _count, bool _owner=true);
 	__host__ __device__ IndexArray(uint idx1,uint idx2);
 	string toString(bool lf = true) const;
-	intPair toPair() const;
+	//intPair toPair() const;
 	__host__ __device__ ~IndexArray();
 	friend std::ostream& operator<<(std::ostream& os,  const IndexArray arry)  {
 		return os << arry.toString().c_str();
@@ -629,26 +675,32 @@ public:
 
 #if defined(__WIN32__) || defined(_WIN32) || defined(WIN32) || defined(__WINDOWS__) || defined(__TOS_WIN__)
 
-  #include <windows.h>
+	#include <windows.h>
 
-  inline void delay( unsigned long ms )
-    {
-    Sleep( ms );
-    }
-
+	inline void delay( unsigned long ms )    {  Sleep( ms );  }
+	inline long long getTotalSystemMemory()
+	{
+	    MEMORYSTATUSEX status;
+	    status.dwLength = sizeof(status);
+	    GlobalMemoryStatusEx(&status);
+	    return status.ullTotalPhys;
+	}
 #else  /* presume POSIX */
 
   #include <unistd.h>
 
-  inline void delayMics( unsigned long us )
-    {
-    usleep( us );
-    }
-  inline void delayMillis( unsigned long ms )
-    {
-    usleep( ms * 1000 );
-    }
-
+	inline void delayMics(unsigned long us) {
+		usleep(us);
+	}
+	inline void delayMillis(unsigned long ms) {
+		usleep(ms * 1000);
+	}
+	inline long long getTotalSystemMemory()
+	{
+	    long pages = sysconf(_SC_PHYS_PAGES);
+	    long page_size = sysconf(_SC_PAGE_SIZE);
+	    return (long long)pages * page_size;
+	}
 #endif
 
 template<typename T> class toT {
@@ -657,4 +709,81 @@ public:
 		uint val = *((uint*) elem);
 		return (T) val;
 	}
+};
+
+template<typename PackType> struct Packeur {
+
+	PackType& target;
+	int currIdx;
+
+	__host__ __device__ Packeur(PackType& target) : target(target), currIdx(0) {}
+
+	__host__ __device__ void pack(){}
+
+	template <typename H>
+		__host__ __device__ void packNext(H h);
+
+	template <typename H, typename... T>
+	__host__ __device__ void pack(H h, T... vals) {
+		packNext(h);
+		pack(vals...);
+	}
+};
+
+struct Packeur2 {
+
+	ulong vals[4];
+	int currIdx;
+
+	__host__ __device__ Packeur2() : currIdx(0) {
+		vals[0] = 0;
+		vals[1] = 0;
+		vals[2] = 0;
+		vals[3] = 0;
+	}
+
+	__host__ __device__ void pack(){}
+
+	template <typename H>
+		__host__ __device__ void packNext(H h) {
+		if(currIdx < 4)
+			vals[currIdx++] = (ulong) h;
+	}
+
+	template <typename H, typename... T>
+	__host__ __device__ void pack(H h, T... vals) {
+		packNext(h);
+		pack(vals...);
+	}
+
+	template <typename PackType> void render(PackType&);
+};
+
+template <typename T> struct Packeur3 {
+
+	T vals[4];
+	int currIdx;
+
+	__host__ __device__ Packeur3() : currIdx(0) {
+		vals[0] = 0;
+		vals[1] = 0;
+		vals[2] = 0;
+		vals[3] = 0;
+	}
+
+	__host__ __device__ void pack(){}
+
+	template <typename H>
+		__host__ __device__ void packNext(H h) {
+		if(currIdx < 4)
+			vals[currIdx++] = (ulong) h;
+	}
+
+	template <typename H, typename... Ts>
+	__host__ __device__ void pack(H h, Ts... vals) {
+		packNext(h);
+		pack(vals...);
+	}
+
+	template <typename PackType> __host__ __device__ PackType render();
 };

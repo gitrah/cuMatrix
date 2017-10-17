@@ -5,8 +5,7 @@
  *      Author: reid
  */
 
-#ifndef VUTIL_H_
-#define VUTIL_H_
+#pragma once
 #include <string.h>
 
 template <typename T> struct Vutil {
@@ -36,7 +35,7 @@ template <typename T> struct Vutil {
 	}
 
 	inline static T lenSqr(const T* src) { return src[0]*src[0] + src[1]*src[1] + src[2]*src[2]; }
-	inline static T len(const T* src) { return sqrt(lenSqr(src));}
+	inline static T len(const T* src) { return sqrtf(lenSqr(src));}
 
 	inline static void norm(T* out, const T* in) { scale(out, in, 1.0/len(in));}
 
@@ -48,8 +47,3 @@ template <typename T> struct Vutil {
 	}
 	inline static T dist3(T* dst, const T* src) {return sqrt(dist3Sqr(dst,src));}
 };
-
-
-
-
-#endif /* VUTIL_H_ */

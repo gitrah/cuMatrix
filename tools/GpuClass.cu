@@ -27,7 +27,7 @@ int main(int argc, const char** argv) {
 		checkCudaErrors(cudaGetDeviceProperties(&deviceProp, devID));
 		ss << deviceProp.major << "." << deviceProp.minor;
 		strs.insert( ss.str() );
-		ss.str("");
+		ss.str(" ");
     }
     typedef set<string>::iterator strit;
     int distinctCount = strs.size();
@@ -35,9 +35,9 @@ int main(int argc, const char** argv) {
     for( strit i = strs.begin(); i != strs.end(); i++ ){
     	cout << *i;
     	currGpu++;
-    	if(currGpu < distinctCount -1) {
+    	//if(currGpu < distinctCount -1) {
     		cout << " ";
-    	}
+    	//}
     }
 	return 0;
 }

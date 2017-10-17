@@ -5,8 +5,6 @@
  *      Author: reid
  */
 
-#ifndef FRUSTUM_H_
-#define FRUSTUM_H_
 
 #include "Vision.h"
 
@@ -18,5 +16,3 @@ public:
 	virtual ~Frustum();
 	void set();
 };
-
-#endif /* FRUSTUM_H_ */

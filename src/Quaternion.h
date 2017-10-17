@@ -5,8 +5,7 @@
  *      Author: reid
  */
 
-#ifndef QUATERNION_H_
-#define QUATERNION_H_
+#pragma once
 
 template<typename T> class Quaternion {
 	T w,x,y,z;
@@ -31,6 +30,3 @@ public:
 	inline T norm() { return w * w + x*x + y*y + z* z; }
 
 };
-
-
-#endif /* QUATERNION_H_ */

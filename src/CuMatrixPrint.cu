@@ -11,7 +11,7 @@
 //
 /////////////////////////////////////////////////////////////////////////
 
-template<typename T> string CuMatrix<T>::toString() const {
+template<typename T> __host__ string CuMatrix<T>::toString() const {
 
 	stringstream ss1, ss2, ss3, sstrout;
 	char value[200];
@@ -28,6 +28,12 @@ template<typename T> string CuMatrix<T>::toString() const {
 	sstrout << ss2.str();
 	sstrout << "*";
 	ss3 << p;
+	ss3 << (ownsDBuffers || ownsHBuffers) ? " owns" : "";
+	if (ownsDBuffers)
+		ss3 << "D";
+	if (ownsHBuffers)
+		ss3 << "H";
+
 	sstrout << ss3.str();
 	sstrout << ")<" << size << "> [" << (colMajor ? "cm]" : "rm]");
 
@@ -67,12 +73,12 @@ template<typename T> string CuMatrix<T>::toString() const {
 				if (sizeof(T) == 4)
 					sprintf(value,
 							(i1 * n + j1) % WARP_SIZE == 0 ?
-									"w%1.4g" : "% 2.4g ",
+									"w   %5.8g" : "% 5.8g ",
 							useHost ? getH(i1, j1) : get(i1, j1));
 				else
 					sprintf(value,
 							(i1 * n + j1) % WARP_SIZE == 0 ?
-									"w%5.8g" : "%5.8g",
+									"w   %5.8g" : "%5.8g",
 							useHost ? getH(i1, j1) : get(i1, j1));
 				//elements[i1 * p + j1]);
 				sstrout << value;
@@ -115,12 +121,12 @@ template<typename T> string CuMatrix<T>::toString() const {
 				if (sizeof(T) == 4)
 					sprintf(value,
 							(i2 * n + j2) % WARP_SIZE == 0 ?
-									"w%1.4g" : "% 2.4g",
+									"w   %1.5g" : "%5.8g",
 							useHost ? getH(i2, j2) : get(i2, j2));
 				else
 					sprintf(value,
 							(i2 * n + j2) % WARP_SIZE == 0 ?
-									"w%1.5g" : "%5.8g",
+									"w   %1.5g" : "%5.8g",
 							useHost ? getH(i2, j2) : get(i2, j2));
 				//elements[i2 * p + j2]);
 				sstrout << value;
@@ -131,12 +137,11 @@ template<typename T> string CuMatrix<T>::toString() const {
 			sstrout << "\n";
 		}
 		if (m > getMaxRowsDisplayed()) {
-			for (uint i3 = MAX( m - getMaxRowsDisplayed(),getMaxRowsDisplayed());
-					i3 < m; i3++) {
+			for (uint i3 = MAX(m - getMaxRowsDisplayed(),
+					getMaxRowsDisplayed()); i3 < m; i3++) {
 				if (n > getMaxColsDisplayed()) {
-					for (uint j3 =
-							MAX(n - getMaxColsDisplayed(), getMaxColsDisplayed());
-							j3 < n; j3++) {
+					for (uint j3 = MAX(n - getMaxColsDisplayed(),
+							getMaxColsDisplayed()); j3 < n; j3++) {
 						if (j3 == n - getMaxColsDisplayed()) {
 							sstrout << "...";
 							continue;
@@ -144,12 +149,12 @@ template<typename T> string CuMatrix<T>::toString() const {
 						if (sizeof(T) == 4)
 							sprintf(value,
 									(i3 * n + j3) % WARP_SIZE == 0 ?
-											"w%1.4g" : "% 2.4g",
+											"w   %1.5g" : "%5.8g",
 									useHost ? getH(i3, j3) : get(i3, j3));
 						else
 							sprintf(value,
 									(i3 * n + j3) % WARP_SIZE == 0 ?
-											"w%1.5g" : "%5.8g",
+											"w   %1.5g" : "%5.8g",
 									useHost ? getH(i3, j3) : get(i3, j3));
 						//elements[i3 * p + j3]);
 						sstrout << value;
@@ -162,12 +167,12 @@ template<typename T> string CuMatrix<T>::toString() const {
 						if (sizeof(T) == 4)
 							sprintf(value,
 									(i3 * n + j4) % WARP_SIZE == 0 ?
-											"w%1.4g" : "% 2.4g",
+											"w   %1.5g" : "%5.8g",
 									useHost ? getH(i3, j4) : get(i3, j4));
 						else
 							sprintf(value,
 									(i3 * n + j4) % WARP_SIZE == 0 ?
-											"w%1.5g" : "%5.8g",
+											"w   %1.5g" : "%5.8g",
 									useHost ? getH(i3, j4) : get(i3, j4));
 						//elements[i3 * p + j4]);
 						sstrout << value;
@@ -185,7 +190,7 @@ template<typename T> string CuMatrix<T>::toString() const {
 	return sstrout.str();
 }
 
-template<typename T> string CuMatrix<T>::pAsRow() {
+template<typename T> __host__ string CuMatrix<T>::pAsRow() {
 	poseAsRow();
 	string ret = toString();
 	unPose();
@@ -193,7 +198,7 @@ template<typename T> string CuMatrix<T>::pAsRow() {
 }
 
 template<typename T> __host__ __device__ void CuMatrix<T>::print(
-		const char* msg) const {
+		const char* fmt, const char* msg) const {
 
 	//printf("%s (%d*%d*%d) %d matrix, this %p h %p d %p\n",m,n,p,size,msg, this,elements,tiler.currBuffer());
 	T * elems = NULL;
@@ -228,9 +233,9 @@ template<typename T> __host__ __device__ void CuMatrix<T>::print(
 			for (uint j1 = 0; j1 < n; j1++) {
 
 				if (sizeof(T) == 4)
-					printf("%2.3g", elems[i1 * p + j1]);  //get(i1,j1) );
+					printf(fmt, elems[i1 * p + j1]);  //get(i1,j1) );
 				else
-					printf("%2.6g", elems[i1 * p + j1]); // get(i1,j1) );
+					printf(fmt, elems[i1 * p + j1]); // get(i1,j1) );
 				//);
 				if (j1 < n - 1) {
 					printf(" ");
@@ -269,9 +274,9 @@ template<typename T> __host__ __device__ void CuMatrix<T>::print(
 					continue;
 				}
 				if (sizeof(T) == 4)
-					printf("%2.3g", elems[i2 * p + j2]); //get(i2,j2));
+					printf(fmt, elems[i2 * p + j2]); //get(i2,j2));
 				else
-					printf("%2.6g", elems[i2 * p + j2]); //get(i2,j2));
+					printf(fmt, elems[i2 * p + j2]); //get(i2,j2));
 				//elements[i2 * p + j2]);
 				if (j2 < n - 1) {
 					printf(" ");
@@ -288,9 +293,9 @@ template<typename T> __host__ __device__ void CuMatrix<T>::print(
 							continue;
 						}
 						if (sizeof(T) == 4)
-							printf("%2.3g", elems[i3 * p + j3]);//get(i3, j3));
+							printf(fmt, elems[i3 * p + j3]);	//get(i3, j3));
 						else
-							printf("%2.6g", elems[i3 * p + j3]); //get(i3,j3));
+							printf(fmt, elems[i3 * p + j3]); //get(i3,j3));
 						//elements[i3 * p + j3]);
 						if (j3 < n - 1) {
 							printf(" ");
@@ -299,9 +304,9 @@ template<typename T> __host__ __device__ void CuMatrix<T>::print(
 				} else {
 					for (uint j4 = 0; j4 < n; j4++) {
 						if (sizeof(T) == 4)
-							printf("%2.3g", elems[i3 * p + j4]); // get(i3,j4));
+							printf(fmt, elems[i3 * p + j4]); // get(i3,j4));
 						else
-							printf("%2.6g", elems[i3 * p + j4]); //get(i3,j4));
+							printf(fmt, elems[i3 * p + j4]); //get(i3,j4));
 						//elements[i3 * p + j4]);
 
 						if (j4 < n - 1) {
@@ -324,9 +329,9 @@ template<typename T> __host__ __device__ void CuMatrix<T>::print(
 						T t = get(i5, j5);
 
 						if (sizeof(T) == 4)
-							printf("%2.3g", t);
+							printf(fmt, t);
 						else
-							printf("%2.6g", t);
+							printf(fmt, t);
 						if (j5 < n - 1) {
 							printf(" ");
 						}
@@ -334,9 +339,9 @@ template<typename T> __host__ __device__ void CuMatrix<T>::print(
 				} else {
 					for (uint j4 = 0; j4 < n; j4++) {
 						if (sizeof(T) == 4)
-							printf("%2.3g", elems[i5 * p + j4]); //get(i5,j4));
+							printf(fmt, elems[i5 * p + j4]); //get(i5,j4));
 						else
-							printf("%2.6g", elems[i5 * p + j4]); //get(i5,j4));
+							printf(fmt, elems[i5 * p + j4]); //get(i5,j4));
 
 						if (j4 < n - 1) {
 							printf(" ");
@@ -350,6 +355,25 @@ template<typename T> __host__ __device__ void CuMatrix<T>::print(
 		}
 	}
 }
+
+template<typename T> __host__ __device__ void CuMatrix<T>::print(
+		const char* msg) const {
+}
+
+template<> __host__ __device__ void CuMatrix<float>::print(
+		const char* msg) const {
+	print("%2.6g", msg);
+}
+template<> __host__ __device__ void CuMatrix<double>::print(
+		const char* msg) const {
+	print("%2.6g", msg);
+}
+
+template<> __host__ __device__ void CuMatrix<int>::print(
+		const char* msg) const {
+	print("%6d", msg);
+}
+
 /*
  template void CuMatrix<float>::print(const char*) const;
  template void CuMatrix<double>::print(const char*) const;
@@ -362,14 +386,14 @@ template<typename T> __host__ __device__ void CuMatrix<T>::printShortString(
 	cudaPointerAttributes ptrAtts;
 	if(tiler.currBuffer()) {
 		cherr(cudaPointerGetAttributes(&ptrAtts,tiler.currBuffer()));
-		printf("[[ %p %dX%dX%d (sz %d) mod %d  h: %p d: %p <%d>]] %s\n",
-				this, m, n, p, size, lastMod, elements, tiler.currBuffer(),ptrAtts.device,pmsg);
+		printf("[[ %p %dX%dX%d (sz %d) mod %s  h: %p d: %p dev%d]] %s\n",
+				this, m, n, p, size, b_util::modStr(lastMod), elements, tiler.currBuffer(),ptrAtts.device,pmsg);
 	} else {
-		printf("[[ %p %uX%uX%u  (sz %lu) mod %d h: %p d: %p]] %s\n", this, m,n,p,size,elements,tiler.currBuffer(),pmsg);
+		printf("[[ %p %uX%uX%u  (sz %lu) mod %s h: %p d: %p]] %s\n", this, m,n,p,size,b_util::modStr(lastMod) ,elements,tiler.currBuffer(),pmsg);
 	}
 #else
-	printf("[[ %p %uX%uX%u  (sz %lu) h: %p d: %p ]] %s\n", this, m, n, p, size, lastMod,
-			elements, tiler.currBuffer(), pmsg);
+	printf("[[ %p %uX%uX%u  (sz %lu) h: %p d: %p ]] %s\n", this, m, n, p, size,
+			lastMod, elements, tiler.currBuffer(), pmsg);
 #endif
 }
 

@@ -202,7 +202,7 @@ template<typename T> inline IndexArray CuMatrix<T>::columnIndices(int col) const
 }
 
 template<typename T> CuMatrix<T> CuMatrix<T>::toMaxColumnIndexVector() const {
-	dassert(tiler.tileSize== tiler.m_size);
+	dassert(tiler.tileSize >= tiler.m_size);
 	CuMatrix<T> ret(m,1,false, true);
 	DMatrix<T> d_A, d_res;
 	tile0(d_A, lastMod == mod_host);
@@ -229,7 +229,7 @@ template<typename T> T CuMatrix<T>::vectorLength() const {
 
 
 // fixme not stl on this side of the membrane! use float2 and double2
-template<typename T> pair<T,T> CuMatrix<T>::bounds() const {
+template<typename T> __host__ pair<T,T> CuMatrix<T>::bounds() const {
 
 	DMatrix<T> d_A;
 	tile0(d_A, lastMod == mod_host);
@@ -251,13 +251,13 @@ template<typename T> pair<T,T> CuMatrix<T>::bounds() const {
 
     // toto find out why noworkdis
     reduceAsync(&min, d_A, Functory<T,minBinaryOp>::pinch(), util<T>::maxValue(), stream[0]);
-    if(checkDebug(debugExec))outln("min launch");
+    //if(checkDebug(debugExec))outln("min launch");
     reduceAsync(&max, d_A, Functory<T,maxBinaryOp>::pinch(), util<T>::minValue(), stream[1]);
-    if(checkDebug(debugExec))outln("max launch");
+    //if(checkDebug(debugExec))outln("max launch");
 
     checkCudaErrors(cudaEventRecord(stop_event, 0));
     checkCudaErrors(cudaEventSynchronize(stop_event));   // block until the event is actually recorded
-    if(checkDebug(debugExec))outln("minmax took " << watch.stop());
+    //if(checkDebug(debugExec))outln("minmax took " << watch.stop());
 	b_util::syncGpu();
 	for(int i = 0; i < 2; i++) {
 		checkCudaErrors(cudaStreamDestroy(stream[i]));
@@ -269,7 +269,7 @@ template<typename T> pair<T,T> CuMatrix<T>::bounds() const {
 }
 
 template<typename T> void CuMatrix<T>::bounds(T* min, T* max) const {
-	dassert(tiler.tileSize== tiler.m_size);
+	dassert(tiler.tileSize >= tiler.m_size);
 	DMatrix<T> d_A;
 	tile0(d_A, lastMod == mod_host);
 	cudaStream_t stream[2];

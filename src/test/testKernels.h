@@ -5,8 +5,7 @@
  *      Author: reid
  */
 
-#ifndef TESTKERNELS_H_
-#define TESTKERNELS_H_
+#pragma once
 #include "../debug.h"
 #include "../CuFunctor.h"
 template<typename T> __global__ void testShuffleKernel();
@@ -43,4 +42,3 @@ template<typename T>void launchKbar(kbar<T> bar);
 template<typename T, int StateDim> __global__ void constFillKrnle( UnaryOpIndexF<T,StateDim> fill );
 template<typename T>void constFillKrnleL( );
 
-#endif /* TESTKERNELS_H_ */

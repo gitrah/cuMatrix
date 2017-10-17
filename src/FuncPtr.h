@@ -5,8 +5,7 @@
  *      Author: reid
  */
 
-#ifndef FUNCPTR_H_
-#define FUNCPTR_H_
+#pragma once
 
 #include "CuDefs.h"
 
@@ -106,5 +105,3 @@ template <typename T, typename I> struct d_idxfn1s {
 		return (*inst)(s1,idx);
 	}
 };
-
-#endif /* FUNCPTR_H_ */

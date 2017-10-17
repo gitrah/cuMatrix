@@ -156,7 +156,10 @@ template <typename T> __host__ CUDART_DEVICE void Kmeans<T>::findClosest(IndexAr
 	findClosestKernel<<<grid,block, smemSize>>>(d_indx,centroids.asDmatrix(), x.asDmatrix());
 	cherr(cudaDeviceSynchronize());
 #ifndef __CUDA_ARCH__
+	CuTimer timer;
+	timer.start();
 	cherr(cudaMemcpy(indices.indices,d_indx, x.m*sizeof(uint), cudaMemcpyDeviceToHost));
+	//CuMatrix<T>::incDhCopy("Kmeans<T>::findClosest",x.m*sizeof(uint),timer.stop());
 	if(checkDebug(debugMeans)) prlocf("copied dev indices to host\n");
 	cherr(cudaFree(d_indx));
 #endif
@@ -268,7 +271,10 @@ template <typename T> __host__ CUDART_DEVICE void Kmeans<T>::calcMeansColThread(
 
 #ifndef __CUDA_ARCH__
 	cherr(cudaFree(d_indx));
+	CuTimer timer;
+	timer.start();
 	cherr(cudaMemcpy(counts, d_counts, centroids.m*sizeof(uint), cudaMemcpyDeviceToHost));
+	//CuMatrix<T>::incDhCopy("Kmeans<T>::calcMeansColThread",centroids.m*sizeof(uint),timer.stop());
 	cherr(cudaFree(d_counts));
 #endif
 	delete[] counts;
@@ -341,7 +347,10 @@ template <typename T> __host__ CUDART_DEVICE void Kmeans<T>::calcMeans(IndexArra
 	cherr(cudaDeviceSynchronize());
 #ifndef __CUDA_ARCH__
 	cherr(cudaFree(d_indx));
+	CuTimer timer;
+	timer.start();
 	cherr(cudaMemcpy(counts, d_counts, centroids.m*sizeof(uint), cudaMemcpyDeviceToHost));
+	//CuMatrix<T>::incDhCopy("Kmeans<T>::calcMeans" ,centroids.m*sizeof(uint),timer.stop());
 	cherr(cudaFree(d_counts));
 #endif
 	delete[] counts;

@@ -1,6 +1,10 @@
 cuMatrix is a bubbling cauldron of CUDA/c++ experiments, some implementing basic Matrix math
 also linear / logistic regression, neural network, anomaly detection functions (so far) 
 and functions for reading octave data files
+It uses kernel functors like Thrust and explores three different means of effecting functor polymporphism. 
+Originally, I used templates for this, but debug executable sizes and link times made me explore other solutions.
+To reduce the effort of switching between these approaches, I employed a modified ruby template-expansion script 
+called 'ribosome' to generate the appropriate functor wrapper-code around the basic expressions.
 
 requires Cuda 3.5+ hardware 
 	needed to support arbitrary matrix math (including all operators) from device code

@@ -5,8 +5,7 @@
  *      Author: reid
  */
 
-#ifndef PATH_H_
-#define PATH_H_
+#pragma once
 #include <vector>
 
 using std::vector;
@@ -28,4 +27,3 @@ template vector<T3<float> > Path<float>::data;
 template vector<T3<double> > Path<double>::data;
 template <typename T> vector<T3<T> > Path<T>::data;
 
-#endif /* PATH_H_ */

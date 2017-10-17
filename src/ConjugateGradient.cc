@@ -28,7 +28,7 @@ template<typename T> void printCost(T* lastCost, char* buff, int iteration, T co
 			T lc = (2 * lastCost[iteration-1] + lastCost[iteration-2])/3;
 			delta = (cost-lc)/lc;
 		}
-		printf("%4d | Cost: %4.6e delta %.5f%\r", iteration, cost, 100 * delta);
+		printf("%4d | Cost: %4.6e delta %.5f%\r", iteration, (double) cost, (double) 100 * delta);
 	}
 }
 template<> void printCost<ulong>(ulong* lastCost, char* buff, int iteration, ulong cost) {
@@ -65,7 +65,6 @@ template<typename T> template<typename CostFunction> std::pair<CuMatrix<T>,
 		outln("x0 "<< x0.toShortString());
 		outln("df0 "<< df0.toShortString());
 		outln("df1 "<< df1.toShortString());
-		outln("df2 "<< df2.toShortString());
 	}
 	T f0 = 0;
 	T f1 = 0;
@@ -82,79 +81,81 @@ template<typename T> template<typename CostFunction> std::pair<CuMatrix<T>,
 	bool success = false;
 	bool outerLoop = true;
 	T limit = 0;
+
 	int i = 0;
 	bool ls_failed = false;
 	CuMatrix<T> fX ;
-/*
-	if(checkDebug(debugCg))outln("limits min " << std::numeric_limits<T>::min());
-	if(checkDebug(debugCg))outln("0 x.sum() " << x.sum());
-	if(checkDebug(debugCg))outln("0 x.ss() " << x.toShortString());
-	if(checkDebug(debugCg))outln("f1 " << f1);
-*/
-	if(checkDebug(debugCg)){
+ 	if(checkDebug(debugCg)){
 		outln("0.0 f");
 		//outln("0.0 x " << x.syncBuffers());
 		//outln("0.0 x+x " << (x+x).syncBuffers());
 	}
 	f(df1, f1, x);
-	if(checkDebug(debugCg)){
-		//outln("0.0 df1 " << df1.syncBuffers());
+	if(checkDebug(debugCg))flprintf("init df1 %dX%d df1.sum %f\n", df1.m, df1.n, (double) df1.sum() );
+
+	if(checkDebug(debugCg))
 		outln("0.0 f1 " << f1 );
-	}
-	if (length > 0)
-		i++;
+
+	i = i + (length<0);
+
 	anyErr();
 	s = df1.negate();
 	if(checkDebug(debugCg))outln("s after df1 " << s.toShortString());
 	//d1 = -s.autoDot();
-	d1 = - ( s.transpose() * s).toScalar();
-	if(checkDebug(debugCg))outln("init df1.sum " << df1.sum() << ", s.sum " << s.sum() << ", d1 " << d1);
+	d1 = - s.autoDot();
+	if(checkDebug(debugCg))outln("init s.sum " << s.sum() << "\n\tinit d1 " << d1);
 
 	z1 = red / (1 - d1);
 
 	while (outerLoop && i < abs(length)) {
 		//cout << x.getMgr().stats();
 		if(checkDebug(debugCg))b_util::usedDmem();
-		if (length > 0)
-			i++;
-		if(checkDebug(debugCg))outln("x bef copy " << x.toShortString());
-		if(checkDebug(debugCg))outln("x0 bef copy " << x0.toShortString());
+
+		i = i + (length>0);
+
+		if(checkDebug(debugCg))flprintf("size x bef copy %dX%dX%d\n" , x.m, x.n, x.p);
+		if(checkDebug(debugCg))flprintf("size s bef copy  %dX%dX%d\n" , s.m, s.n, s.p);
 		x0 = x.copy(true);
 		if(checkDebug(debugCg))outln("x0 after copy " << x0.toShortString());
 		f0 = f1;
 		df0 = df1.copy(true);
 		if(checkDebug(debugCg)){
 			outln("i  " << i);
-			outln(" z1 " << z1 << "\n");
+			flprintf("0.0 z1 %.20g\n", (double)z1);
 			if(s.size < 100 * (int)sizeof(T))
 				outln(" s " << s.syncBuffers() << "\n");
+		}
+		if(checkDebug(debugCg))
+			flprintf("0.0.9 x.sum %.20g\n", (double)x.sum());
+		if(checkDebug(debugCg))
+					flprintf("0.1 z1 * s.sum %.20g\n", (double)(z1 * s).sum());
+		if(x.rowVectorQ())
+			x = x.transpose() + z1 * s;
+		else
+			x = x + z1 * s;
+		if(checkDebug(debugCg))
+			flprintf("0.1 x.sum %.20g\n", (double)x.sum());
 
-			//outln("x " << x.toShortString());
-			outln("s " << s.toShortString());
-		}
-		x = x + z1 * s;
-		if(checkDebug(debugCg)){
-			if(x.size < 100 * (int)sizeof(T)) {
-				outln("0.1 x " << x.syncBuffers());
-				outln("0.1 x+x " << (x+x).syncBuffers());
-			} else {
-				outln("x.1 ss " << x.toShortString());
-			}
-			flprintf("0.1 x.sum %.20g\n", (double)x0.sum());
-		}
 		f(df2,f2, x);
+
+
+		if(checkDebug(debugCg))
+			flprintf("size df2 %dX%d%d\n", df2.m,df2.n,df2.p);
+
 		if(checkDebug(debugCg)){
 			//outln("0.1 df2\n" << df2.syncBuffers() );
-			outln("0.1 f2 " << f2 << ", df2.sum " << df2.sum());
+			outln("0.1 f2 " << f2 << "\n0.1 df2.sum " << df2.sum());
 		}
-		if (length < 0)
-			i++;
+
+		i = i + (length < 0);
+		//if (length < 0)	i++;
+
 		if(checkDebug(debugCg)){
 			outln("df2 " << df2.dimsString());
 			outln("s " << s.dimsString());
 		}
 
-		d2 = (df2.transpose() * s).toScalar();
+		d2 = ( ( df2.rowVectorQ() ?  df2 : df2.transpose() )  * s).toScalar();
 		if(checkDebug(debugCg))outln("0.1 d2 " << d2);
 		f3 = f1;
 		d3 = d1;
@@ -163,17 +164,24 @@ template<typename T> template<typename CostFunction> std::pair<CuMatrix<T>,
 		success = false;
 		limit = -1;
 		bool innerLoop = true;
+		if(checkDebug(debugCg)) {
+			flprintf("outerloop (f2 > f1 + z1 * rho * d1) %d\n", (f2 > f1 + z1 * rho * d1));
+			flprintf("outerloop  (d2 > -sig * d1) %d\n",  (d2 > -sig * d1));
+			flprintf("outerloop (m > 0) %d\n", (m > 0));
+		}
 		while (innerLoop) {
+			if(checkDebug(debugCg)) prlocf("inside inner loop\n");
 			while (((f2 > f1 + z1 * rho * d1) || (d2 > -sig * d1)) && m > 0) {
+				if(checkDebug(debugCg))prlocf("iside looop\n");
 				limit = z1;
 				if (f2 > f1) {
 					z2 = z3 - .5 * d3 * z3 * z3 / (d3 * z3 + f2 - f3);
-					if(checkDebug(debugCg))outln("f2 > f1, z2 " << z2);
+					if(checkDebug(debugCg))flprintf("f2 > f1, z2 %f\n", (double) z2);
 				} else {
 					a = 6. * (f2 - f3) / z3 + 3. * (d2 + d3);
 					b = 3. * (f3 - f2) - z3 * (d3 + 2. * d2);
 					z2 = (sqrt(b * b - a * d2 * z3 * z3) - b) / a;
-					if(checkDebug(debugCg))flprintf("a %g, b %g, z2 %g\n", (double)a, (double)b, (double)z2);
+					if(checkDebug(debugCg))flprintf("0.1 a %g, b %g, z2 %g\n", (double)a, (double)b, (double)z2);
 					//outln("f2 <= f1, a " << a << ", b " << b << ", z2 " << z2);
 				}
 				if (nanQ(z2) || infQ(z2)) {
@@ -198,24 +206,33 @@ template<typename T> template<typename CostFunction> std::pair<CuMatrix<T>,
 					//outln("0.2 df2 " << df2.syncBuffers());
 				}
 				m = m - 1;
-				if (length < 0)
-					i++;
-				d2 = (df2.transpose() * s).toScalar();
+				i = i + (length<0);
+
+				if(checkDebug(debugCg))flprintf("s %dX%d df2 %dX%d df1 %dX%d\n", s.m,s.n, df2.m, df2.n, df1.m, df1.n);
+				if(df2.rowVectorQ())
+					d2 = ( df2 * s).toScalar();
+				else
+					d2 = (df2.transpose() * s).toScalar();
 				z3 -= z2;
-				if(checkDebug(debugCg))outln("1 d2 " << d2 << ", z3 " << z3);
-			}
+				if(checkDebug(debugCg))flprintf("bot loop M %d df %f f2 %f z3 %f\n", m, (double)d2, (double)f2,(double)z3);
+
+			} // while (((f2 > f1 + z1 * rho * d1) || (d2 > -sig * d1)) && m > 0)
 			if ((f2 > f1 + z1 * rho * d1) || (d2 > -sig * d1)) {
+				if(checkDebug(debugCg)) outln("ail f2 > f1 + z1 * rho * d1) || (d2 > -sig * d1))");
 				innerLoop = false;
 			} else if (d2 > sig * d1) {
+				if(checkDebug(debugCg)) outln("(ail d2 > sig * d1)");
 				success = true;
 				innerLoop = false;
 			} else if (m == 0) {
+				if(checkDebug(debugCg)) outln("ail m==0");
 				innerLoop = false;
 			} else {
+				if(checkDebug(debugCg)) prlocf("after cond aft while f2 > f1...\n");
 				a = 6 * (f2 - f3) / z3 + 3 * (d2 + d3); // make cubic extrapolation
 				b = 3 * (f3 - f2) - z3 * (d3 + 2 * d2);
 				z2 = -d2 * z3 * z3 / (b + sqrt(b * b - a * d2 * z3 * z3)); // num. error possible - ok!
-				if(checkDebug(debugCg))outln("a " << a << ", b " << b << ", z2 " << z2);
+				if(checkDebug(debugCg))    flprintf("ABz2 a %f b %f,  z2 %f\n", (double)a, (double)b, (double)z2);
 				if (!realQ(z2) || z2 < 0) // num prob or wrong sign?
 					if (limit < -0.5) // if we have no upper limit
 						z2 = z1 * (ext - 1.);
@@ -263,18 +280,30 @@ template<typename T> template<typename CostFunction> std::pair<CuMatrix<T>,
 				m = m - 1;
 				if (length < 0)
 					i++; // count epochs?!
-				d2 = (df2.transpose() * s).toScalar();
+				if(checkDebug(debugCg)){
+						outln("0.3 df2 " << df2.dimsString());
+						outln("0.3 s " << s.dimsString());
+					}
+				d2 = ( (df2.rowVectorQ() ? df2 : df2.transpose()) * s).toScalar();
 			}
-			if(checkDebug(debugCg))outln("repeat while (innerLoop)");
-		}
-		if(checkDebug(debugCg))outln("done innerLoop");
+			if(checkDebug(debugCg)) {
+				outln("bot loop (innerLoop)");
+				flprintf("(f2 > f1 + z1 * rho * d1) %d\n", (f2 > f1 + z1 * rho * d1));
+				flprintf(" (d2 > -sig * d1) %d\n",  (d2 > -sig * d1));
+				flprintf("(m > 0) %d\n", (m > 0));
+			}
+
+		} // while innerloop
+		if(checkDebug(debugCg))flprintf("done innerLoop, success %s\n", tOrF(success));
 		if (success) { // if line search succeeded
 			f1 = f2;
-			if (fX.zeroDimsQ()) {
+			if(checkDebug(debugCg))flprintf("with succ fX was %dX%d\n",fX.m, fX.n);
+		    if (fX.zeroDimsQ()) {
 				fX = CuMatrix<T>::ones(1, 1) * f1;
 			} else {
 		        fX = (fX.transpose() |= (CuMatrix<T>::ones(1, 1) * f1)).transpose();
 			}
+			if(checkDebug(debugCg))flprintf("with succ fX is %dX%d\n",fX.m, fX.n);
 
 			//sprintf(buff, "%4d | Cost: %4.6e\r", i, f1);
 			//outln(i << " cost " << f1);
@@ -284,7 +313,16 @@ template<typename T> template<typename CostFunction> std::pair<CuMatrix<T>,
 			cout << buff << endl;
 
 			//  s = s * (df2.autoDot() - (df1.tN() * df2).toScalar()) / (df1.autoDot) - df2 // Polack-Ribiere direction
-			s = s * (df2.autoDot() - (df1.transpose() * df2).toScalar()) / df1.autoDot() - df2;
+
+			if(checkDebug(debugCg))flprintf("s %dX%d df2 %dX%d df1 %dX%d\n", s.m,s.n, df2.m, df2.n, df1.m, df1.n);
+			// s = (df2'*df2-df1'*df2)/(df1'*df1)*s - df2
+			if(df2.rowVectorQ())
+				s = s * (df2.autoDot() - (df2 * df1).toScalar()) / df1.autoDot() - df2.transpose();
+			else if(df1.rowVectorQ())
+				s = s * (df2.autoDot() -(df1*df2).toScalar())/df1.autoDot() - df2;
+			else
+				s = s * (df2.autoDot() -(df1.transpose() *df2).toScalar())/df1.autoDot() - df2;
+			if(checkDebug(debugCg))flprintf("with succ s.sum %.20g\n", (double)s.sum());
 			// Polack-Ribiere direction
 			CuMatrix<T> tmp = df1;
 			df1 = df2;
@@ -292,11 +330,12 @@ template<typename T> template<typename CostFunction> std::pair<CuMatrix<T>,
 			if(checkDebug(debugCg))outln("df1.sum " << df1.sum() << ", df2.sum " << df2.sum() << ", tmp.sum() " << tmp.sum());
 
 			// swap derivatives
-			d2 = (df1.transpose() * s).toScalar();
+
+			d2 = ( (df1.rowVectorQ() ? df1 : df1.transpose() ) * s).toScalar();
 			if(checkDebug(debugCg))outln("P-R d2 " << d2);
 			if (d2 > 0) { // new slope must be negative
 				s = df1 * -1; // otherwise use steepest direction
-				d2 = (s.transpose() * s * (static_cast<T>( -1.))).toScalar();
+				d2 = -s.autoDot();
 			}
 			z1 = z1 * MIN(ratio, d1 / (d2 - MinPositiveValue)); // slope ratio but max RATIO
 			d1 = d2;
@@ -312,8 +351,8 @@ template<typename T> template<typename CostFunction> std::pair<CuMatrix<T>,
 				CuMatrix<T> tmp = df1;
 				df1 = df2;
 				df2 = tmp; // swap derivatives
-				s = df1 * -1.; // try steepest
-				d1 = (s.transpose() * s).toScalar() * -1;
+				s = df1.negate(); // try steepest
+				d1 = -s.autoDot();
 				z1 = 1. / (1. - d1);
 				ls_failed = true; // this line search failed
 				if(checkDebug(debugCg))outln("failed first time");

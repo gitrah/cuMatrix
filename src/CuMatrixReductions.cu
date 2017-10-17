@@ -20,21 +20,37 @@ T CuMatrix<T>::reduce(const DMatrix<T>& d_M, MonoidF<T,StateDim> op, T start, cu
 #endif
 {
 	long nP = d_M.m * d_M.n;
+
+	if(nP == 1) {
+		T result;
+		CuTimer timer;
+		timer.start();
+#ifndef __CUDA_ARCH__
+		cherr(cudaMemcpy(&result, d_M.elements, sizeof(T), cudaMemcpyDeviceToHost));
+		//CuMatrix<T>::incDhCopy("CuMatrix<T>::reduce(long l)", sizeof(T),timer.stop());
+#else
+		memcpy(&result, d_M.elements, sizeof(T));
+#endif
+		return result;
+	}
 	int threads;
 	int blocks;
 
 	::getReductionExecContext(blocks, threads, nP);
-	if(checkDebug(debugRedux ))flprintf("CuMatrix<T>::reduce blocks %d threads %d np %d\n", blocks,threads, nP);
+	if(checkDebug(debugRedux )) flprintf("CuMatrix<T>::reduce blocks %d threads %d np %d\n", blocks,threads, nP);
 #ifdef CuMatrix_Enable_Cdp
 	cherr(cudaPeekAtLastError());
 #endif
-	CuMatrix<T> res(blocks, 1, false, true);
+	//CuMatrix<T> res(blocks, 1, false, true);
+	cherr(cudaPeekAtLastError());
 	if(checkDebug(debugRedux)) {
 		prlocf("res ");
-		res.printShortString();
+		//res.printShortString();
 	}
-	DMatrix<T> d_Res;
-	res.tile0(d_Res, false);
+
+	DMatrix<T> d_Res(blocks,1);
+	cherr(cudaMalloc( &(d_Res.elements), blocks*sizeof(T)));
+	//res.tile0(d_Res, false);
 
 	if(checkDebug(debugRedux)) {
 		prlocf("after res.tile0(..)\n");
@@ -51,8 +67,10 @@ T CuMatrix<T>::reduce(const DMatrix<T>& d_M, MonoidF<T,StateDim> op, T start, cu
 #endif
 	T total = 0;
 	if(checkDebug(debugRedux)) flprintf("&total %p\n",&total);
-	if(checkDebug(debugRedux)) flprintf(",d_M.n %d d_M.p %d stride %d\n",d_M.n, d_M.p ,d_M.n != d_M.p ? d_M.p : 1);
-	reduceLauncher(&total, d_Res, nP, d_M, op, start, d_M.n != d_M.p ? d_M.p : 1, 0, stream);
+	if(checkDebug(debugRedux)) flprintf("curr dev %d device of d_m.elems %d device of d_Res.elems %d\n",ExecCaps::currDev(),
+			b_util::getDevice(d_M.elements), b_util::getDevice(d_Res.elements));
+	if(checkDebug(debugRedux)) flprintf("d_M.m,d_M.n %d d_M.p %d stride %d\n",d_M.m, d_M.n, d_M.p ,d_M.n != d_M.p ? d_M.p : 1);
+	reduceLauncher(&total, d_Res, nP, d_M, op, start, 0, stream);
 #ifndef __CUDA_ARCH__
 	cherr(cudaPeekAtLastError());
 	cherr(cudaStreamSynchronize(stream));
@@ -63,6 +81,8 @@ T CuMatrix<T>::reduce(const DMatrix<T>& d_M, MonoidF<T,StateDim> op, T start, cu
 	__syncthreads();
 #endif
 	if(checkDebug(debugRedux))flprintf("total now %f\n",total);
+	cherr(cudaFree( d_Res.elements));
+
 	return total;
 }
 #ifdef  CuMatrix_Enable_KTS
@@ -147,7 +167,7 @@ void CuMatrix<T>::reduceColumn(T* total, const DMatrix<T>& d_M, MonoidF<T,StateD
 	if(checkDebug(debugRedux)){ prlocf("dev ");}
 #endif
 	if(checkDebug(debugRedux)){ flprintf("&total %p\n",&total); }
-	reduceLauncher(total, d_Res, nP, d_M, op, start, d_M.p, col, stream);
+	reduceLauncher(total, d_Res, nP, d_M, op, start, col, stream);
 }
 #ifdef  CuMatrix_Enable_KTS
 template  __host__ CUDART_DEVICE void CuMatrix<float>::reduceColumn<plusBinaryOp>(float*, DMatrix<float> const&, plusBinaryOp<float>, float, int, CUstream_st*);
@@ -182,7 +202,7 @@ template<typename T> template<int StateDim> __host__ CUDART_DEVICE void CuMatrix
 	CuMatrix<T> res(blocks, 1, true, true);
 	DMatrix<T> d_Res;
 	res.tile0(d_Res, false);
-	reduceLauncher(result, d_Res, nP, d_M, op, start, 1, 0, stream);
+	reduceLauncher(result, d_Res, nP, d_M, op, start, 0, stream);
 #ifndef __CUDA_ARCH__
 	checkCudaError(cudaStreamSynchronize(stream));
 #else
@@ -221,7 +241,7 @@ template<typename T> template<int StateDim> __host__ CUDART_DEVICE void CuMatrix
 #endif
 {
 	if(checkDebug(debugExec)) flprintf("reduceAsyncBuffer blocks %d\n", blocks);
-	reduceLauncher(result, buffer, nP, d_M, op, start, 1, 0, stream);
+	reduceLauncher(result, buffer, nP, d_M, op, start, 0, stream);
 #ifndef __CUDA_ARCH__
 	checkCudaError(cudaStreamSynchronize(stream));
 #else
@@ -262,12 +282,13 @@ template<typename T> template<int StateDim> __host__ CUDART_DEVICE T CuMatrix<T>
 	//assert(lastMod != mod_host);
 
 	DMatrix<T> d_A;
-	if(checkDebug(debugRedux) ) flprintf("tiler.m_m %u, tiler.m_n %u, tiler.m_p %u\n",tiler.m_m,tiler.m_n,tiler.m_p);
+	if(checkDebug(debugRedux) ) flprintf("tiler.m_m %u, tiler.m_n %u, tiler.m_p %u m_size %lu tileSize %ld\n",
+			tiler.m_m,tiler.m_n,tiler.m_p, tiler.m_size, tiler.tileSize);
 
-	uint roff=0, coff=0, tileM = 0, tileN = 0;
+	int roff=0, coff=0, tileM = 0, tileN = 0, tileP=0;
 	int tileCount  = tiler.getTileCount();
-	tiler.tileDims(tileM,tileN,tdRows);
-	tileCount = MAX(tileCount, DIV_UP(m,tileM));
+	//tiler.tileDims(tileM,tileN,tdRows);
+	//tileCount = MAX(tileCount, DIV_UP(m,tileM));
 	T* resA;
 	T res;
 #ifndef __CUDA_ARCH__
@@ -276,7 +297,7 @@ template<typename T> template<int StateDim> __host__ CUDART_DEVICE T CuMatrix<T>
 	resA = (T*) malloc(tileCount*sizeof(T));
 #endif
 
-	int lastGpu = 0;
+	int lastGpu = -1;
 	int orgDevice = ExecCaps::currDev();
 	int gpuCount = tiler.countGpus();
 	if(checkDebug(debugRedux) ) flprintf("orgDev %d gpuCount %d\n",orgDevice, gpuCount);
@@ -293,12 +314,13 @@ template<typename T> template<int StateDim> __host__ CUDART_DEVICE T CuMatrix<T>
 			cherr(cudaStreamCreateWithFlags(&streams[i],cudaStreamNonBlocking));
 		}
 	}
-	lastGpu = tiler.nextGpu(0);
-	if(checkDebug(debugRedux) ) flprintf("m %u, n %u, p %u, tiler.getTileCount() %d\n",m,n,p,tileCount);
+	lastGpu = -1;
+	if(checkDebug(debugRedux) ) flprintf("m %d, n %d, p %d, tileP %d, tiler.getTileCount() %d tileDir %s\n",m, n, p, tileP, tileCount, b_util::tileDir(tiler.tileD));
 	for(int tile = 0; tile < tileCount; tile++) {
 		if(gpuCount> 1)
 			ExecCaps_setDevice(lastGpu);
-		tiler.tile1D( d_A,roff,coff,tileM, tileN, tile, tdRows,lastMod == mod_host, lastGpu,gpuCount > 1 ? streams[tile] : stream);
+		tiler.tile1D( d_A,roff,coff,tileM, tileN, tileP, tile, tdRows,lastMod == mod_host, lastGpu,gpuCount > 1 ? streams[tile] : stream);
+		if(checkDebug(debugRedux) ) util<T>::prdm("d_A", d_A);
 		resA[tile] = reduce(d_A, op, start, gpuCount > 1 ? streams[tile] : stream);
 	}
 	if(gpuCount > 1) {
@@ -364,9 +386,9 @@ template __host__ CUDART_DEVICE ulong CuMatrix<ulong>::reduce(MonoidF<ulong,1>, 
 template<typename T> template<template <typename> class BinaryOp> __host__ CUDART_DEVICE T CuMatrix<T>::reduceColumn(BinaryOp<T> op, T start, int col, cudaStream_t stream ) const
 #else
 template<typename T> template<int StateDim> __host__ CUDART_DEVICE T CuMatrix<T>::reduceColumn(MonoidF<T,StateDim> op, T start, int col, cudaStream_t stream ) const
-#endif
 {
 	DMatrix<T> d_A;
+#endif
 
 	T* resA;
 	T res;
@@ -388,7 +410,7 @@ template<typename T> template<int StateDim> __host__ CUDART_DEVICE T CuMatrix<T>
 		}
 	}
 	lastGpu = tiler.nextGpu(0);
-	uint roff, coff, tileM = 0, tileN = 0;
+	int roff, coff, tileM = 0, tileN = 0, tileP = 0;
 #ifndef __CUDA_ARCH__
 	cherr(cudaHostAlloc(&resA,tileCount*sizeof(T),0));
 #else
@@ -396,7 +418,8 @@ template<typename T> template<int StateDim> __host__ CUDART_DEVICE T CuMatrix<T>
 #endif
 
 	for(int tile = 0; tile < tileCount; tile++) {
-		tiler.tile1D(d_A, roff, coff, tileM, tileN, tile, tdRows, true);
+		// tile1D(DMatrix<T>& dm,  int& roff, int& coff,int& tileM, int& tileN, int& tileP,   int t, TileDirection tileD = tdRows, bool copy = true, int lastGpu = -1, cudaStream_t stream = 0)
+		tiler.tile1D(d_A, roff, coff, tileM, tileN, tileP, tile, tdRows, true);
 		reduceColumn(resA + tile, d_A, op, start, col, stream);
 	}
 	if(tileCount > 1) {
@@ -518,15 +541,16 @@ template<typename T> __host__ CUDART_DEVICE T CuMatrix<T>::prod( cudaStream_t st
 
 template<typename T> void CuMatrix<T>::featureMeans( CuMatrix<T>& means, bool lv) const {
 	DMatrix<T> d_Means, d_X;
-	uint tileM, tileN, roff, coff;
+	int  roff, coff;
 
-	tiler.tileDims(tileM, tileN, tdCols);
+	int tileM, tileN, tileP;
+	tiler.tileDims(tileM, tileN, tileP, tdCols);
 	int tileCount = DIV_UP(m,tileM);
 
 	for(int i = 0; i < tileCount; i++) {
-		tiler.tileLike(d_X, roff,coff, tileM, tileN, i, tdCols, true);
+		tiler.tileLike(d_X, roff,coff, tileM, tileN, tileP, i, tdCols, true);
 		if(checkDebug(debugTiler))prlocf("means tiling");
-		means.tiler.tileLike(d_Means, roff,coff, tileM, tileN, i, tdCols, true);
+		means.tiler.tileLike(d_Means, roff,coff, tileM, tileN, tileP, i, tdCols, true);
 		if(vectorQ()) {
 			means.set(0, sum()/length());
 		} else {
@@ -539,12 +563,13 @@ template<typename T> void CuMatrix<T>::featureMeans( CuMatrix<T>& means, bool lv
 
 template<typename T> void CuMatrix<T>::featureMeansTx( CuMatrix<T>& means) const {
 	DMatrix<T> d_Means, d_X;
-	uint tileM, tileN, roff,coff;
-	tiler.tileDims(tileM, tileN, tdRows); // todo check this
-	int tileCount = DIV_UP(m,tileM);
+	int roff,coff;
+	int tileM, tileN, tileP;
+	tiler.tileDims(tileM, tileN, tileP, tdRows); // todo check this
+	int tileCount = DIV_UP(m,_tileM);
 	for(int i = 0; i < tileCount; i++) {
-		tiler.tileLike(d_X, roff,coff, tileM, tileN, i, tdRows, true);
-		means.tiler.tileLike(d_Means, roff,coff, tileM, tileN, i, tdRows, true);
+		tiler.tileLike(d_X, roff,coff, tileM, tileN, tileP, i, tdRows, true);
+		means.tiler.tileLike(d_Means, roff,coff, tileM, tileN, tileP, i, tdRows, true);
 		featureAvgTxdKernelL(d_Means, d_X);
 		means.tiler.syncTile(d_Means, roff, coff);
 	}
@@ -553,12 +578,14 @@ template<typename T> void CuMatrix<T>::featureMeansTx( CuMatrix<T>& means) const
 
 template<typename T> void CuMatrix<T>::featureMeansStreams( CuMatrix<T>& means, bool lv,int nstreams) const {
 	DMatrix<T> d_Means, d_X;
-	uint tileM, tileN, roff, coff;
+	int roff, coff;
 	int tileCount = tiler.getTileCount();
-	tiler.tileDims(tileM, tileN, tdCols); // todo check this
+	int tileM, tileN, tileP;
+
+	tiler.tileDims(tileM, tileN, tileP, tdCols); // todo check this
 	for(int i = 0; i < tileCount; i++) {
-		tiler.tileLike(d_X, roff,coff, tileM, tileN, i, tdCols, true);
-		means.tiler.tileLike(d_Means, roff,coff, tileM, tileN, i, tdCols, true);
+		tiler.tileLike(d_X, roff,coff, tileM, tileN, tileP, i, tdCols, true);
+		means.tiler.tileLike(d_Means, roff,coff, tileM, tileN, tileP, i, tdCols, true);
 		//outln("d_Means " << util<T>::pdm(d_Means));
 		featureAvgMultiStreamL(d_Means, d_X, lv, nstreams);
 		means.tiler.syncTile(d_Means, roff, coff);
@@ -574,33 +601,34 @@ template<typename T> CuMatrix<T> CuMatrix<T>::featureMeans(bool lv) const {
 
 
 // matrix is transposed and average calced by doing sum-reductions of each row
-// one thread for each row
-template<typename T> __global__ void rowSumKernel2(DMatrix<T> sums, const DMatrix<T> x) {
-	uint rowIdx = blockIdx.x * blockDim.x + threadIdx.x; // index into column
+// one thread (in x dir) for each row
+template<typename T> __global__ void rowSumKernel2(DMatrix<T> sums, const DMatrix<T> xTxd) {
+	uint rowIdx = blockIdx.x * blockDim.x + threadIdx.x; // index into column of un-txd source matrix
 	if(checkDebug(debugRedux) && rowIdx == 0) {
-		util<T>::printRow(x, rowIdx);
+		util<T>::printRow(xTxd, rowIdx);
 	}
 	__syncthreads();
 #ifdef CuMatrix_Enable_Cdp
 	cherr(cudaPeekAtLastError());
 #endif
 	// T* sdata = SharedMemory<T>();
-	DMatrix<T> row(x.elements + x.p * rowIdx, 1, x.n);
+	DMatrix<T> row(xTxd.elements + xTxd.p * rowIdx, 1, xTxd.n);
 	__syncthreads();
 #ifdef CuMatrix_Enable_Cdp
 	cherr(cudaPeekAtLastError());
 #endif
-	if(checkDebug(debugRedux) && rowIdx == x.m - 1) {
+	if(checkDebug(debugRedux) && rowIdx == xTxd.m - 1) {
 		prlocf("last row as ");
 		util<T>::printRow(row, 0);
 	}
-	if(rowIdx < x.m) {
+	if(rowIdx < xTxd.m) {
 		if(checkDebug(debugRedux)) {
 			flprintf("reducing row %d\n",rowIdx);
 		}
 		T sum = 0;
 #ifdef CuMatrix_Enable_Cdp
 		sum = CuMatrix<T>::reduce(row, Functory<T,plusBinaryOp>::pinch(),0);
+//		flprintf("sum %g\n", sum);
 #else
 		prlocf("not implemented for non-cdp\n");
 		assert(false);
@@ -757,15 +785,15 @@ void rowReductionKernelNlte64(DMatrix<T> resVec, MonoidF<T,StateDim> bop, const 
 // 'slices' are row-wise
 // stripes of 64 cols are col-wise
 #ifdef  CuMatrix_Enable_KTS
-template<typename T, template <typename> class BinaryOpF> __global__ void rowReductionKernel(DMatrix<T> resVec, BinaryOpF<T> bop, const DMatrix<T> x, uint slice, uint slices, uint stripes)
+template<typename T, template <typename> class BinaryOpF> __global__ void rowReductionKernel(DMatrix<T> resVec, BinaryOpF<T> bop, const DMatrix<T> x, int slice, int slices, int stripes)
 #else
-template<typename T, int StateDim> __global__ void rowReductionKernel(DMatrix<T> resVec, MonoidF<T,StateDim> bop, const DMatrix<T> x, uint slice, uint slices, uint stripes)
+template<typename T, int StateDim> __global__ void rowReductionKernel(DMatrix<T> resVec, MonoidF<T,StateDim> bop, const DMatrix<T> x, int slice, int slices, int stripes)
 #endif
 {
 	int col = threadIdx.x;
 	int row = threadIdx.y + blockIdx.y * blockDim.y;
 	ulong soffset = slice * x.m * x.p;
-	uint toffset = slice * x.m * resVec.p;
+	int toffset = slice * x.m * resVec.p;
 	for(int stripe = 0; stripe < stripes; stripe++) {
 		int currLen = MIN(WARP_SIZE/2, b_util::nextPowerOf2(x.n)/2);
 		T* xrow = x.elements + soffset + row * x.p + stripe * 64;

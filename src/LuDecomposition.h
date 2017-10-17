@@ -5,8 +5,7 @@
  *      Author: reid
  */
 
-#ifndef LUDECOMPOSITION_H_
-#define LUDECOMPOSITION_H_
+#pragma once
 
 #include "CuMatrix.h"
 
@@ -30,4 +29,3 @@ public:
   CuMatrix<T> solve(const CuMatrix<T>& b);
 
 };
-#endif /* LUDECOMPOSITION_H_ */

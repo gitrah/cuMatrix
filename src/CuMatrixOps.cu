@@ -13,10 +13,12 @@
 /////////////////////////////////////////////////////////////////////////
 
 template<typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::operator=(const CuMatrix<T> o) {
+/*
 	if(checkDebug(debugMem)){
 		printShortString("operator= from");
 		o.printShortString("hrt") ;
 	}
+*/
 	if (this == &o) {
 		return *this;
 	}
@@ -47,7 +49,6 @@ template<typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::operator=(c
 		elements=o.elements;
 #ifndef __CUDA_ARCH__
 		if(checkDebug(debugMem))prlocf("adding host\n");
-
 		getMgr().addHost(*this);
 #endif
 	}
@@ -56,6 +57,9 @@ template<typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::operator=(c
 		tiler.m_size = o.tiler.m_size;
 		tiler.buffers = o.tiler.buffers;
 		tiler.gpuMask = o.tiler.gpuMask;
+		_tileP = o._tileP;
+		_tileM = o._tileM;
+		_tileN = o._tileN;
 		tiler.m_m = o.m;
 		tiler.m_n = o.n;
 		tiler.m_p = o.p;
@@ -73,12 +77,6 @@ template<typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::operator=(c
 template<typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::operator^(T o) const {
 	return pow(o);
 }
-
-/*
-template<typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::operator^(int o) const {
-	return pow( static_cast<T>(  o));
-}
-*/
 
 template<typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::operator<(T o) const {
 	ltUnaryOp<T> ltf = Functory<T,ltUnaryOp>::pinch(o);
@@ -140,7 +138,5 @@ template<typename T> __host__ CUDART_DEVICE  CuMatrix<T> CuMatrix<T>::operator|=
 template<typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::operator/=( const CuMatrix<T> b) const {
 	return bottomConcatenate(b);
 }
-
-
 
 #include "CuMatrixInster.cu"

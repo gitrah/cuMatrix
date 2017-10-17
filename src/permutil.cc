@@ -78,3 +78,12 @@ template <typename E>  int b_util::countAll(list<list<E>> listOfLists, list<E> i
 }
 template  int b_util::countAll(list<list<uint> >, list<uint>);
 
+const char* b_util::cardinalToOrdinal(int cardinalNo){
+	static const char * ords[] = {
+			"zeroth",
+			"first","second", "third","fourth", "fifth",
+			"sixth", "seventh", "eighth", "ninth", "tenth",
+			"eleventh", "twelth", "thirteenth", "fourteenth", "fifteenth"
+	};
+	return cardinalNo < 0 || cardinalNo > 15 ? "???" : ords[cardinalNo];
+}

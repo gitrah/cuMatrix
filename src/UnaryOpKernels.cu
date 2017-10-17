@@ -22,6 +22,27 @@ template<typename T, typename UnaryOp> __global__ void unaryOp1dKernel(
 	}
 }
 
+template<typename T, typename UnaryOp> __global__ void unaryOp1dKernel(
+		T* trg, const T* src, UnaryOp op,  int rows, int cols, int pitch) {
+	ulong idx = blockIdx.x * blockDim.x + threadIdx.x;
+	int row = idx / cols;
+	int col = idx % cols;
+	if (idx < rows * cols) {
+		ulong i = row * pitch + col;
+		trg[i] = op(src[i]);
+	}
+}
+
+template<typename T, typename UnaryOp> __global__ void unaryOp2dKernel(
+		T* trg, const T* src, UnaryOp op,  int rows, int cols, int pitch) {
+	ulong idx = blockIdx.x * blockDim.x + threadIdx.x;
+	ulong idy = blockIdx.y * blockDim.y + threadIdx.y;
+	if (idx < cols && idy < rows) {
+		ulong i = idx * pitch + idx;
+		trg[i] = op(src[i]);
+	}
+}
+
 template<typename T, typename UnaryOp> __global__ void unaryOpDmKernel(
 		DMatrix<T> trg, const DMatrix<T> src, UnaryOp op ) {
 	uint x = blockIdx.x * blockDim.x + threadIdx.x;
@@ -45,7 +66,7 @@ template<typename T, int StateDim> __host__ CUDART_DEVICE void unaryOpL(DMatrix<
 	uint len = src.m * src.n;
 	dim3 dBlocks, dThreads;
 	b_util::vectorExecContext(threads, len, dBlocks, dThreads);
-	unaryOp1dKernel<<<dBlocks,dThreads,0,stream>>>(trg.elements, src.elements, op, len);
+	unaryOp1dKernel<<<dBlocks,dThreads,0,stream>>>(trg.elements, src.elements, op, src.m, src.n, src.p);
 }
 #ifdef  CuMatrix_Enable_KTS
 template __host__ CUDART_DEVICE void unaryOpL<float, approxInvSqrtUnaryOp>(DMatrix<float>&, DMatrix<float> const&, approxInvSqrtUnaryOp<float>, CUstream_st *);

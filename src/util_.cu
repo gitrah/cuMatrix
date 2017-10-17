@@ -11,7 +11,10 @@
 
 using std::numeric_limits;
 
-template <typename T> inline __host__ __device__ void printColoArray(const T* array, int n, int direction) {
+template <typename T> __host__ __device__ void printColoArray(const T* array, int n, int direction) {
+#ifndef __CUDA_ARCH__
+	printf("caller %s\n", b_util::caller().c_str());
+#endif
 	flprintf("array %p[0::%d] ", array, n);
 	for(int i =0; i < n; i++) {
 		printf("%f", (float) array[i]);
@@ -27,7 +30,8 @@ template __host__ __device__ void printColoArray<long>(const long*, int,int);
 template __host__ __device__ void printColoArray<ulong>(const ulong*, int,int);
 
 
-template <typename T> inline __host__ __device__ void prtColoArrayDiag(
+
+template <typename T> __host__ __device__ void prtColoArrayDiag(
 		const T* array,const char*msg,int line,  int pitch,int n, int direction, T notEq) {
 	flprintf("%s:%d h arraydiag %p p:%d[0::%d] notEq %f\n", msg, line, array, pitch, n, notEq);
 	int neqCnt = 0;
@@ -55,7 +59,7 @@ template __host__ __device__ void prtColoArrayDiag<uint>(const uint*,const char*
 template __host__ __device__ void prtColoArrayDiag<long>(const long*,const char*msg,int line,int,int,int,long);
 template __host__ __device__ void prtColoArrayDiag<ulong>(const ulong*,const char*msg,int line,int,int,int,ulong);
 
-template <typename T> inline __host__ __device__ void cntColoArrayDiag(
+template <typename T> __host__ __device__ void cntColoArrayDiag(
 		const T* array,const char*msg,int line,  int pitch,int n, int direction, T test) {
 	flprintf("%s:%d h arraydiag %p p:%d[0::%d] test %f\n", msg, line, array, pitch, n, test);
 	int neqCnt = 0;
@@ -84,7 +88,7 @@ template __host__ __device__ void cntColoArrayDiag<uint>(const uint*,const char*
 template __host__ __device__ void cntColoArrayDiag<long>(const long*,const char*msg,int line,int,int,int,long);
 template __host__ __device__ void cntColoArrayDiag<ulong>(const ulong*,const char*msg,int line,int,int,int,ulong);
 
-template <typename T> inline __host__ __device__ void prtColoArrayInterval(const T* array,
+template <typename T> __host__ __device__ void prtColoArrayInterval(const T* array,
 		const char* msg, long n, int sampleElemCount, int sampleCount) {
 	int step = n / sampleCount;
 	printf("%s array %p n %ld selems %d samCnt %d step %d\n", msg, array, n, sampleElemCount, sampleCount, step);
@@ -112,9 +116,43 @@ __host__ void b_util::warmupL() {
 	checkCudaError(cudaDeviceSynchronize());
 }
 
+__host__ __device__ const char* b_util::tileDir(TileDirection tileD) {
+	switch(tileD) {
+	case tdNeither:
+		return "tdNeither";
+	case tdRows:
+		return "tdRows";
+	case tdCols:
+		return "tdCols";
+	case tdBoth:
+		return "tdBoth";
+	default:
+		return "???";
+	}
+}
+
+
 __host__ __device__ bool b_util::isPow2(uint x) {
     return ((x&(x-1))==0);
 }
+
+__host__ __device__ int b_util::threadIdx1D() {
+#ifdef __CUDA_ARCH__
+	return blockIdx.x * blockDim.x * 2 + threadIdx.x;
+#else
+	return false;
+#endif
+}
+
+__host__ __device__ int b_util::threadIdx1Dblock(uint blocksize) {
+#ifdef __CUDA_ARCH__
+	return blockIdx.x * blocksize * 2 + threadIdx.x;
+#else
+	return false;
+#endif
+}
+
+
 
 __host__ __device__  const char* tdStr(TileDirection td) {
 	switch (td ){
@@ -214,6 +252,41 @@ template <> __host__  __device__ uint util<uint>::minValue() {
 	return 0;
 }
 
+template<typename T>  __host__  __device__ bool util<T>::almostEquals(T t1, T t2, T epsilon) {
+	if(checkDebug(debugVerbose))flprintf("t2 %f - t1 %f < epsilon %f ::abs(t2 - t1) %f (%d)\n",
+			(double)t2, (double) t1, (double) epsilon,(double) ::fabs(t2 - t1),  ::fabs(t2 - t1) < epsilon);
+	return ::fabs(t2 - t1) < epsilon;
+}
+template   __host__  __device__ bool util<long>::almostEquals(long, long, long);
+template   __host__  __device__ bool util<unsigned long>::almostEquals(unsigned long, unsigned long, unsigned long);
+template   __host__  __device__ bool util<double>::almostEquals(double, double, double);
+template   __host__  __device__ bool util<int>::almostEquals(int, int, int);
+template   __host__  __device__ bool util<float>::almostEquals(float, float, float);
+template   __host__  __device__ bool util<unsigned int>::almostEquals(unsigned int, unsigned int, unsigned int);
+
+template<typename T>  __host__  __device__ bool util<T>::almostEqualsNormalized(T t1, T t2, T epsilon) {
+	if(checkDebug(debugVerbose))flprintf("t2 %f - t1 %f < epsilon %f ::abs(t2 - t1) %f (%d)\n",
+			(double)t2, (double) t1, (double) epsilon,(double) ::fabs(t2 - t1),  ::fabs(t2 - t1) < epsilon);
+	return (::fabs(t2 - t1))/t1 < epsilon;
+}
+
+template   __host__  __device__ bool util<long>::almostEqualsNormalized(long, long, long);
+template   __host__  __device__ bool util<unsigned long>::almostEqualsNormalized(unsigned long, unsigned long, unsigned long);
+template   __host__  __device__ bool util<double>::almostEqualsNormalized(double, double, double);
+template   __host__  __device__ bool util<int>::almostEqualsNormalized(int, int, int);
+template   __host__  __device__ bool util<float>::almostEqualsNormalized(float, float, float);
+template   __host__  __device__ bool util<unsigned int>::almostEqualsNormalized(unsigned int, unsigned int, unsigned int);
+
+
+template<typename T>__global__ void vectorAddPitch(T *c, const T *a, const T *b, int n, int p) {
+	uint idx = blockDim.x * blockIdx.x + threadIdx.x;
+    if (idx < n) {
+    	int tidx = idx * p;
+        tidx[c] = tidx[a] + tidx[b]; // fun with [] syntax
+    }
+}
+
+
 template<typename T> __host__ float util<T>::vAddGflops(int device){
 	int orgDev;
 	cherr(cudaPeekAtLastError());
@@ -228,7 +301,11 @@ template<typename T> __host__ float util<T>::vAddGflops(int device){
 	//outln("before mc");
 	//usedDevMem();
 	CuMatrix<T> mc = CuMatrix<T>::ones(n,1);
-	//outln("after mc");
+	outln("after mc " << mc.toShortString());
+	T mcsum = mc.sum();
+	outln("mcsum " << mcsum);
+	assert(mcsum == (T)n);
+
 	//outln("checking fer dev " << device);
 	//usedDevMem();
 	//outln("made mc\n " << mc.syncBuffers());
@@ -236,17 +313,17 @@ template<typename T> __host__ float util<T>::vAddGflops(int device){
 	//printColoArrayInterval(mc.elements, n, 10, 40);
 	//usedDevMem();
 
-	CuMatrix<T> m2 = CuMatrix<T>::fill((T)2, n,1);
+	CuMatrix<T> m2 = CuMatrix<T>::fill( n,1,(T)2);
 	//outln("made m2\n " << m2.syncBuffers());
 	//usedDevMem();
 	CuMatrix<T> m3 = CuMatrix<T>::zeros( n,1);
 	outln("made mc " << mc.toShortString() << ", " << m2.toShortString() << ", m3 " << m3.toShortString());
-	m3.syncBuffers();
+	//m3.syncBuffers();
 
 	DMatrix<T> dc = mc.asDmatrix();
 	DMatrix<T> d2 = m2.asDmatrix();
 	DMatrix<T> d3 = m3.asDmatrix();
-//	outln("after d1-d3");
+	outln("after d1-d3");
 	//usedDevMem();
 	//flprintf("util<T>::vAddGflops dc.el %p d2.el %p d3.el %p\n", dc.elements, d2.elements, d3.elements);
 	uint blockSize = 1024;
@@ -256,16 +333,22 @@ template<typename T> __host__ float util<T>::vAddGflops(int device){
 	MemMgr<T>::checkValid(  dc.elements);
 	MemMgr<T>::checkValid(  d2.elements);
 	MemMgr<T>::checkValid(  d3.elements);
+	outln("all valid d1-d3");
 
-	vectorAdd<T><<<DIV_UP(n,blockSize), blockSize>>>(d3.elements, dc.elements, d2.elements, n);
+	vectorAddPitch<T><<<DIV_UP(n,blockSize), blockSize>>>(d3.elements, dc.elements, d2.elements, n, mc._tileP);
 	cherr(cudaDeviceSynchronize());
+	outln("cudaDeviceSynchronize after vectorAddPitch");
+
+	m3.invalidateHost();
 	float addTimeMs = timer.stop();
 	timer.start();
 	m3.syncBuffers();
-	assert(m3.sum() == 3 * n);
+	//outln("m3 " << m3 );
+	T m3sum = m3.sum();
+	outln("m3sum " << m3sum );
+	assert(m3sum == 3 * n);
 	float memTimeMs = timer.stop();
 
-	//outln("m3 " << m3 );
 //	b_util::usedDmem(1);
 	//printColoArrayInterval(m3.elements, n, 10, 40);
 	//flprintf("n %u adds took exeTimeMs %f millis (%f s)\n", n, exeTimeMs, exeTimeMs/Kilo);
@@ -363,46 +446,73 @@ __host__ __device__ const char * b_util::modStr(Modification lastMod) {
 int b_util::kernelOccupancy( void* kernel, int* maxBlocks, int blockSize) {
 	ExecCaps* curr = ExecCaps::currCaps();
 	//cudaOccupancyMaxActiveBlocksPerMultiprocessor(maxBlocks, kernel, blockSize,0);
-	int activeWarps = *maxBlocks * blockSize / curr->deviceProp.warpSize;
-	int maxWarps = curr->deviceProp.maxThreadsPerMultiProcessor /curr->deviceProp.warpSize;;
+	int device = ExecCaps::currDev();
+	cudaDeviceProp prop;
+	int numBlocks;
+	cherr(cudaGetDeviceProperties(&prop, device))
+	cudaOccupancyMaxActiveBlocksPerMultiprocessor(&numBlocks, kernel,
+			blockSize, 0);
+	int activeWarps = numBlocks * blockSize / prop.warpSize;
+	int maxWarps = prop.maxThreadsPerMultiProcessor / prop.warpSize;
+	//int activeWarps = *maxBlocks * blockSize / curr->deviceProp.warpSize;
+	//int maxWarps = curr->deviceProp.maxThreadsPerMultiProcessor /curr->deviceProp.warpSize;;
 	outln("Occupancy " << (double) activeWarps/maxWarps * 100 << "%");
 	return 0;
 }
 
 
-template<typename T> __host__ __device__ void b_util::pPtrAtts(T * ptr) {
+template<typename T> __host__ __device__ void b_util::pPtrAtts(const T * ptr) {
+
 #ifndef __CUDA_ARCH__
+	int ptrDev = b_util::getDevice((void*)ptr);
+	int orgDev = ExecCaps::currDev();
 	outln("b_util::pPtrAtts( " << ptr << ")");
 	cudaPointerAttributes ptrAtts;
+	if(ptrDev != orgDev) {
+		ExecCaps_visitDevice(ptrDev);
+	}
 	chsuckor(cudaPointerGetAttributes(&ptrAtts, ptr), cudaErrorInvalidValue);
-	flprintf("raw %p dpr %p, hptr %p dev %d, managed %d, type %d\n",ptr, ptrAtts.devicePointer,ptrAtts.hostPointer, ptrAtts.device, ptrAtts.isManaged, ptrAtts.memoryType);
+	if(ptrDev != orgDev) {
+		ExecCaps_restoreDevice(orgDev);
+	}
+
+	stringstream ss;
+	flprintf("raw %p %s %p, %s %p gpu %d, managed %s, type %s\n",
+			ptr,
+			ptrAtts.devicePointer != nullptr ?  "dev: " : "",
+			ptrAtts.devicePointer != nullptr ? ptrAtts.devicePointer : 0,
+			ptrAtts.hostPointer != nullptr ? "host: " : "",
+			ptrAtts.hostPointer != nullptr ? ptrAtts.hostPointer : 0,
+			ptrAtts.device,
+			tOrF(ptrAtts.isManaged),
+			ptrAtts.memoryType == cudaMemoryTypeHost  ? "host"
+					:  ptrAtts.memoryType == cudaMemoryTypeDevice ? "device" : "unknown");
 #else
-    flprintf("can't call cudaPointerGetAttributes() from device, ptr %p\n", ptr );
+    flprintf("b_util::pPtrAtts(..) can't call cudaPointerGetAttributes() from device, ptr %p\n", ptr );
 #endif
 }
 template __host__ __device__ void b_util::pPtrAtts<UnaryOpIndexF<float,0> const>(UnaryOpIndexF<float,0> const*);
 template __host__ __device__ void b_util::pPtrAtts<UnaryOpIndexF<double,0> const>(UnaryOpIndexF<double,0> const*);
 template __host__ __device__ void b_util::pPtrAtts<UnaryOpIndexF<unsigned long,0> const>(UnaryOpIndexF<unsigned long,0> const*);
-template __host__ __device__ void b_util::pPtrAtts<float (*)(float)>(float (**)(float));
-template __host__ __device__ void b_util::pPtrAtts<double (*)(double)>(double (**)(double));
-template __host__ __device__ void b_util::pPtrAtts<unsigned long (*)(unsigned long)>(unsigned long (**)(unsigned long));
-template __host__ __device__ void b_util::pFuncPtrAtts<void>(void*);
-template __host__ __device__ void b_util::pPtrAtts<void>(void*);
-template __host__ __device__ void b_util::pPtrAtts<constFiller<float> >(constFiller<float>*);
-template __host__ __device__ void b_util::pPtrAtts<constFiller<double> >(constFiller<double>*);
-template __host__ __device__ void b_util::pPtrAtts<constFiller<unsigned long> >(constFiller<unsigned long>*);
+template __host__ __device__ void b_util::pPtrAtts<float (*)(float) >(float (* const *)(float));
+template __host__ __device__ void b_util::pPtrAtts<double (*)(double)>(double (* const *)(double));
+template __host__ __device__ void b_util::pPtrAtts<unsigned long (*)(unsigned long)>(unsigned long (* const *)(unsigned long));
+template __host__ __device__ void b_util::pPtrAtts<void>( const void*);
+template __host__ __device__ void b_util::pPtrAtts<constFiller<float> >( const constFiller<float>*);
+template __host__ __device__ void b_util::pPtrAtts<constFiller<double> >( const constFiller<double>*);
+template __host__ __device__ void b_util::pPtrAtts<constFiller<unsigned long> >( const constFiller<unsigned long>*);
 template __host__ __device__  void b_util::pPtrAtts<float const>(float const*);
 template __host__ __device__  void b_util::pPtrAtts<ulong const>(ulong const*);
 template __host__ __device__  void b_util::pPtrAtts<double const>(double const*);
 
-template __host__ __device__  void b_util::pPtrAtts<float>(float*);
-template __host__ __device__  void b_util::pPtrAtts<double>(double*);
-template __host__ __device__  void b_util::pPtrAtts<int>(int*);
-template __host__ __device__  void b_util::pPtrAtts<uint>(uint*);
-template __host__ __device__  void b_util::pPtrAtts<long>(long*);
-template __host__ __device__  void b_util::pPtrAtts<ulong>(ulong*);
+template __host__ __device__  void b_util::pPtrAtts<float>( const float*);
+template __host__ __device__  void b_util::pPtrAtts<double>( const double*);
+template __host__ __device__  void b_util::pPtrAtts<int>( const int*);
+template __host__ __device__  void b_util::pPtrAtts<uint>( const uint*);
+template __host__ __device__  void b_util::pPtrAtts<long>( const long*);
+template __host__ __device__  void b_util::pPtrAtts<ulong>( const ulong*);
 
-template<typename T> __host__ __device__ void b_util::pFuncPtrAtts(T * ptr) {
+__host__ __device__ void b_util::pFuncPtrAtts( const void * ptr) {
 //#ifndef __CUDA_ARCH__
 #ifdef CuMatrix_Enable_Cdp
 	struct cudaFuncAttributes fa;
@@ -417,18 +527,76 @@ template<typename T> __host__ __device__ void b_util::pFuncPtrAtts(T * ptr) {
 */
 }
 
+template<typename T> __host__ __device__ enum cudaMemcpyKind  b_util::copyKind( T * dst,  T const * const src ) {
+#ifndef __CUDA_ARCH__
+	int dstDevice = b_util::getDevice((void*)dst);
+	int srcDevice = b_util::getDevice((void*)src);
 
-__host__ CUDART_DEVICE bool b_util::validLaunchQ( void* pKernel, dim3 grid, dim3 block) {
+	int orgDev = ExecCaps::currDev();
+	outln("b_util::copyKind( dst " << dst << ", src " << src << ") orgDev " << orgDev << ", dstDev " <<  dstDevice << ",  srcDev " << srcDevice);
+	cudaPointerAttributes padst, pasrc;
+	if(dstDevice != orgDev) {
+		outln("b_util::copyKind() visiting dstDevice " << dstDevice);
+		ExecCaps_visitDevice(dstDevice);
+	}
+	chsuckor(cudaPointerGetAttributes(&padst, dst), cudaErrorInvalidValue);
+	if(dstDevice != orgDev) {
+		outln("b_util::copyKind() restoring orgDev " << orgDev);
+		ExecCaps_restoreDevice(orgDev);
+	}
+	if(srcDevice != orgDev) {
+		outln("b_util::copyKind() visiting srcDevice " << srcDevice);
+		ExecCaps_visitDevice(srcDevice);
+	}
+	chsuckor(cudaPointerGetAttributes(&pasrc, src), cudaErrorInvalidValue);
+	if(srcDevice != orgDev) {
+		outln("b_util::copyKind() restoring orgDev " << orgDev);
+		ExecCaps_restoreDevice(orgDev);
+	}
+
+	outln("b_util::copyKind() pasrc.memoryType " << pasrc.memoryType << "; padst.memoryType " << padst.memoryType);
+
+	if(pasrc.memoryType == cudaMemoryTypeHost) {
+		if(padst.memoryType == cudaMemoryTypeHost)
+			return cudaMemcpyHostToHost;
+		else
+			return cudaMemcpyHostToDevice;
+	}else {
+		if(padst.memoryType == cudaMemoryTypeHost)
+			return cudaMemcpyDeviceToHost;
+		else
+			return cudaMemcpyDeviceToDevice;
+	}
+
+#else
+    flprintf("b_util<T>::copyType(..) can't call cudaPointerGetAttributes() from device, dst %p\n", dst );
+    return cudaMemcpyDefault; // kind inferred from pointer; for managed buffers
+#endif
+}
+template __host__ __device__ enum  cudaMemcpyKind b_util::copyKind<float>(float*, float const*);
+template __host__ __device__ enum  cudaMemcpyKind b_util::copyKind<double>(double*, double const*);
+template __host__ __device__ enum  cudaMemcpyKind b_util::copyKind<unsigned long>(unsigned long*, unsigned long const*);
+
+__host__ __device__ int b_util::maxBlockThreads(const void * ptr) {
+	struct cudaFuncAttributes fa;
+	cherr(cudaFuncGetAttributes(&fa, ptr));
+	return fa.maxThreadsPerBlock;
+}
+
+__host__ CUDART_DEVICE bool b_util::validLaunchQ( const void* pKernel, dim3 grid, dim3 block) {
 	cudaFuncAttributes fatts;
-	cudaFuncGetAttributes(&fatts, pKernel);
+	cherr(cudaFuncGetAttributes(&fatts, pKernel));
 	uint blockThreads = block.x * block.y * block.z;
+	flprintf("blockThreads %u\n", blockThreads);
 	if(blockThreads > fatts.maxThreadsPerBlock) {
 		flprintf("kernel @ %p unlaunchable: blockThreads %u > fatts.maxThreadsPerBlock %u\n", pKernel, blockThreads, fatts.maxThreadsPerBlock);
 		return false;
 	}
 	ExecCaps* pCaps = ExecCaps::currCaps();
 	uint gridVol = grid.x * grid.y * grid.z;
+	flprintf("gridVol %u\n", gridVol);
 	uint blockRegs = fatts.numRegs * blockThreads;
+	flprintf("blockRegs %u\n", blockRegs);
 	if(blockRegs > pCaps->regsPerBlock) {
 		flprintf("kernel @ %p unlaunchable: blockRegs %u > pCaps->regsPerBlock %u, gridVol %u\n", pKernel, blockRegs, pCaps->regsPerBlock, gridVol);
 		return false;
@@ -442,6 +610,24 @@ __host__ CUDART_DEVICE bool b_util::validLaunchQ( void* pKernel, dim3 grid, dim3
 }
 
 
+__host__ CUDART_DEVICE void b_util::validLaunch( dim3 &  block, const void* pKernel) {
+	cudaFuncAttributes fatts;
+	uint minF = MIN( block.x, MIN(block.y, block.z));
+	uint maxF = MAX( block.x, MAX(block.y, block.z));
+	uint blocks = block.x * block.y * block.z;
+	uint otherF =  blocks / (minF * maxF);
+	cudaFuncGetAttributes(&fatts, pKernel);
+
+	if(fatts.maxThreadsPerBlock < blocks) {
+		double factor = 1.0 * blocks/ fatts.maxThreadsPerBlock;
+		if(factor < maxF) {
+			maxF = (uint) maxF/ factor;
+		}
+		block.x = maxF; block.y = otherF; block.z = minF;
+	}
+}
+
+
 
 __host__ __device__ void b_util::prd3(const dim3& d3,const char* msg) {
 	if(msg)
@@ -450,7 +636,11 @@ __host__ __device__ void b_util::prd3(const dim3& d3,const char* msg) {
 		printf("(%u,%u,%u)\n", d3.x, d3.y, d3.z);
 }
 
-
+#ifdef CuMatrix_NVML
+__host__ void b_util::enableGpuMode() {
+	//nvmlDeviceSetGpuOperationMode();
+}
+#endif
 /* for rows of n<65
 	each warpsized sublock (should) reduces multiple spans of 64 columns
 	? for given matrix dimension, how many warp-spanning rows will there be?
@@ -518,7 +708,10 @@ template<typename T> __host__ __device__ void util<T>::printDm( const DMatrix<T>
 #ifndef __CUDA_ARCH__
 	if(dm.elements) {
 		checkCudaError(cudaHostAlloc(&elems, size,0));
+		CuTimer timer;
+		timer.start();
 		checkCudaError(cudaMemcpy(elems,dm.elements, size, cudaMemcpyDeviceToHost));
+		//CuMatrix<T>::incDhCopy("util<T>::printDm-" + b_util::caller(),size,timer.stop() );
 	}
 #else
 	elems = dm.elements;
@@ -716,48 +909,51 @@ template void util<int>::printRow(DMatrix<int> const&,int);
 template void util<uint>::printRow(DMatrix<uint> const&,int);
 
 __host__ __device__ void b_util::vectorExecContext(int threads, int count, dim3& dBlocks,
-		dim3& dThreads) {
+		dim3& dThreads, const void* kernel) {
 	if (threads % WARP_SIZE != 0) {
 			printf("WARN: %d is not a multiple of the warp size (32)\n",threads);
 	}
-	int blocks = (count + threads - 1) / threads;
-	dBlocks.y = dBlocks.z = 1;
-	dBlocks.x = blocks;
+	int blocks = DIV_UP(count, threads);
 	dThreads.y = dThreads.z = 1;
 	dThreads.x = threads;
+
+	if(kernel) {
+		validLaunch(dThreads,kernel);
+		if(dThreads.x != threads) {
+			blocks = DIV_UP(count, dThreads.x);
+		}
+	}
+
+	dBlocks.y = dBlocks.z = 1;
+	dBlocks.x = blocks;
+
 #ifndef __CUDA_ARCH__
-	totalThreads += blocks * threads;
+	totalThreads += dBlocks.x * dThreads.x;
 	totalElements += count;
 #endif
 	if (checkDebug(debugExec))
 		printf(
-				"contxt of %d  blks of %d threads for count of %d\n", blocks ,threads,count);
+				"contxt of %d  blks of %d threads for count of %d\n", dBlocks.x, dThreads.x,count);
 }
 
 template<typename T> __host__ __device__ void util<T>::pDarry(const T* arry, int cnt) {
-	T* ptr = (T*)arry;
-#ifndef __CUDA_ARCH__
-	checkCudaError(cudaMallocHost(&ptr, cnt * sizeof(T)));
-	checkCudaError(cudaMemcpy(ptr, arry, cnt*sizeof(T), cudaMemcpyDeviceToHost));
-#endif
 	for(int i = 0; i < cnt; i++) {
-		printf("%f ", ptr[i]);
+		printf("%f ", arry[i]);
 	}
 	printf("\n");
-#ifndef __CUDA_ARCH__
-	flprintf("freeing host ptr %p\n", ptr);
-	checkCudaError(cudaFreeHost(ptr));
-#endif
 }
 
 template<> __host__ __device__ void util<uint>::pDarry(const uint* arry, int cnt) {
 	uint* ptr = (uint*)arry;
 #ifndef __CUDA_ARCH__
 	checkCudaError(cudaMallocHost(&ptr, cnt * sizeof(uint)));
+	CuTimer timer;
+	timer.start();
 	checkCudaError(cudaMemcpy(ptr, arry, cnt*sizeof(uint), cudaMemcpyDeviceToHost));
+	//CuMatrix<uint>::incDhCopy("util<uint>::pDarry-" + b_util::caller() , cnt*sizeof(uint),timer.stop());
 #endif
 	for(int i = 0; i < cnt; i++) {
-		printf("%u ", ptr[i]);
+		printf("%.3f ", (double) ptr[i]);
 	}
 	printf("\n");
 #ifndef __CUDA_ARCH__
@@ -771,11 +967,20 @@ template __host__ __device__ void util<double>::pDarry(const double*, int);
 template __host__ __device__ void util<ulong>::pDarry(const ulong*, int);
 template __host__ __device__ void util<int>::pDarry(const int*, int);
 
-template <typename T> void util<T>::fillNDev(T* trg, T val, long n) {
+template <typename T>  __host__ __device__ void util<T>::fillNDev(T* trg, T val, long n) {
 	int threads = 512;
 	dim3 dBlocks, dThreads;
 	b_util::vectorExecContext(threads, n, dBlocks, dThreads);
-	if(checkDebug(debugCheckValid)) flprintf("trg %p val %.5f\n", trg,val);
+	if(checkDebug(debugCheckValid)) {
+		flprintf("currdev %d -- trg %p val %.5f N = %d\n", ExecCaps::currDev(), trg,val,n);
+		MemMgr<T>::checkValid(trg, "fillNDev start");
+		MemMgr<T>::checkValid(trg + n/2, "fillNDev half/N");
+		MemMgr<T>::checkValid(trg + 3* n/4, "fillNDev 3N/4");
+		MemMgr<T>::checkValid(trg + n-1, "fillNDev N-1");
+
+		//MemMgr<T>::checkRange(trg, n-1, "fillNDev range of N");
+	}
+
 	fillKernel<<<dBlocks,dThreads>>>(trg, val, n);
 	cherr(cudaDeviceSynchronize());
 }
@@ -812,10 +1017,12 @@ __host__ __device__ IndexArray::IndexArray(uint idx1, uint idx2) :
 	indices[1] = idx2;
 }
 
+/*
 intPair IndexArray::toPair() const {
 	assert(count == 2);
 	return intPair(indices[0], indices[1]);
 }
+*/
 
 __host__ __device__ IndexArray::~IndexArray() {
 	if (indices != null && owner) {
@@ -855,6 +1062,31 @@ __host__ __device__ void b_util::expNotation(char* buff, long val) {
 	}
 #endif
 }
+__host__ void b_util::expNotationMem(char* buff, long val) {
+	double factor = 1.;
+	if (val >= Terab) {
+			factor = 1. / Terab;
+		sprintf(buff, "%2.3gTb", (double) val * factor);
+	} else if (val >= Gigab) {
+		factor = 1. / Gigab;
+		sprintf(buff, "%2.3gGb", (double) val * factor);
+	} else if (val >= Megab) {
+		factor = 1. / Megab;
+		sprintf(buff, "%2.3gMb", (double)val * factor);
+	} else if (val >= Kilob) {
+		factor = 1. / Kilob;
+		sprintf(buff, "%2.3gKb", (double)val * factor);
+	} else {
+		sprintf(buff, "%2.3gb", (double)val * factor);
+	}
+}
+__host__ string b_util::expNotationMemStr( long val) {
+	char buff[256];
+	expNotationMem(buff, val);
+	stringstream ss;
+	ss << buff;
+	return ss.str();
+}
 __host__ CUDART_DEVICE double b_util::currMemRatio( ) {
 	size_t freeMemory =1, totalMemory =1;
 	cherr(		cudaMemGetInfo(&freeMemory, &totalMemory));
@@ -880,9 +1112,9 @@ __host__ CUDART_DEVICE double b_util::usedMemRatio(bool allDevices) {
 __host__ CUDART_DEVICE void b_util::usedDmem(bool allDevices) {
 	//outln("b_util::usedDmem("<< tOrF(allDevices) <<  ") ent");
 #ifndef __CUDA_ARCH__
-	flprintf("Memory %d% used\n", usedMemRatio(allDevices));
+	flprintf("Memory %.3f%% used\n", usedMemRatio(allDevices));
 #else
-	flprintf("Memory %d% used\n", usedMemRatio(false));
+	flprintf("Memory %.3f%% used\n", usedMemRatio(false));
 #endif
 }
 
@@ -914,3 +1146,227 @@ template <> __host__ __device__ int sqrt_p(int val) {
 template <> __host__ __device__ uint sqrt_p(uint val) {
 	return (uint)sqrtf((float)val);
 }
+
+template<typename T> __host__ __device__ void prry(T* ry) {
+
+}
+
+template <> template <> __host__ __device__ void Packeur<double4>::packNext<double>(
+		double h) {
+	switch (currIdx) {
+	case 0:
+		target.x = h;
+		break;
+	case 1:
+		target.y = h;
+		break;
+	case 2:
+		target.z = h;
+		break;
+	case 3:
+		target.w = h;
+		break;
+	default:
+		setLastError(outOfBoundsEx);
+		return;
+	}
+	currIdx++;
+}
+
+template<> template <> __host__ __device__ void Packeur<double3>::packNext<double>(
+		double h) {
+	switch (currIdx) {
+	case 0:
+		target.x = h;
+		break;
+	case 1:
+		target.y = h;
+		break;
+	case 2:
+		target.z = h;
+		break;
+	default:
+		setLastError(outOfBoundsEx);
+		return;
+	}
+	currIdx++;
+}
+
+template<> template <> __host__ __device__ void Packeur<int3>::packNext<int>(
+		int h) {
+	switch (currIdx) {
+	case 0:
+		target.x = h;
+		break;
+	case 1:
+		target.y = h;
+		break;
+	case 2:
+		target.z = h;
+		break;
+	default:
+		setLastError(outOfBoundsEx);
+		return;
+	}
+	currIdx++;
+}
+
+template<> template <> __host__ __device__ void Packeur<uint3>::packNext<uint>(
+		uint h) {
+	switch (currIdx) {
+	case 0:
+		target.x = h;
+		break;
+	case 1:
+		target.y = h;
+		break;
+	case 2:
+		target.z = h;
+		break;
+	default:
+		setLastError(outOfBoundsEx);
+		return;
+	}
+	currIdx++;
+}
+
+template<> __host__ __device__ void Packeur2::render<double4>(double4& target) {
+	switch (currIdx) {
+	case 1:
+		target.x = vals[0];
+		break;
+	case 2:
+		target.x = vals[0];
+		target.y = vals[1];
+		break;
+	case 3:
+		target.x = vals[0];
+		target.y = vals[1];
+		target.z = vals[2];
+		break;
+	case 4:
+		target.x = vals[0];
+		target.y = vals[1];
+		target.z = vals[2];
+		target.w = vals[3];
+		break;
+	default:
+		setLastError(outOfBoundsEx);
+		return;
+	}
+}
+
+
+template<typename T> template <typename PackType> __host__ __device__ PackType Packeur3<T>::render() {
+	if(sizeof(T) == 4) {
+		switch (currIdx) {
+		case 1:
+			return vals[0];
+		case 2:
+			return render<float2>();
+		case 3:
+			return render<float3>();
+		case 4:
+			return render<float4>();
+		default:
+			setLastError(outOfBoundsEx);
+		}
+
+	}else {
+		switch (currIdx) {
+		case 1:
+			return vals[0];
+		case 2:
+			return render<double2>();
+		case 3:
+			return render<double3>();
+		case 4:
+			return render<double4>();
+		default:
+			setLastError(outOfBoundsEx);
+		}
+	}
+}
+
+
+template<> template<> __host__ __device__ double4 Packeur3<double>::render() {
+	double4 target;
+	switch (currIdx) {
+	case 1:
+		target.x = vals[0];
+		break;
+	case 2:
+		target.x = vals[0];
+		target.y = vals[1];
+		break;
+	case 3:
+		target.x = vals[0];
+		target.y = vals[1];
+		target.z = vals[2];
+		break;
+	case 4:
+		target.x = vals[0];
+		target.y = vals[1];
+		target.z = vals[2];
+		target.w = vals[3];
+		break;
+	default:
+		setLastError(outOfBoundsEx);
+	}
+	return target;
+}
+
+template<> template<> __host__ __device__ float4 Packeur3<float>::render() {
+	float4 target;
+	switch (currIdx) {
+	case 1:
+		target.x = vals[0];
+		break;
+	case 2:
+		target.x = vals[0];
+		target.y = vals[1];
+		break;
+	case 3:
+		target.x = vals[0];
+		target.y = vals[1];
+		target.z = vals[2];
+		break;
+	case 4:
+		target.x = vals[0];
+		target.y = vals[1];
+		target.z = vals[2];
+		target.w = vals[3];
+		break;
+	default:
+		setLastError(outOfBoundsEx);
+	}
+	return target;
+}
+
+template<> template<> __host__ __device__ ulong4 Packeur3<ulong>::render() {
+	ulong4 target;
+	switch (currIdx) {
+	case 1:
+		target.x = vals[0];
+		break;
+	case 2:
+		target.x = vals[0];
+		target.y = vals[1];
+		break;
+	case 3:
+		target.x = vals[0];
+		target.y = vals[1];
+		target.z = vals[2];
+		break;
+	case 4:
+		target.x = vals[0];
+		target.y = vals[1];
+		target.z = vals[2];
+		target.w = vals[3];
+		break;
+	default:
+		setLastError(outOfBoundsEx);
+	}
+	return target;
+}
+

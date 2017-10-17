@@ -5,9 +5,7 @@
  *      Author: reid
  */
 
-#ifndef MIGRATOR_H_
-#define MIGRATOR_H_
-
+#pragma once
 
 template <typename T> class Migrator {
 private:
@@ -20,5 +18,3 @@ public:
 		return *this;
 	}
 };
-
-#endif /* MIGRATOR_H_ */

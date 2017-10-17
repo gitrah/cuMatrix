@@ -44,7 +44,7 @@ template <typename T> int testReduceRows<T>::operator()(int argc, const char **a
 	}
 
 	ulong len = 2 * Mega;
-	CuMatrix<T> bigm1 = CuMatrix<T>::increasingColumns(0,len,64);
+	CuMatrix<T> bigm1 = CuMatrix<T>::increasingColumns(len,64,0);
 	outln("bigm1 " << bigm1.syncBuffers());
 	T bigm1sum = bigm1.sum();
 	T check  = 2l * Mega * 2016l;

@@ -20,7 +20,6 @@ unsigned long totalThreads;
 unsigned long totalElements;
 int MaxThreads = 512;
 int MaxBlocks = 128;
-int ExecCaps::deviceCount = 0;
 int ExecCaps::deviceCounter = 0;
 
 template <> int getTypeEnum<float>() {
@@ -225,3 +224,4 @@ void ExecCaps::releaseStream(ExecCaps& caps) {
 	dthrow(CapsException());
 }
 */
+

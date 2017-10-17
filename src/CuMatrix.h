@@ -25,6 +25,7 @@
 #include <set>
 
 template<typename T> class MemMgr;
+
 /*
  * m-m-m-my m-matrix
  *
@@ -51,7 +52,6 @@ template<typename T> class CuMatrix {
 public:
 	static CuMatrix<T> ZeroMatrix;
 	static MemMgr<T>* mgr;
-	static BuildType buildType;
 protected:
 	bool ownsTxp;
 	__host__ __device__ void freeTxp();
@@ -64,16 +64,16 @@ public:
 	int m, n, p;
 	int oldM, oldN;
 	long size; // in BYTES
-	bool posed, colMajor, ownsBuffers;
+	bool posed, colMajor, ownsDBuffers, ownsHBuffers;
 
 	Tiler<T> tiler; // todo d and h tilers
-
+	int _tileM, _tileN,  _tileP;
 	/*
 	 * in the extra resident case, a suitable row or column tile is calculated
 	 * tiler allocs one or more (if >1 gpus) tile-sized that will be shared by all the tiles
 	 * operations are then decomposed into bunches that operate sequentially over (pairs of) tiles
 	 */
-	//TileDirection hTileD;
+	TileDirection tileD;
 	//int hTileCount;
 
 	__host__ MemMgr<T>& getMgr() const;
@@ -82,12 +82,13 @@ public:
 	__host__ __device__ CuMatrix();
 	__host__ __device__ CuMatrix(const CuMatrix<T>& o);
 /*	__host__ __device__ CuMatrix(const CuMat<T>& o);*/
-	__host__ __device__ CuMatrix( T* h_data, int m, int n, bool allocateD);
-	__host__ __device__ CuMatrix( T* h_data, int m, int n, int p, bool allocateD);
-	__host__ __device__ CuMatrix(int m, int n, bool allocateH, bool allocateD );
-	__host__ __device__ CuMatrix(int m, int n, int p, bool allocateH, bool allocateD );
-	__host__ __device__ CuMatrix(int m, int n, int p, int gpuMask, bool allocateH, bool allocateD );
-	__host__ __device__ CuMatrix(int m, int n, int p, int tileM, int tileN, int gpuMask, bool allocateH, bool allocateD );
+	explicit __host__ __device__ CuMatrix( T* h_data, int m, int n, bool allocateD);
+	explicit __host__ __device__ CuMatrix( T* h_data, int m, int n, int p, bool allocateD);
+	explicit __host__ __device__ CuMatrix(int m, int n, bool allocateH, bool allocateD );
+	explicit __host__ __device__ CuMatrix(int m, int n, int p, bool allocateH, bool allocateD );
+	explicit __host__ __device__ CuMatrix(int m, int n, int p, bool allocateH,
+			bool allocateD, int gpuMask, TileDirection tileD = tdCols);
+	explicit __host__ __device__ CuMatrix(int m, int n, int p, int tileM, int tileN, bool allocateH, bool allocateD, int gpuMask = Tiler<T>::gpuMaskFromCurrGpu(), TileDirection tileD = tdCols );
 	virtual __host__ __device__ ~CuMatrix();
 
 	__host__ __device__ CuMatrix copy(bool copyDeviceMem = true) const;
@@ -131,6 +132,7 @@ public:
 	__host__ __device__ T* currBuffer() const { return tiler.currBuffer(); }
 	__host__ __device__ CuMatrix<T> syncHost();
 	__host__ __device__ CuMatrix<T> syncDevice();
+
 	inline __host__ __device__ ulong offset(int roff, int coff) const {return colMajor ? (coff * m + roff ) : (roff * p + coff);}
 
 	// toRtiles, toLtiles
@@ -158,7 +160,7 @@ public:
 
 	// copy 'fraction' (normalized) of rows into 'trg' and remainder into 'leftovers' shuffling row order by using
 	// vIndices to hold a random sequence that become the new indices
-	void shuffle(CuMatrix<T>* trg, CuMatrix<T>* leftovers, T fraction, vector<int>& vIndices ) const;
+	void shuffle(CuMatrix<T>* trg, CuMatrix<T>* leftovers, T fraction, vector<int>& vIndices, TileDirection td = tdRows) const;
 
 	std::pair<int,int> refCounts() const { return getMgr().refCounts(*this); }
 
@@ -194,6 +196,11 @@ public:
 	__host__ __device__ inline bool compatibleQ(const CuMatrix<T>& o) const {
 		return o.m == m && o.n == n && o.p == p;
 	}
+
+	int indexOfGlolo(T val);
+
+	int2 indexOf2D(T val,cudaStream_t stream = 0);
+
 	bool zeroQ(T eps  = util<T>::epsilon());
 	__host__ __device__ inline bool contiguousQ() const { return n == p; };
 	__host__ __device__ inline bool paddedQ() { return !contiguousQ(); }
@@ -269,12 +276,20 @@ public:
 	ulong distinctCount() const;
 	std::set<T> distinct() const;
 
+	__host__ CUDART_DEVICE CuMatrix<T> histogram( cudaStream_t stream ) const ;
+
+	__host__ CUDART_DEVICE void attributeFreqsKernelL(DMatrix<T>& d_freqs, DMatrix<T>& d_atts, DMatrix<T>& d_entropies, DMatrix<int>& d_counts, DMatrix<int>& d_depths, DMatrix<int>& d_distances, const DMatrix<T>& d_x, cudaStream_t stream ) const ;
+
+	__host__ CUDART_DEVICE void attributeFrequencies( CuMatrix<T>& freqs, CuMatrix<T>& atts, CuMatrix<T>& entropies, CuMatrix<int>& counts, CuMatrix<int>& depths,  CuMatrix<int>& distances, cudaStream_t stream = nullptr) const;
+	__host__ CUDART_DEVICE CuMatrix<T> attributeFrequencies(cudaStream_t stream = nullptr) const;
 // form
 	__host__ CUDART_DEVICE CuMatrix<T> transpose(cudaStream_t stream = 0) const;
 	__host__ CUDART_DEVICE CuMatrix<T> transposeXr(cudaStream_t stream = 0) const;
-	__host__ CUDART_DEVICE CuMatrix<T> transposeKernelPtr(void (*kernel)(const T*  sElements,  T* tElements, int width, int height));
+	__host__ CUDART_DEVICE CuMatrix<T> transposeKernelPtr(void (*kernel)( T*  tElements,  const T* sElements, int width, int height));
+	__host__ CUDART_DEVICE CuMatrix<T> transposePitchKernelPtr(void (*kernel)(T*  tElements,  const T* sElements, int width, int height,int spitch,int tpitch));
 	__host__ CUDART_DEVICE void transpose(DMatrix<T>& res);
-	__host__ CUDART_DEVICE void transposeKernelPtr(DMatrix<T>& res, void (*kernel)(const T*  sElements,  T* tElements, int width, int height));
+	__host__ CUDART_DEVICE void transposeKernelPtr(DMatrix<T>& res, void (*kernel)( T*  tElements,  const T* sElements, int width, int height));
+	__host__ CUDART_DEVICE void transposePitchKernelPtr(DMatrix<T>& res, void (*kernel)( T*  tElements,  const T* sElements, int width, int height, int spitch, int tpitch));
 
 	// create new matrix from array of row indices into this matrix
 	CuMatrix<T> reconstruct(const IndexArray& arry);
@@ -290,7 +305,7 @@ public:
 	CuMatrix<T> redimension(pair<int, int>& dims, int offset = 0);
 	__host__ CUDART_DEVICE CuMatrix<T> columnMatrix(int col) const;
 	CuMatrix<T> rowMatrix(int row) const;
-	CuMatrix<T> dropFirst(bool copy=true) const;
+	CuMatrix<T> dropFirst(bool copy=true, cudaStream_t stream = 0) const;
 	CuMatrix<T> dropLast(bool copy=false) const;
 	CuMatrix<T> vectorToDiagonal() const;
 	__host__ CUDART_DEVICE CuMatrix<T> columnVector(int col) const;
@@ -333,7 +348,7 @@ public:
 	// todo move this to anom det
 	void fitGaussians( CuMatrix<T>& sqrdSigmas, CuMatrix<T>& mus) const;
 	void variance( CuMatrix<T>& sqrdSigmas, const CuMatrix<T>& mus) const;
-	CuMatrix<T> toCovariance() const;
+	CuMatrix<T> toCovariance() const; // assumes this is the variance matrix
 	void toCovariance(CuMatrix<T>& covariance) const;
 	void multivariateGaussianFeatures( CuMatrix<T>& pden, const CuMatrix<T>& sigmaSquared, const CuMatrix<T>& mu);
 	void mvGaussianVectorFromFeatures( CuMatrix<T>& pvec);
@@ -354,10 +369,13 @@ public:
 
 // printing
 	string dimsString() const;
-	string toShortString() const;
+	__host__ string toShortString() const;
+	string toss() const { return toShortString();}
+
 	__host__ __device__ void printShortString(const char* msg = null) const;
-	string toString() const;
-	string pAsRow();
+	__host__ string toString() const;
+	__host__ string pAsRow();
+	__host__ __device__ void print(const char* fmt, const char* msg) const;
 	__host__ __device__ void print(const char* msg) const;
 	__host__ __device__ void printRow(int row) const;
 	__host__ string rowStr(int row) const;
@@ -388,6 +406,7 @@ public:
 	__host__ CUDART_DEVICE CuMatrix<T> sqrt()const;
 	__host__ CUDART_DEVICE CuMatrix<T> sqr()const;
 	__host__ CUDART_DEVICE CuMatrix<T> pow(T o)const;
+	__host__ CUDART_DEVICE CuMatrix<T> qpow(T o)const;
 	__host__ CUDART_DEVICE CuMatrix<T> divSqrt(T divisor)const;
 
 	__host__ CUDART_DEVICE void setAll(int val);
@@ -425,7 +444,7 @@ public:
 	template <typename IndexBoolUnaryOp, template <typename> class BinaryOp> __host__ CUDART_DEVICE T indexedReduceL(const DMatrix<T>& d_M, IndexBoolUnaryOp idxOp, BinaryOp<T> op, T start, cudaStream_t stream = 0 )const;
 #else
 	template <int IopDim, int BopDim> __host__ CUDART_DEVICE T indexedReduce(UnaryOpIndexF<T,IopDim> idxOp, MonoidF<T,BopDim> op, T start, cudaStream_t stream = 0 )const;
-	template <int IopDim, int BopDim> __host__ CUDART_DEVICE T indexedReduceL(const DMatrix<T>& d_M, UnaryOpIndexF<T,IopDim>  idxOp, MonoidF<T,BopDim> op, T start, cudaStream_t stream = 0 )const;
+	template <int IopDim, int BopDim> __host__ CUDART_DEVICE T indexedReduceL(const DMatrix<T>& d_M, UnaryOpIndexF<T,IopDim>  idxOp, MonoidF<T,BopDim> op, T start, ulong idxStart = 0, cudaStream_t stream = 0 )const;
 #endif
 
 #ifdef  CuMatrix_Enable_KTS
@@ -480,16 +499,35 @@ public:
 
 #ifdef  CuMatrix_Enable_KTS
 	template <template <typename> class BinaryOp> __host__ CUDART_DEVICE
-	T columnReduceIndexed(BinaryOp<T> op, int column, T start, cudaStream_t stream = 0 )const;
-	__host__ CUDART_DEVICE T columnSum(int column, cudaStream_t stream = 0) const;
+		T columnReduceIndexed(BinaryOp<T> op, int column, T start, cudaStream_t stream = 0 )const;
 	template <template <typename> class BinaryOp> __host__ CUDART_DEVICE T rowReduce(BinaryOp<T> op, int row, T start, cudaStream_t stream = 0 )const;
 
 #else
 	template<int StateDim> __host__ CUDART_DEVICE
-	T columnReduceIndexed(MonoidF<T,StateDim> op, int column, T start, cudaStream_t stream = 0 )const;
-	__host__ CUDART_DEVICE T columnSum(int column, cudaStream_t stream = 0) const;
+		T columnReduceIndexed(MonoidF<T,StateDim> op, int column, T start, cudaStream_t stream = 0 )const;
 	template<int StateDim> __host__ CUDART_DEVICE T rowReduce(MonoidF<T,StateDim> op, int row, T start, cudaStream_t stream = 0 )const;
 #endif
+	__host__ CUDART_DEVICE T columnSum(int column, cudaStream_t stream = 0) const;
+
+	__host__ CUDART_DEVICE CuMatrix<T> columnSums(int numGpus = 1) const {
+		cudaStream_t *streams = (cudaStream_t *) malloc(
+				numGpus * sizeof(cudaStream_t));
+		CuMatrix<T> sums = CuMatrix<T>::zeros(1,n);
+#ifndef __CUDA_ARCH__
+		flprintf("sums.toss %s\n", sums.toss().c_str());
+#endif
+		for(auto i = 0; i < n; i++ ) {
+			cherr(cudaStreamCreateWithFlags(&streams[i],  cudaStreamNonBlocking));
+		}
+		for(auto i = 0; i < n; i++ ) {
+			sums.set(0,i, columnSum(i, streams[i]));
+		}
+		for(auto i = 0; i < n; i++ ) {
+			cherr(cudaStreamDestroy(streams[i]));
+		}
+		cherr(cudaDeviceSynchronize());
+		return sums;
+	}
 
 	__host__ CUDART_DEVICE T sum(cudaStream_t stream = 0 ) const;
 	__host__ T kahanSum() const;
@@ -502,9 +540,9 @@ public:
 		return gloloReduce(Functory<T,sqrUnaryOp>::pinch(), pl, 0, stream);
 #endif
 	}
-	__host__ CUDART_DEVICE T rowSum(int column, cudaStream_t stream = 0) const;
+	__host__ CUDART_DEVICE T rowSum(int row, cudaStream_t stream = 0) const;
 	__host__ CUDART_DEVICE T prod( cudaStream_t stream = 0) const;
-	pair<T,T> bounds() const;
+	__host__ pair<T,T> bounds() const;
 	void bounds(T* min, T* max) const;
 
 	__host__ CUDART_DEVICE T sumSqrDiff( const CuMatrix<T>& o)const;
@@ -589,9 +627,9 @@ public:
 			bool colMajor);
 	static void parseCsvDataLine(const CuMatrix<T>* x, int currLine, string line, const char* sepChars);
 	static map<string,dim3> parseOctaveMatrixSizes(const char * path );
-	static map<string, CuMatrix<T>*> parseOctaveDataFile(
+	static __host__ map<string, CuMatrix<T>*> parseOctaveDataFile(
 			const char * path, bool colMajor, bool matrixOwnsBuffer = true);
-	static map<string, CuMatrix<T>*> parseCsvDataFile(
+	static __host__ map<string, CuMatrix<T>*> parseCsvDataFile(
 			const char * path, const char * sepChars, bool colMajor, bool matrixOwnsBuffer = true, bool hasXandY = false);
 	static CuMatrix<T>& getMatrix(std::map<std::string, CuMatrix<T>*> map, const char* key);
 
@@ -605,7 +643,8 @@ public:
 	//cudaError_t set( DMatrix<T> m, int row, int col, T val);
 	static int maxSlices(int n);
 	static __host__ CUDART_DEVICE void transposeL(DMatrix<T>& t, const DMatrix<T>& s, cudaStream_t stream = 0);
-	static __host__ CUDART_DEVICE void transposeKernelPtrL( DMatrix<T>& t, void (*kernel)(const T*, T*, int, int), const DMatrix<T>& s, cudaStream_t stream = 0);
+	static __host__ CUDART_DEVICE void transposeKernelPtrL( DMatrix<T>& t, void (*kernel)( T*, const T*, int, int), const DMatrix<T>& s, cudaStream_t stream = 0);
+	static __host__ CUDART_DEVICE void transposePitchKernelPtrL( DMatrix<T>& t, void (*kernel)( T*, const T*, int, int,int,int), const DMatrix<T>& s, cudaStream_t stream = 0);
 
 	static __host__ CUDART_DEVICE void rightConcatenateL(DMatrix<T>& trg, const DMatrix<T>& src1, const DMatrix<T>& src2, cudaStream_t stream = 0);
 	static __host__ CUDART_DEVICE void bottomConcatenateL(DMatrix<T>& trg, const DMatrix<T>& src1, const DMatrix<T>& src2, cudaStream_t stream = 0);
@@ -653,23 +692,50 @@ public:
 	static __host__ CUDART_DEVICE void rowSum(DMatrix<T>& d_prod, const DMatrix<T>& d_x, cudaStream_t stream = 0);
 
 
-	/*
-	template<typename BinaryOp> static T reduceLauncher(T* d_odata, const T* d_idata,
-			long n, BinaryOp op, T start, cudaStream_t stream = 0);
-*/
-
-	// initial reduction is of values generated from the block/thread index alone
+ 	/*
+ 	 *  'index...' reduction is of values generated from the block/thread index alone
+ 	 *  'indexed...' reduction is of global values selected from block/thread index
+ 	 */
 #ifdef  CuMatrix_Enable_KTS
-	template<template <typename> class IndexUnaryOp,template <typename> class BinaryOp> static __host__ CUDART_DEVICE T indexReduceLauncher(
-			T* d_odata, long n, IndexUnaryOp<T> idxOp, BinaryOp<T> op, T start, cudaStream_t stream = 0);
-	template<typename IndexBoolUnaryOp,template <typename> class BinaryOp> static __host__ CUDART_DEVICE
-	T indexedReduceLauncher(DMatrix<T> res, const T* d_idata, long n, IndexBoolUnaryOp idxOp, BinaryOp<T> op, T start, cudaStream_t stream = 0);
+	template<template <typename> class IndexUnaryOp,template <typename> class BinaryOp> static __host__ CUDART_DEVICE
+	T indexReduceLauncher(
+			T* d_odata, long n, IndexUnaryOp<T> idxOp, BinaryOp<T> op, T start, ulong idxStart =0, cudaStream_t stream = 0);
 #else
-	template<int IopDim, int BopDim> static __host__ CUDART_DEVICE T indexReduceLauncher(
-			T* d_odata, long n, UnaryOpIndexF<T,IopDim> idxOp, MonoidF<T,BopDim> op, T start, cudaStream_t stream = 0);
 	template<int IopDim, int BopDim> static __host__ CUDART_DEVICE
-	T indexedReduceLauncher(DMatrix<T> res, const T* d_idata, long n, UnaryOpIndexF<T,IopDim> idxOp, MonoidF<T,BopDim> op, T start, cudaStream_t stream = 0);
+	T indexReduceLauncher(
+			T* d_odata, long n, UnaryOpIndexF<T,IopDim> idxOp, MonoidF<T,BopDim> op, T start, ulong idxStart =0, cudaStream_t stream = 0);
 #endif
+
+#ifdef  CuMatrix_Enable_KTS
+	template<typename IndexBoolUnaryOp,template <typename> class BinaryOp> static __host__ CUDART_DEVICE
+	T indexedReduceLauncher(
+			DMatrix<T> res, const T* d_idata, long n, IndexBoolUnaryOp idxOp, BinaryOp<T> op, T start, ulong idxStart =0, cudaStream_t stream = 0);
+#else
+	template<int IopDim, int BopDim> static __host__ CUDART_DEVICE
+	T indexedReduceLauncher(
+			DMatrix<T> res, const T* d_idata, long n, UnaryOpIndexF<T,IopDim> idxOp, MonoidF<T,BopDim> op, T start, ulong idxStart =0, cudaStream_t stream = 0);
+#endif
+
+#ifdef  CuMatrix_Enable_KTS
+	template<template <typename> class IndexUnaryOp,template <typename> class BinaryOp> static __host__ CUDART_DEVICE
+	T indexReduceLauncherPitch(
+			T* d_odata, size_t pitch, size_t cols, size_t rows, IndexUnaryOp<T> idxOp, BinaryOp<T> op, T start, ulong idxStart =0, cudaStream_t stream = 0);
+#else
+	template<int IopDim, int BopDim> static __host__ CUDART_DEVICE
+	T indexReduceLauncherPitch(
+			T* d_odata, size_t pitch, size_t cols, size_t rows, UnaryOpIndexF<T,IopDim> idxOp, MonoidF<T,BopDim> op, T start, ulong idxStart =0, cudaStream_t stream = 0);
+#endif
+
+#ifdef  CuMatrix_Enable_KTS
+	template<typename IndexBoolUnaryOp,template <typename> class BinaryOp> static __host__ CUDART_DEVICE
+	T indexedReduceLauncherPitch(
+			DMatrix<T> res, const T* d_idata, size_t pitch, size_t cols, size_t rows, IndexBoolUnaryOp idxOp, BinaryOp<T> op, T start, ulong idxStart =0, cudaStream_t stream = 0);
+#else
+	template<int IopDim, int BopDim> static __host__ CUDART_DEVICE
+	T indexedReduceLauncherPitch(
+			DMatrix<T> res, const T* d_idata, size_t pitch, size_t cols, size_t rows, UnaryOpIndexF<T,IopDim> idxOp, MonoidF<T,BopDim> op, T start, ulong idxStart =0, cudaStream_t stream = 0);
+#endif
+
 	static __host__ CUDART_DEVICE T factorial(int val);
 
 	// initial reduction is of values predicated by block/thread index
@@ -693,7 +759,7 @@ public:
 
 	static int devByOccupancy(vector<CuMatrix<T>>  ms) {
 		map<int,long> devOx;
-		for( int i = 0; i < ExecCaps::deviceCount;i++) {
+		for( int i = 0; i < ExecCaps::countGpus();i++) {
 			devOx[i] = 0;
 		}
 		for( auto& m : ms)
@@ -722,7 +788,7 @@ public:
 	static __host__ CUDART_DEVICE void copyUintDvrg(DMatrix<T>& trg, const DMatrix<T>& src, int troff, int tcoff);
 	static void copyIntDvrg(DMatrix<T>& trg, const DMatrix<T>& src, int troff, int tcoff);
 	static void shuffleCopyRows(DMatrix<T>& trg, const DMatrix<T>& src, int* rowIndices); // indices must be dev mem
-	static void initRand(int height, int width);
+	static void initRand(int height, int width, int pitch);
 	static void freeRand();
 
 	// les methodes du fillois
@@ -737,17 +803,21 @@ public:
 	template<int StateDim> static __host__ CUDART_DEVICE void fillFn(const UnaryOpIndexF<T,StateDim>& op, CuMatrix<T>& res, cudaStream_t stream = 0);
 	template<int StateDim> static __host__ CUDART_DEVICE void fillFnNsb(UnaryOpIndexF<T,StateDim> op, CuMatrix<T>& res, int w2h = 8, cudaStream_t stream = 0);
 #endif
-	static __host__ CUDART_DEVICE CuMatrix<T> increasingColumns(T start, int rows, int cols, bool colMajor = false);
-	static __host__ CUDART_DEVICE CuMatrix<T> increasingRows(T start, int rows, int cols, bool colMajor = false);
-	static __host__ CUDART_DEVICE CuMatrix<T> fill(T t, int nRows, int nCols, bool colMajor = false, cudaStream_t stream = 0);
-	static __host__ CUDART_DEVICE CuMatrix<T> sfill(T t, int nRows, int nCols, bool colMajor = false, cudaStream_t stream = 0);
-	static __host__ CUDART_DEVICE CuMatrix<T> fill(T t, intPair dims, bool colMajor = false, cudaStream_t stream = 0);
-	static __host__ CUDART_DEVICE CuMatrix<T> zeros(int nRows, int nCols, bool colMajor = false);
+	static __host__ CUDART_DEVICE CuMatrix<T> increasingColumns(int rows, int cols, T start, int gpuMask = Tiler<T>::gpuMaskFromCurrGpu(), TileDirection tileD = tdRows, bool colMajor = false);
+	static __host__ CUDART_DEVICE CuMatrix<T> increasingRows(int rows, int cols, T start, int gpuMask = Tiler<T>::gpuMaskFromCurrGpu(), TileDirection tileD = tdRows,  bool colMajor = false);
+	static __host__ CUDART_DEVICE CuMatrix<T> fill(int nRows, int nCols, T t, int gpuMask = Tiler<T>::gpuMaskFromCurrGpu(), TileDirection tileD = tdRows, bool colMajor = false, cudaStream_t stream = 0);
+	static __host__  CuMatrix<T> sfill(int nRows, int nCols, T t, bool colMajor = false, cudaStream_t stream = 0);
+	static __host__ CUDART_DEVICE CuMatrix<T> fill(intPair dims, T t, int gpuMask = Tiler<T>::gpuMaskFromCurrGpu(), TileDirection tileD = tdCols, bool colMajor = false, cudaStream_t stream = 0);
+	static __host__ CUDART_DEVICE CuMatrix<T> zeros(int nRows, int nCols, int gpuMask = Tiler<T>::gpuMaskFromCurrGpu(), TileDirection tileD = tdRows, bool colMajor = false);
 	static __host__ CUDART_DEVICE CuMatrix<T> zeros(intPair dims, bool colMajor = false);
-	static __host__ CUDART_DEVICE CuMatrix<T> ones(int nRows, int nCols, bool colMajor = false);
+	static __host__ CUDART_DEVICE CuMatrix<T> ones(int nRows, int nCols, int gpuMask = Tiler<T>::gpuMaskFromCurrGpu(), TileDirection tileD = tdRows, bool colMajor = false);
 	static __host__ CUDART_DEVICE CuMatrix<T> ones(intPair dims, bool colMajor = false);
-	static __host__ CUDART_DEVICE CuMatrix<T> sin(int m, int n, T amplitude = 1./10, T period = 2*Pi,T phase =0, bool colMajor = false);
-	static __host__ CUDART_DEVICE CuMatrix<T> sin(intPair dims, T amplitude = 1, T period = 2*Pi, T phase =0, bool colMajor = false);
+
+	static __host__ CUDART_DEVICE CuMatrix<T> evens(int nRows, int nCols, T phase=0, int gpuMask = Tiler<T>::gpuMaskFromCurrGpu(), TileDirection tileD = tdRows, bool colMajor = false);
+	static __host__ CUDART_DEVICE CuMatrix<T> odds(int nRows, int nCols, T phase=0, int gpuMask = Tiler<T>::gpuMaskFromCurrGpu(), TileDirection tileD = tdRows, bool colMajor = false);
+
+	static __host__ CUDART_DEVICE CuMatrix<T> sin(int m, int n, T amplitude = 1./10, T period = 2*Pi,T phase =1, bool colMajor = false);
+	static __host__ CUDART_DEVICE CuMatrix<T> sin(intPair dims, T amplitude = 1, T period = 2*Pi, T phase =1, bool colMajor = false);
 	static __host__ CUDART_DEVICE CuMatrix<T> cos(int m, int n, T amplitude = 1, T period = 2*Pi, T phase=0, bool colMajor = false);
 	static __host__ CUDART_DEVICE CuMatrix<T> cos(intPair dims, T amplitude = 1, T period = 2*Pi, T phase=0, bool colMajor = false);
 	static __host__ CUDART_DEVICE CuMatrix<T> diagonal(int dim, T val, bool colMajor = false);
@@ -755,14 +825,17 @@ public:
 	static __host__ CUDART_DEVICE CuMatrix<T> identity(int dim, bool colMajor = false); // should cache
 
 	static cudaError_t randn(DMatrix<T>& d_ret, T epsilon = 1);
+	static cudaError_t randmod(DMatrix<T>& d_ret, int mod, T epsilon = 1);
 	static CuMatrix<T> randn(int rows, int cols, T epsilon = static_cast<T>(  1), bool colMajor = false);
+	static CuMatrix<T> randmod(int rows, int cols, int mod, T epsilon = static_cast<T>(  1), bool colMajor = false);
 	static CuMatrix<T> randn( const intPair& dims, float epsilon, bool colMajor = false);
 	static CuMatrix<T> randn( const intPair& dims, bool colMajor = false);
 
-	static __host__ CUDART_DEVICE CuMatrix<T> span(T start, T end, int m, int n, bool colMajor = false);
-	static __host__ CUDART_DEVICE CuMatrix<T> sequence(T start, int m, int n, bool colMajor = false);
+	static __host__ CUDART_DEVICE CuMatrix<T> span( int m, int n, T start, T end,  int gpuMask = Tiler<T>::gpuMaskFromCurrGpu(), TileDirection tileD = tdRows, bool colMajor = false, cudaStream_t stream = 0);
+	static __host__ CUDART_DEVICE CuMatrix<T> spanMod( int m, int n, T start, T end, int steps,  int gpuMask = Tiler<T>::gpuMaskFromCurrGpu(), TileDirection tileD = tdRows, bool colMajor = false, cudaStream_t stream = 0);
+	static __host__ CUDART_DEVICE CuMatrix<T> sequence(int m, int n, T start,  T step = 1,  int gpuMask = Tiler<T>::gpuMaskFromCurrGpu(), TileDirection tileD = tdRows, bool colMajor = false, cudaStream_t stream = 0);
 	//static __host__ CUDART_DEVICE CuMatrix<T> sequenceScale(T start, T scale, int m, int n, bool colMajor = false);
-	static __host__ CUDART_DEVICE CuMatrix<T> seqMod(T start, T mod, int m, int n, bool colMajor = false);
+	static __host__ CUDART_DEVICE CuMatrix<T> seqMod(int m, int n, T start, T mod,  int gpuMask = Tiler<T>::gpuMaskFromCurrGpu(), TileDirection tileD = tdRows, bool colMajor = false, cudaStream_t stream = 0);
 	static __host__ CUDART_DEVICE CuMatrix<T> mapFeature(CuMatrix<T> m1, CuMatrix<T> m2, int degree = 6);
 
 	static inline __host__ CUDART_DEVICE CuMatrix<T> reductionBuffer(int rows) { return zeros(rows,1);	}
@@ -773,12 +846,86 @@ private:
 	static int MaxRowsDisplayed; // to force accessor calls which also sets device copy
 	static int MaxColsDisplayed;
 public:
-	static string theTypeStr;
+	//static string theTypeStr;
 	static long Constructed;
 	static long Destructed;
 	static long HDCopied;
 	static long DDCopied;
 	static long DHCopied;
+	//static  CMap<string, int> methodDhCopies;
+	//static  CMap<string, long> methodDhVolumes;
+	//static  CMap<string, double> methodDhTimes;
+
+/*
+	static int incDhCopy(string who, long bytes, double millis, int times = 1) {
+		int dhCount = 0;
+		auto itBytes = methodDhVolumes.find(who);
+		auto itTimes = methodDhTimes.find(who);
+		auto it = methodDhCopies.find(who);
+
+		if (it != methodDhCopies.end()) {
+			dhCount = ((*it).second + times) ;
+			methodDhCopies.erase(it);
+		} else {
+			dhCount = times;
+		}
+		methodDhCopies.insert( methodDhCopies.end(),
+				pair<string, int>(who, dhCount));
+
+		long dhVol = 0;
+		if (itBytes != methodDhVolumes.end()) {
+			dhVol = ((*itBytes).second + 1) + bytes;
+			methodDhVolumes.erase(itBytes);
+		} else {
+			dhVol = bytes;
+		}
+		methodDhVolumes.insert( methodDhVolumes.end(),
+				pair<string, long>(who, dhVol));
+
+		double dhTime = 0;
+		if (itTimes != methodDhTimes.end()) {
+			dhTime = ((*itTimes).second + 1) + millis;
+			methodDhTimes.erase(itTimes);
+		} else {
+			dhTime = millis;
+		}
+		methodDhTimes.insert( methodDhTimes.end(),
+				pair<string, double>(who, dhTime));
+
+		return dhCount;
+	}
+
+	static void dumpDhCopies() {
+		auto it = methodDhCopies.begin();
+		//
+		int proced = 0;
+		flprintf("DhCopy Stats has %d stats\n", methodDhCopies.size());
+		long total=0l;
+		int totalDh=0;
+		double totalMillis=0;
+		while(it != methodDhCopies.end() && proced++ < methodDhCopies.size()) {
+			auto itl = methodDhVolumes.find((*it).first);
+			auto itt = methodDhTimes.find((*it).first);
+			long vol = 0l;
+			double millis = 0;
+			totalDh += (*it).second;
+			if(itl != methodDhVolumes.end()) {
+				vol = (*itl).second;
+				millis = (*itt).second;
+				total += vol;
+				totalMillis += millis;
+			}
+			flprintf("caller %s  dhCopies %d volume %s time %s\n",
+					(*it).first.c_str(), (*it).second,
+					b_util::expNotationMemStr(vol).c_str(),
+					fromMillis( millis).c_str());
+			it++;
+		}
+		flprintf("Total DH copies %d, total bytes copied DH: %s time %s\n", totalDh, b_util::expNotationMemStr(total).c_str() ,
+				fromMillis(totalMillis).c_str());
+	}
+*/
+
 	static long HHCopied;
 	static long MemHdCopied;
 	static long MemDdCopied;

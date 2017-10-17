@@ -3,6 +3,7 @@
 #include "Kernels.h"
 #include "debug.h"
 #include "caps.h"
+#include "MemMgr.h"
 #include "MatrixExceptions.h"
 
 #include <pthread.h>
@@ -15,8 +16,8 @@ template<typename T, template <typename> class FillOp> __global__ void fillOpKer
 		int height,
 		int width,
 		int pitch,
-		uint rowStart,
-		uint colStart,
+		int rowStart,
+		int colStart,
 		bool colMajor)
 #else
 template<typename T, int StateDim> __global__ void fillOpKernel(
@@ -25,15 +26,15 @@ template<typename T, int StateDim> __global__ void fillOpKernel(
 		int height,
 		int width,
 		int pitch,
-		uint rowStart,
-		uint colStart,
+		int rowStart,
+		int colStart,
 		bool colMajor)
 #endif
 {
     uint xIndex = blockIdx.x * blockDim.x + threadIdx.x;
     uint yIndex = blockIdx.y * blockDim.y + threadIdx.y;
     ulong indexOut = colMajor ? xIndex * pitch + yIndex : yIndex * pitch + xIndex;
-    ulong indexIn = colMajor ? (xIndex + colStart) * pitch + yIndex + rowStart: (yIndex + rowStart) * pitch + xIndex;
+    ulong indexIn = colMajor ? (xIndex + colStart) * height + yIndex + rowStart: (yIndex + rowStart) * width + xIndex;
 	if(threadIdx.x == 0 && blockIdx.x == 0 && threadIdx.y == 0 && blockIdx.y == 0){
 		if(checkDebug(debugFill)) {
 			//flprintf("fillOpKernel %f -> trg %p height %d width %d pitch %d\n", (float)op(indexOut), trg, height, width,pitch);
@@ -57,7 +58,7 @@ template<typename T> template<int StateDim>  __host__ CUDART_DEVICE
 void CuMatrix<T>::fillFn( const UnaryOpIndexF<T,StateDim>& op, CuMatrix<T>& ret, cudaStream_t stream)
 #endif
 {
-	//cherr(cudaPeekAtLastError());
+	//c herr(cudaPeekAtLastError());
 	//cherr(cudaDeviceSynchronize());
 	if(checkDebug(debugFill))prlocf("CuMatrix<T>::fillFn(UnaryOpIndexF<T,StateDim> op, CuMatrix<T>& ret, cudaStream_t stream) enter\n");
 #ifdef CuMatrix_StatFunc
@@ -67,6 +68,10 @@ void CuMatrix<T>::fillFn( const UnaryOpIndexF<T,StateDim>& op, CuMatrix<T>& ret,
 	#else
 	if(checkDebug(debugFill))flprintf("op.operation %p\n", op.operation);
 	#endif
+#endif
+
+#ifndef __CUDA_ARCH__
+	if(checkDebug(debugFill))outln("ret " << ret.toShortString());
 #endif
 
 	if(ret.m ==0 || ret.n ==0 ){
@@ -87,41 +92,63 @@ void CuMatrix<T>::fillFn( const UnaryOpIndexF<T,StateDim>& op, CuMatrix<T>& ret,
 	}
 
 	DMatrix<T> d_A;
-	uint tileM = 0, tileN=0;
-	uint roff = 0, coff = 0 ;
+	int tileM = 0, tileN=0, tileP = 0;
+	int roff = 0, coff = 0 ;
 
-	int lastGpu = 0;
+	int lastGpu = -1;
 	int gpuCount = ret.tiler.countGpus();
 	int orgDevice = ExecCaps::currDev();
-	cudaStream_t* streams = null;
+	DevStream** devStreams = nullptr;
 	if(checkDebug(debugMem))usedDevMem();
 	if(gpuCount > 1) {
 		assert(!stream);
-		cudaStream_t* streams = (cudaStream_t* ) malloc(gpuCount * sizeof(cudaStream_t));
+		devStreams = (DevStream** ) malloc(gpuCount * sizeof(DevStream*));
 		for(int i =0 ; i < gpuCount; i++) {
 			lastGpu = ret.tiler.nextGpu(lastGpu);
-			if(gpuCount> 1)
-				ExecCaps_setDevice(lastGpu);
-			cherr(cudaStreamCreateWithFlags(&streams[i],cudaStreamNonBlocking));
-			if(checkDebug(debugFill))flprintf("created streams[i] %p\n",streams[i]);
+
+			devStreams[i] = new DevStream(lastGpu);
+			if(checkDebug(debugFill))flprintf("created devStreams %d at %p\n",i,devStreams[i]);
 		}
 	}
 	if(checkDebug(debugMem))usedDevMem();
-	if (checkDebug(debugTiler)) {
+	if (checkDebug(debugFill)) {
 		char buff[33];
 		buff[32]=0;
 		b_util::printBinInt(buff, ret.tiler.gpuMask);
 		flprintf("ret.tiler.gpuMask bits %s\n",buff);
 	}
 	if(checkDebug(debugMem))usedDevMem();
+	lastGpu = -1;
+	cudaStream_t currStream = nullptr;
+	cherr(cudaDeviceSynchronize());
 	for(int tile = 0; tile < tileCount; tile++) {
-		lastGpu = ret.tiler.nextGpu(0);
-		if(gpuCount> 1)
+		if(checkDebug(debugMem))usedDevMem();
+
+		currStream = gpuCount == 1 ? stream : devStreams[ tile % ret.tiler.gpuModulus ]->stream;
+		if(checkDebug(debugFill)) flprintf("tile %d currGpu %d lastGpu %d currStream %p\n",tile, ExecCaps::currDev(), lastGpu, currStream);
+		cherr(cudaDeviceSynchronize());
+
+		lastGpu= ret.tiler.tile1D(d_A, roff, coff, tileM, tileN, tileP, tile, ret.tiler.tileD, false, lastGpu, currStream);
+		if(ExecCaps::currDev() != lastGpu) {
 			ExecCaps_setDevice(lastGpu);
+		}
+		cherr(cudaDeviceSynchronize());
+
+		if(checkDebug(debugFill)) {
+#ifndef __CUDA_ARCH__
+			outln("dev " << ExecCaps::currDev() << " zeroing d_A " << util<T>::pdm(d_A));
+			outln("b_util::getDevice(d_A.elements) " << b_util::getDevice(d_A.elements));
+#endif
+			// cudaMemset2D(void *devPtr, size_t pitch, int value, size_t width, size_t height);
+			cherr(cudaGetLastError());
+			MemMgr<T>::checkValid(d_A.elements + d_A.p * d_A.m -1 );
+			cherr(cudaMemset2DAsync((void*)d_A.elements, d_A.p * sizeof(T), 0, d_A.n * sizeof(T), d_A.m, stream));
+			//cherr( cudaMemset((void*)d_A.elements,0, (long)d_A.m * d_A.p * sizeof(T)));
+		}
+		cherr(cudaDeviceSynchronize());
+
 		if(checkDebug(debugFill))flprintf("tileM %d tileN %d tile %d lastGpu %u\n", tileM, tileN, tile, lastGpu);
 		if(checkDebug(debugFill))flprintf("roff %u coff %u\n",roff, coff);
-		if(checkDebug(debugMem))usedDevMem();
-		lastGpu= ret.tiler.tile1D(d_A, roff, coff, tileM, tileN, tile, tdRows, false,lastGpu);
 		if(checkDebug(debugMem))usedDevMem();
 		if(checkDebug(debugFill)) {
 			flprintf("after ret.tiler.tile1D for tile %d; roff %u coff %u\n", tile, roff, coff);
@@ -131,6 +158,7 @@ void CuMatrix<T>::fillFn( const UnaryOpIndexF<T,StateDim>& op, CuMatrix<T>& ret,
 			ulong eob = d_A.m * d_A.n-1;
 			flprintf("end of buffer %lu ", eob);
 			if(checkDebug(debugMem))usedDevMem();
+			prlocf("d_A.elements + eob ");
 			b_util::pPtrAtts(d_A.elements + eob );
 		}
 
@@ -145,7 +173,7 @@ void CuMatrix<T>::fillFn( const UnaryOpIndexF<T,StateDim>& op, CuMatrix<T>& ret,
 		dim3 block(blockW,blockH);
 		// todo make distinction between gram tiles and thread grid slices mobvios
 		int sliceGridY = grid.y/ slices;
-		uint sliceM = sliceGridY * blockH;
+		int sliceM = sliceGridY * blockH;
 		if( checkDebug(debugFill)){
 			if(slices)flprintf("init sliceGridY %d sliceM %d\n",sliceGridY, sliceM);
 		}
@@ -159,23 +187,33 @@ void CuMatrix<T>::fillFn( const UnaryOpIndexF<T,StateDim>& op, CuMatrix<T>& ret,
 				sliceGridY =  DIV_UP(sliceM, blockH);
 			}
 			grid.y = sliceGridY;
-			if(checkDebug(debugFill)){
-				flprintf("stream %p, sliceGridY %d\n",stream, sliceGridY);
+			if(checkDebug(debugMem))usedDevMem();
 
-				if(slices) {
-					flprintf("sliceGridY %d currSlice %d sliceM %d sliceOffset %d\n",stream, sliceGridY, currSlice, sliceOffset );
+			if(checkDebug(debugFill)){
+				flprintf("currStream %p, sliceGridY %d\n",currStream, sliceGridY);
+
+				if(slices > 1 ) {
+					flprintf(
+							"sliceGridY %d currSlice %d sliceM %d sliceOffset %d\n",
+							stream, sliceGridY, currSlice, sliceOffset);
 				} else {
-					flprintf("tile %d currSlice %d on mat offset %d sliceM %d X ret.n %d( X ret.p %d) (d_A.elements+ offset %p)\n",
-							tile, currSlice, sliceOffset, sliceM, ret.n, ret.p, (d_A.elements+ sliceOffset));
+					flprintf(
+							"gpu %d tile %d currSlice %d on mat offset %d sliceM %d X ret.n %d( X ret.p %d)\n(d_A.elements+ offset %p)\n",
+							ExecCaps::currDev(), tile, currSlice, sliceOffset,
+							sliceM, ret.n, ret.p, (d_A.elements + sliceOffset));
 				}
 
 				 b_util::prd3(grid, " grid of ");
 				 b_util::prd3(block, "block of");
 			}
-			if(checkDebug(debugMem))usedDevMem();
+#ifndef __CUDA_ARCH__
+			outln("d_A.elements + sliceOffset " <<  d_A.elements + sliceOffset << ", sliceM " << sliceM << ", d_A.n " <<  d_A.n <<
+					", tileP " << tileP << ", roff " << roff << ", coff " <<coff);
+#endif
+			fillOpKernel<<<grid, block, 0, currStream>>>(
+					op, d_A.elements + sliceOffset, sliceM, d_A.n, /*ret.tiler.tileP*/d_A.p, roff, coff, ret.colMajor);
 
-			fillOpKernel<<<grid, block, 0, stream>>>(op, d_A.elements + sliceOffset, sliceM, d_A.n, d_A.p, roff, coff, ret.colMajor);
-
+			cherr(cudaDeviceSynchronize());
 			if(checkDebug(debugMem))usedDevMem();
 			if(checkDebug(debugFill)){
 				flprintf("post fill tile %d slice %d\n", tile, currSlice);
@@ -191,7 +229,7 @@ void CuMatrix<T>::fillFn( const UnaryOpIndexF<T,StateDim>& op, CuMatrix<T>& ret,
 		if(stream) {
 			cherr(cudaStreamSynchronize(stream));
 		}
-		else {
+		else if(!devStreams){
 			cherr(cudaDeviceSynchronize());
 		}
 
@@ -202,29 +240,37 @@ void CuMatrix<T>::fillFn( const UnaryOpIndexF<T,StateDim>& op, CuMatrix<T>& ret,
 		//printArrayNe(d_A.elements + sliceOffset,d_A.p * 2, (T) 0);
 		//printArrayDiagNeq(d_A.elements + sliceOffset + roff,d_A.p, MIN(d_A.n,d_A.m), 1, (T) 1);
 
-		ret.tiler.syncTile(d_A, roff, coff, stream);
-
+		ret.tiler.syncTile(d_A, roff, coff, currStream);
+		cherr(cudaGetLastError());
 		T* retHostTile= ret.elements + ret.tiler.offset(roff,coff);
 		if(checkDebug(debugFill))flprintf("\n\nafter host-sync, hostTile %p...\n",retHostTile);
 		//countColoArrayDiagNe( retHostTile + roff, ret.p, MIN(d_A.n,d_A.m), (T)1);
 		//printColoArrayDiagNe( retHostTile + roff, ret.p, MIN(d_A.n,d_A.m), (T)1);
-		flprintf("printColorArray(retHostTile %p + roff %d - 5, 10)\n", retHostTile + roff - 5, roff);
+		//flprintf("printColorArray(retHostTile %p + roff %d - 5, 10)\n", retHostTile + roff - 5, roff);
 		//printColoArray(retHostTile + roff - ( roff > 5 ? 5 : 0), 10);
 
 		if(checkDebug(debugMem))usedCurrMem();
 	}
 	if(gpuCount > 1) {
 		for(int i =0 ; i < gpuCount; i++) {
-			cherr(cudaStreamDestroy(streams[i]));
+			if(checkDebug(debugFill))flprintf("syncing stream %d at %p\n", i , devStreams[i]);
+
+			cherr(devStreams[i]->sync());
+			//cherr(cudaStreamSynchronize(streams[i]));
+			//cherr(cudaStreamDestroy(streams[i]));
+			delete devStreams[i];
 		}
-		free(streams);
+		free(devStreams);
 	}
 
-	if(ret.tiler.tileSize == ret.tiler.m_size) {
+	if(ret.tiler.tileSize >= ret.tiler.m_size) {
 		ret.invalidateHost();
 	} else {
 		ret.invalidateDevice();
 	}
+
+	if(checkDebug(debugFill))prlocf("fillFn exit\n");
+
 }
 #ifdef  CuMatrix_Enable_KTS
 
@@ -250,12 +296,14 @@ template __host__ CUDART_DEVICE void CuMatrix<double>::fillFn<increasingRowsFill
 
 template __host__ CUDART_DEVICE void CuMatrix<float>::fillFn<oneOverFiller>(oneOverFiller<float>, CuMatrix<float>&, CUstream_st*);
 template __host__ CUDART_DEVICE void CuMatrix<double>::fillFn<oneOverFiller>(oneOverFiller<double>, CuMatrix<double>&, CUstream_st*);
+template __host__ CUDART_DEVICE void CuMatrix<unsigned long>::fillFn<oneOverFiller>(oneOverFiller<unsigned long>, CuMatrix<unsigned long>&, CUstream_st*);
 
 #else
 template __host__ CUDART_DEVICE void CuMatrix<float>::fillFn(const UnaryOpIndexF<float, 0>&, CuMatrix<float>&, CUstream_st*);
 template __host__ CUDART_DEVICE void CuMatrix<double>::fillFn(const UnaryOpIndexF<double, 0>&, CuMatrix<double>&, CUstream_st*);
 template __host__ CUDART_DEVICE void CuMatrix<float>::fillFn(const UnaryOpIndexF<float, 1>&, CuMatrix<float>&, CUstream_st*);
 template __host__ CUDART_DEVICE void CuMatrix<double>::fillFn(const UnaryOpIndexF<double, 1>&, CuMatrix<double>&, CUstream_st*);
+template __host__ CUDART_DEVICE void CuMatrix<unsigned long>::fillFn<0>(UnaryOpIndexF<unsigned long, 0> const&, CuMatrix<unsigned long>&, CUstream_st*);
 #endif
 
 /*
@@ -362,16 +410,18 @@ template<typename T> template<int StateDim>__host__ CUDART_DEVICE
 	dim3 grid(DIV_UP(ret.n, blockW), DIV_UP(ret.m,blockW));
 	dim3 block(blockW,blockH);
 	if(checkDebug(debugFill))printf("fillFnNsb on mat tiler.currBuffer() %p %dx%d\n",ret.tiler.currBuffer(), ret.m,ret.n);
-	fillOpNsbKernel<<<grid,block,0,stream>>>(op, ret.tiler.currBuffer(), ret.m,ret.n,ret.p, ret.colMajor);
+	fillOpNsbKernel<<<grid,block,0,stream>>>(op, ret.tiler.currBuffer(), ret.m,ret.n,ret._tileP, ret.colMajor);
 	ret.invalidateHost();
 }
 
 #ifdef  CuMatrix_Enable_KTS
 template __host__ CUDART_DEVICE void CuMatrix<float>::fillFnNsb<oneOverFiller>(oneOverFiller<float>, CuMatrix<float>&, int, CUstream_st*);
 template __host__ CUDART_DEVICE void CuMatrix<double>::fillFnNsb<oneOverFiller>(oneOverFiller<double>, CuMatrix<double>&, int, CUstream_st*);
+template __host__ CUDART_DEVICE void CuMatrix<unsigned long>::fillFnNsb<oneOverFiller>(oneOverFiller<unsigned long>, CuMatrix<unsigned long>&, int, CUstream_st*);
 #else
 template __host__ CUDART_DEVICE void CuMatrix<float>::fillFnNsb<0>(UnaryOpIndexF<float, 0>, CuMatrix<float>&, int, CUstream_st*);
 template __host__ CUDART_DEVICE void CuMatrix<double>::fillFnNsb<0>(UnaryOpIndexF<double, 0>, CuMatrix<double>&, int, CUstream_st*);
+template __host__ CUDART_DEVICE void CuMatrix<unsigned long>::fillFnNsb<0>(UnaryOpIndexF<unsigned long, 0>, CuMatrix<unsigned long>&, int, CUstream_st*);
 #endif
 /*
 template<typename T> template<template <typename> class FillOp> __host__ CUDART_DEVICE
@@ -443,11 +493,11 @@ template <typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::fromScalar
 	return mat;
 }
 
-template <typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::fill(T t, intPair dims, bool colMajor, cudaStream_t stream) {
-	return fill(t, dims.first, dims.second,colMajor,stream);
+template <typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::fill(intPair dims, T t, int gpuMask, TileDirection tileD, bool colMajor, cudaStream_t stream) {
+	return fill(t, dims.first, dims.second,gpuMask,tileD,colMajor,stream);
 }
 
-template <typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::fill(T t, int nRows, int nCols, bool colMajor, cudaStream_t stream) {
+template <typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::fill(int nRows, int nCols, T t, int gpuMask, TileDirection tileD, bool colMajor, cudaStream_t stream) {
 	constFiller<T> filler = Functory<T,constFiller>::pinch(t);
 #ifdef CuMatrix_StatFunc
 	if(checkDebug(debugFill))flprintf("filler: fn %p  state %f colmajor %d\n", filler.fn, (float)filler.state, colMajor);
@@ -460,9 +510,9 @@ template <typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::fill(T t, 
 
 #endif
 
-	if(checkDebug(debugFill)) prlocf("creating resmat\n");
+	if(checkDebug(debugFill)) flprintf("creating resmat %dX%dX%d mask %d tileD %s\n", nRows, nCols,nCols, gpuMask, b_util::tileDir(tileD));
 
-	CuMatrix<T> mat(nRows,nCols,nCols,Tiler<T>::gpuMaskFromCurrGpu(), true,true);
+	CuMatrix<T> mat(nRows,nCols,nCols, true,true,gpuMask,tileD);
 
 	if(checkDebug(debugFill)) prlocf("created resmat\n");
 
@@ -471,18 +521,10 @@ template <typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::fill(T t, 
 		outln("created " << mat.toShortString());
 		outln(mat.elements << " href " << mat.getMgr().refCount(mat.elements));
 		outln(mat.currBuffer() << " dref " << mat.getMgr().refCount(mat.currBuffer()));
-		outln("res " << mat.toShortString());
 #endif
 	}
-	if(!mat.tiler.hasDmemQ()) {
-		mat.tiler.allocTiles();
-		mat.getMgr().addTiles(&(mat.tiler));
-	} else {
-		if(checkDebug(debugFill)) flprintf("already had buffer %p\n", mat.tiler.currBuffer());
-	}
-	if(mat.tiler.tileSize == mat.tiler.m_size) {
-		//util<T>::setNDev(mat.tiler.buff(), t,nRows*nCols);
-		util<T>::fillNDev(mat.tiler.buff(), t,nRows*nCols);
+	if(mat.tiler.tileSize >= mat.size) {
+		util<T>::fillNDev(mat.tiler.buff(), t,(long)nRows*nCols);
 		mat.invalidateHost();
 		return mat;
 	}
@@ -499,7 +541,7 @@ template <typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::fill(T t, 
 	}
 	if(checkDebug(debugFill)) {
 #ifndef __CUDA_ARCH__
-		outln("after allocTiles");
+		outln("after allocTiles mat " <<  mat.toShortString());
 		outln(mat.elements << " href " << mat.getMgr().refCount(mat.elements));
 		outln(mat.currBuffer() << " dref " << mat.getMgr().refCount(mat.currBuffer()));
 #endif
@@ -543,9 +585,9 @@ template <typename T> static void setNI2( T* trg, T val, long n) {
 	}
 }
 
-template <typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::sfill(T t, int nRows, int nCols, bool colMajor, cudaStream_t stream) {
+template <typename T> __host__ CuMatrix<T> CuMatrix<T>::sfill(int nRows, int nCols, T t, bool colMajor, cudaStream_t stream) {
 	if(checkDebug(debugFill)) prlocf("creating resmat\n");
-	CuMatrix<T> mat(nRows,nCols,nCols,Tiler<T>::gpuMaskFromCurrGpu(), true,true);
+	CuMatrix<T> mat(nRows,nCols,nCols, true,true,Tiler<T>::gpuMaskFromCurrGpu());
 	if(checkDebug(debugFill)) prlocf("created resmat\n");
 	if(checkDebug(debugFill)) {
 #ifndef __CUDA_ARCH__
@@ -555,7 +597,7 @@ template <typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::sfill(T t,
 #endif
 	}
 	if(!mat.tiler.hasDmemQ()) {
-		mat.tiler.allocTiles();
+		mat.tiler.allocTiles(mat._tileM, mat._tileN, mat._tileP);
 		mat.getMgr().addTiles(&(mat.tiler));
 	} else {
 		if(checkDebug(debugFill)) flprintf("already had buffer %p\n", mat.tiler.currBuffer());
@@ -569,34 +611,64 @@ template <typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::sfill(T t,
 	return mat;
 }
 
-template <typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::zeros(int nRows, int nCols, bool colMajor) {
+template <typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::zeros(int nRows, int nCols, int gpuMask, TileDirection tileD, bool colMajor) {
 
 	if(checkDebug(debugFill))flprintf("zeros %uX%u\n", nRows,nCols);
-	return fill(0,nRows,nCols, colMajor);
+	return fill(nRows,nCols,(T)0, gpuMask, tileD, colMajor);
 }
 
 template <typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::zeros(intPair dims, bool colMajor) {
-	return fill(0,dims.first, dims.second);
+	return fill(dims.first, dims.second,(T)0);
 }
 
-template <typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::ones(int nRows, int nCols, bool colMajor) {
+template <typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::ones(int nRows, int nCols, int gpuMask, TileDirection tileD, bool colMajor) {
 	if(checkDebug(debugFill)) flprintf("\n\nones(%u, %u)\n", nRows, nCols);
-	return fill(1,nRows,nCols);
+	return fill(nRows,nCols,(T)1, gpuMask, tileD, colMajor);
 }
 
 template <typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::ones(intPair dims, bool colMajor) {
-	return fill(1, dims.first, dims.second);
+	return fill(dims.first, dims.second,(T)1);
 }
+
+template <typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::evens(int nRows, int nCols, T phase, int gpuMask, TileDirection tileD, bool colMajor) {
+	if(checkDebug(debugFill)) flprintf("\n\nevens(%u, %u, %f)\n", nRows, nCols, (float) phase);
+	evensFiller<T> filler = Functory<T,evensFiller>::pinch();
+	filler.phase() = phase;
+	CuMatrix<T> mat(nRows,nCols,nCols, true,true,gpuMask);
+	mat.colMajor= colMajor;
+#ifdef CuMatrix_Enable_KTS
+	fillFn(filler, mat);
+#else
+	fillFn<1>(filler, mat);
+#endif
+	return mat;
+}
+
+template <typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::odds(int nRows, int nCols, T phase, int gpuMask, TileDirection tileD, bool colMajor) {
+	if(checkDebug(debugFill)) flprintf("\nodds(%u, %u, %f)\n", nRows, nCols, (float) phase);
+	oddsFiller<T> filler = Functory<T,oddsFiller>::pinch();
+	filler.phase() = phase;
+	CuMatrix<T> mat(nRows,nCols,nCols, true,true,gpuMask);
+	mat.colMajor= colMajor;
+#ifdef CuMatrix_Enable_KTS
+	fillFn(filler, mat);
+#else
+	fillFn<1>(filler, mat);
+#endif
+	return mat;
+}
+
 
 template <typename T>__host__ CUDART_DEVICE  CuMatrix<T> CuMatrix<T>::sin(int m, int n, T amplitude, T period, T phase, bool colMajor) {
 
+	flprintf("%uX%u amp %.2f per %.2f phaz %.2f\n", m, n, amplitude, period, phase);
 	CuMatrix<T> mat = CuMatrix<T>::zeros(m,n).syncBuffers();
 
 	int len =  m*n;
 	T *arry= mat.elements;
 	for(int i =0; i < len; i++){
 		int colIdx = i % n * m + i / n;
-		arry[i] = amplitude * ::sin(colIdx+phase);
+		arry[i] = amplitude * ::sinf(colIdx+phase);
 	}
 	mat.invalidateDevice();
 	//CuMatrix<T> mat(m,n,n, Tiler<T>::gpuMaskFromCurrGpu(), true,true);
@@ -607,7 +679,7 @@ template <typename T>__host__ CUDART_DEVICE  CuMatrix<T> CuMatrix<T>::sin(int m,
 
 template <typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::cos(int m, int n, T amplitude, T period, T phase, bool colMajor) {
 	cosFiller<T> filler = Functory<T, cosFiller>::pinch(amplitude,period,phase);
-	CuMatrix<T> mat(m,n,n, Tiler<T>::gpuMaskFromCurrGpu(), true,true);
+	CuMatrix<T> mat(m,n,n, true,true, Tiler<T>::gpuMaskFromCurrGpu());
 	mat.colMajor= colMajor;
 	fillFn(filler, mat);
 	return mat;
@@ -628,7 +700,7 @@ template <typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::diagonal(i
 	if(checkDebug(debugFill)) flprintf("\n\ndiagonal(%u) = %f\n", dim, (float)val);
 	diagonalFiller<T> filler = Functory<T, diagonalFiller>::pinch(val,dim);
 
-	CuMatrix<T> mat(dim,dim,dim, Tiler<T>::gpuMaskFromCurrGpu(), true,true);
+	CuMatrix<T> mat(dim,dim,dim, true,true, Tiler<T>::gpuMaskFromCurrGpu());
 	mat.colMajor= colMajor;
 #ifdef CuMatrix_Enable_KTS
 	fillFn(filler, mat);
@@ -650,13 +722,32 @@ template <typename T> CuMatrix<T> CuMatrix<T>::randn(int rows, int cols, T epsil
 	if(colMajor) {
 		dthrow(notImplemented());
 	}
-	CuMatrix<T> ret(rows,cols,cols, Tiler<T>::gpuMaskFromCurrGpu(), true,true);
-	if(ret.tiler.tileSize != ret.tiler.m_size) {
+
+	CuMatrix<T> ret(rows,cols,cols, true,true, Tiler<T>::gpuMaskFromCurrGpu());
+
+	if(ret.tiler.tileSize < ret.tiler.m_size) {
 		dthrow(notImplemented());
 	}
 	DMatrix<T> d_ret;
 	ret.tile0(d_ret,false);
 	randn(d_ret, epsilon);
+	ret.lastMod = mod_device;
+	return ret;
+}
+
+template <typename T> CuMatrix<T> CuMatrix<T>::randmod(int rows, int cols, int mod, T epsilon, bool colMajor) {
+	if(colMajor) {
+		dthrow(notImplemented());
+	}
+
+	CuMatrix<T> ret(rows,cols,cols, true,true, Tiler<T>::gpuMaskFromCurrGpu());
+
+	if(ret.tiler.tileSize < ret.tiler.m_size) {
+		dthrow(notImplemented());
+	}
+	DMatrix<T> d_ret;
+	ret.tile0(d_ret,false);
+	randmod(d_ret, mod, epsilon);
 	ret.lastMod = mod_device;
 	return ret;
 }
@@ -668,26 +759,39 @@ template <typename T> CuMatrix<T> CuMatrix<T>::randn( const intPair& dims, bool 
 	return (randn(dims.first, dims.second, colMajor));
 }
 
-template <typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::span(T start, T end, int m, int n, bool colMajor) {
+template <typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::span(int m, int n, T start, T end, int gpuMask, TileDirection tileD, bool colMajor, cudaStream_t stream) {
 	spanFiller<T> filler= Functory<T, spanFiller>::pinch(start,end,m*n);
-	CuMatrix<T> mat(m,n,n, Tiler<T>::gpuMaskFromCurrGpu(), true,true);
+	CuMatrix<T> mat(m,n,n, true,true,gpuMask, tileD );
 	mat.colMajor= colMajor;
 #ifdef CuMatrix_Enable_KTS
-	fillFn(filler, mat);
+	fillFn(filler, mat, stream);
 #else
-	fillFn<3>(filler, mat);
+	fillFn<3>(filler, mat, stream);
 #endif
 	return mat;
 }
 
-template <typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::sequence(T start, int m, int n, bool colMajor) {
-	sequenceFiller<T> filler=  Functory<T, sequenceFiller>::pinch(start);
-	CuMatrix<T> mat(m,n,n, Tiler<T>::gpuMaskFromCurrGpu(), true,true);
+template <typename T> __host__ CUDART_DEVICE
+CuMatrix<T> CuMatrix<T>::spanMod(int m, int n, T start, T end, int steps, int gpuMask, TileDirection tileD, bool colMajor, cudaStream_t stream) {
+	spanModFiller<T> filler= Functory<T, spanModFiller>::pinch(start,end,steps);
+	CuMatrix<T> mat(m,n,n, true,true,gpuMask, tileD );
 	mat.colMajor= colMajor;
 #ifdef CuMatrix_Enable_KTS
-	fillFn(filler, mat);
+	fillFn(filler, mat, stream);
 #else
-	fillFn<1>(filler, mat);
+	fillFn<3>(filler, mat, stream);
+#endif
+	return mat;
+}
+
+template <typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::sequence(int m, int n, T start, T step, int gpuMask, TileDirection tileD, bool colMajor, cudaStream_t stream) {
+	sequenceFiller<T> filler=  Functory<T, sequenceFiller>::pinch(start, step);
+	CuMatrix<T> mat(m,n,n, true,true,gpuMask, tileD );
+	mat.colMajor= colMajor;
+#ifdef CuMatrix_Enable_KTS
+	fillFn(filler, mat, stream);
+#else
+	fillFn<2>(filler, mat, stream);
 #endif
 	return mat;
 }
@@ -704,22 +808,25 @@ template <typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::sequenceSc
 }
 */
 
-template <typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::seqMod(T start, T mod, int m, int n, bool colMajor) {
+template <typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::seqMod(int m, int n, T start, T mod, int gpuMask, TileDirection tileD, bool colMajor, cudaStream_t stream ) {
 	seqModFiller<T> filler=  Functory<T, seqModFiller>::pinch(start,mod);
-	CuMatrix<T> mat(m,n,n, Tiler<T>::gpuMaskFromCurrGpu(), true,true);
+	CuMatrix<T> mat(m,n,n, true,true,gpuMask, tileD );
 	mat.colMajor= colMajor;
 #ifdef CuMatrix_Enable_KTS
-	fillFn(filler, mat);
+	fillFn(filler, mat, stream);
 #else
-	fillFn<2>(filler, mat);
+	fillFn<2>(filler, mat, stream);
 #endif
 	return mat;
 }
 
 
-template <typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::increasingColumns(T start, int rows, int cols, bool colMajor ) {
+template <typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::increasingColumns(int rows, int cols, T start, int gpuMask, TileDirection tileD, bool colMajor ) {
 	increasingColumnsFiller<T> filler =  Functory<T, increasingColumnsFiller>::pinch(start,cols);
-	CuMatrix<T> mat(rows,cols,cols, Tiler<T>::gpuMaskFromCurrGpu(), true,true);
+	CuMatrix<T> mat(rows,cols,cols, true,true,gpuMask, tileD );
+#ifndef __CUDA_ARCH__
+	outln("mat " << mat.toShortString());
+#endif
 	mat.colMajor= colMajor;
 #ifdef CuMatrix_Enable_KTS
 	fillFn(filler, mat);
@@ -730,9 +837,9 @@ template <typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::increasing
 	return mat;
 }
 
-template <typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::increasingRows(T start, int rows, int cols, bool colMajor ) {
+template <typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::increasingRows(int rows, int cols, T start, int gpuMask, TileDirection tileD, bool colMajor ) {
 	increasingRowsFiller<T> filler = 	Functory<T, increasingRowsFiller>::pinch(start,cols);
-	CuMatrix<T> mat(rows,cols,cols, Tiler<T>::gpuMaskFromCurrGpu(), true,true);
+	CuMatrix<T> mat(rows,cols,cols, true,true, gpuMask, tileD);
 	mat.colMajor= colMajor;
 	fillFn(filler, mat);
 	return mat;

@@ -11,7 +11,7 @@
 #ifdef CuMatrix_UseOmp
 #include <omp.h>
 #endif
-
+#include <math.h>
 using std::ofstream;
 using std::ios;
 
@@ -173,7 +173,7 @@ template<typename T> void CuMatrix<T>::parseCsvDataLine(const CuMatrix<T>* x,
 			next = dblNext;
 			T tdiff = (T) lastRow[idx] - next;
 			if(diff != 0 && !warnedAlready[idx] &&
-					( ::isinf(diff/tdiff) ||  fabs( 1- fabs(diff/tdiff)) > .05 )) {
+					( __isinf(diff/tdiff) ||  fabs( 1- fabs(diff/tdiff)) > .05 )) {
 				outln("\n\n!!!!!!!!!!!!!!!!!!!!!!!!!!!\n\n" <<
 						"WARNING (once per column) current type parameter results in loss of precision at " <<
 						currLine << ", " << idx << ": " << (diff/tdiff) <<
@@ -230,11 +230,13 @@ template<typename T> void addOctaveObject(map<string, CuMatrix<T>*>& theMap,
 	case matrix: {
 		currMat->invalidateDevice();
 		currMat->syncBuffers();
-		outln(
-				"adding " << ot2str(elementType).c_str() << " '" << name.c_str() << "' of dims " << currMat->m << ", " << currMat->n);
-		outln("first elem " << currMat->get(0,0));
-		outln("first h elem " << currMat->elements[0]);
-		outln("last,0 elem " << currMat->get(currMat->m-1,0));
+		if(scalar == elementType )
+			outln( "adding " << ot2str(elementType).c_str() << " '" << name.c_str() );
+		else
+			outln( "adding " << ot2str(elementType).c_str() << " '" << name.c_str() <<  "' of dims " << currMat->m << ", " << currMat->n );
+		if(checkDebug(debugFile))outln("first elem " << currMat->get(0,0));
+		if(checkDebug(debugFile))outln("first h elem " << currMat->elements[0]);
+		if(checkDebug(debugFile))outln("last,0 elem " << currMat->get(currMat->m-1,0));
 		//outln( "created matrix of dims " << m.getRows() << ", " << m.getCols());
 		theMap.insert(it, pair<string, CuMatrix<T>*>(name, currMat));
 		break;

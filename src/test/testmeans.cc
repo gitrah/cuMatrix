@@ -17,7 +17,7 @@ template int testFeatureMeans<ulong>::operator()(int argc, const char **argv) co
 template<typename T> int testFeatureMeans<T>::operator()(int argc, const char **argv) const {
 	outln("testFeatureMeans start");
 	int count = b_util::getCount(argc,argv,100);
-	CuMatrix<T> x = CuMatrix<T>::increasingColumns(100, 5000, 1000) + 500;
+	CuMatrix<T> x = CuMatrix<T>::increasingColumns(5000, 1000,100) + 500;
 	//outln("x " << x.syncBuffers());
 	CuMatrix<T> tx= x.transpose();
 	CuMatrix<T> means = CuMatrix<T>::zeros(x.n,1);
@@ -49,7 +49,7 @@ template<typename T> int testFeatureMeans<T>::operator()(int argc, const char **
 template int testMeansLoop<float>::operator()(int argc, const char **argv) const;
 template int testMeansLoop<double>::operator()(int argc, const char **argv) const;
 template<typename T> int testMeansLoop<T>::operator()(int argc, const char **argv) const {
-	CuMatrix<T> bign = CuMatrix<T>::increasingColumns(0,1000,1000);
+	CuMatrix<T> bign = CuMatrix<T>::increasingColumns(1000,1000,0);
 	CuMatrix<T> txBign = bign.transpose();
 	CuMatrix<T> bignMeans(1, bign.n,false,true);
 	CuMatrix<T> bignMeansSum = CuMatrix<T>::zeros(1,bign.n);
@@ -321,7 +321,7 @@ template int testMeansPitch<ulong>::operator()(int argc, const char **argv) cons
 template<typename T> int testMeansPitch<T>::operator()(int argc, const char **argv) const {
 	outln("testMeansPitch start");
 
-	CuMatrix<T> src = CuMatrix<T>::increasingColumns(1,1000,1000);
+	CuMatrix<T> src = CuMatrix<T>::increasingColumns(1000,1000,1);
 	printArray( src.currBuffer(), 100);
 
 	//outln("src.sum " << src.sum());
@@ -331,7 +331,7 @@ template<typename T> int testMeansPitch<T>::operator()(int argc, const char **ar
 	col.n = 1;
 	col.p = src.p;
 	col.size = col.m * col.p * sizeof(T);
-	col.ownsBuffers = false;
+	col.ownsDBuffers = col.ownsHBuffers = false;
 	col.tiler.set( src.tiler.buffers);
 	col.elements = src.elements;
 	col.tiler.reset(col);

@@ -8,14 +8,6 @@
 #include <thread>
 
 
-/*
-template<typename T> __host__ __device__ void CuMatrix<T>::calcTiles(float headroom) {
-	assert(!tiler.nTiles);
-	ExecCaps* pcaps = ExecCaps::currCaps();
-	ulong tile = pcaps->maxReasonable(headroom);
-	tiler.nTiles = DIV_UP(size,tile);
-}
-*/
 template<typename T> __host__ __device__ int CuMatrix<T>::releaseBuffers() {
 	int clearCount= 0;
 	if(elements != null) {
@@ -44,7 +36,7 @@ template<typename T> __host__ __device__ CuMatrix<T>& CuMatrix<T>::syncBuffers(b
 	int currDev = ExecCaps::currDev();
 	if(lastMod != mod_synced) {
 		if (lastMod == mod_device) {
-			assert(tiler.tileSize == tiler.m_size);
+			assert(tiler.tileSize >= tiler.m_size);
 			//outln*
 #ifndef __CUDA_ARCH__
 			if(!elements) {
@@ -53,13 +45,63 @@ template<typename T> __host__ __device__ CuMatrix<T>& CuMatrix<T>::syncBuffers(b
 				getMgr().allocHost(*this);
 			}
 
-			if(n != p) {
-				if (checkDebug(debugMem))
-					outln( "syncBuffers() n != p so doing line by line copy");
-				cudaError_t res = cudaMemcpy2D(elements, p* sizeof(T), tiler.buffer(currDev), p* sizeof(T), n * sizeof(T), m, cudaMemcpyDeviceToHost);
+			if(p != _tileP ) {
+				T* currB = tiler.buffer(currDev);
+				flprintf(
+						"cudaMemcpy2D with currDev %d elements %p destpitch %lu \n\t "
+						"dev src (currB) %p srcP %lu n-bytes %u m %d\n",
+						currDev, elements, p* sizeof(T),
+						currB, _tileP* sizeof(T),
+						n * sizeof(T), m);
+				assert( currB == tiler.buffer(currDev));
+				CuTimer timer;
+				timer.start();
+				cudaError_t res = cudaMemcpy2D(elements, p* sizeof(T),
+						tiler.buffer(currDev), _tileP * sizeof(T), n * sizeof(T), m, cudaMemcpyDeviceToHost);
+				//CuMatrix<T>::incDhCopy("CuMatrix<T>::syncBuffers(..)",n * sizeof(T)* m, timer.stop());
 				if(res != cudaSuccess) {
-					outln("ERR m " << toShortString());
-					flprintf("elements %p destpitch %u dev src %p srcP %u widthBytes %u height %u\n", elements, p* sizeof(T), tiler.buffer(currDev), p* sizeof(T), n * sizeof(T), m);
+					outln( "cudaPeekAtLastError() " << cudaPeekAtLastError());
+					outln( "cudaGetLastError() " << cudaGetLastError());
+					outln( "cudaPeekAtLastError() " << cudaPeekAtLastError());
+					outln("ExecCaps::currDev() " << ExecCaps::currDev() << " currDev " << currDev << "\n\t ERR m " << toShortString());
+					flprintf(
+							"if at first...\nelements %p destpitch %u dev src %p srcP %u widthBytes %u height %u\n",
+							elements, p* sizeof(T), tiler.buffer(currDev), _tileP* sizeof(T), n * sizeof(T), m);
+					T* thb = nullptr;
+					T* sdb = nullptr;
+					size_t sdpitch;
+					cherr( cudaMallocPitch(&sdb, &sdpitch, n * sizeof(T), m ) );
+					cherr( cudaMallocHost(&thb, n * sizeof(T) * m ) );
+					flprintf(
+							"thb %p destpitch %u dev src %p srcP %u widthBytes %u height %u\n",
+							thb, n * sizeof(T),
+							sdb, sdpitch,
+							n * sizeof(T), m);
+					CuTimer timer;
+					timer.start();
+					cherr(
+							cudaMemcpy2D(thb, p * sizeof(T),
+									sdb, sdpitch,
+									n * sizeof(T), m,
+									cudaMemcpyDeviceToHost));
+					//CuMatrix<T>::incDhCopy("CuMatrix<T>::syncBuffers(..)",n * sizeof(T)* m,timer.stop());
+
+					// to this' host buff
+					timer.start();
+					cherr(
+							cudaMemcpy2D(elements, p * sizeof(T),
+									sdb, sdpitch,
+									n * sizeof(T), m,
+									cudaMemcpyDeviceToHost));
+					//CuMatrix<T>::incDhCopy("CuMatrix<T>::syncBuffers(..)",n * sizeof(T)* m, timer.stop());
+					// from this' dev buff
+					timer.start();
+					cherr(
+							cudaMemcpy2D(thb, p * sizeof(T),
+									currB, sdpitch,
+									n * sizeof(T), m,
+									cudaMemcpyDeviceToHost));
+					//CuMatrix<T>::incDhCopy("CuMatrix<T>::syncBuffers(..)",n * sizeof(T)* m,timer.stop());
 				}
 				cherr(res);
 			}else {
@@ -70,8 +112,11 @@ template<typename T> __host__ __device__ CuMatrix<T>& CuMatrix<T>::syncBuffers(b
 					MemMgr<T>::checkValid(elements);
 					MemMgr<T>::checkValid(elements +(size - 1)/sizeof(T));
 				}
+				CuTimer timer;
+				timer.start();
 
 				cherr(cudaMemcpy(elements, tiler.buffer(currDev) , size, cudaMemcpyDeviceToHost));
+				//CuMatrix<T>::incDhCopy("CuMatrix<T>::releaseBuffers(..)",size,timer.stop());
 			}
 			//err = cudaMemcpy(elements, d_elements, size, cudaMemcpyDeviceToHost);
 			lastMod = mod_synced;
@@ -91,13 +136,15 @@ template<typename T> __host__ __device__ CuMatrix<T>& CuMatrix<T>::syncBuffers(b
 			assert(size  < ExecCaps::currCaps()->maxReasonable());
 */
 			if(!tiler.hasDmemQ()) {
-				tiler.allocTiles();
+				tiler.allocTiles(_tileM, _tileN, _tileP);
 				getMgr().addTiles(&tiler);
 			}
 			if(checkDebug(debugCheckValid)) flprintf("%dx%dx%d - %p\n", m, n, p, tiler.buff());
-			DMatrix<T> dm;
-			tile0(dm,copy);
-			lastMod = mod_synced;
+			if(tiler.countGpus() == 1) {
+				DMatrix<T> dm;
+				tile0(dm,copy);
+				lastMod = mod_synced;
+			}
 		}
 	}
 	return *this;
@@ -154,9 +201,9 @@ copyKernel(T* tElements, const T* sElements, uint tWidth, uint tHeight, uint tPi
     ulong ty = y + yOff;
     ulong sIdx = y * sPitch + x;
     ulong tIdx = ty * tPitch + tx;
-    if(threadIdx.x == 0 && threadIdx.y == 0) {
-    	if(checkDebug(debugCopy))flprintf("block %u,%u tx %lu ty %lu sIdx %lu tIdx %lu\n", blockIdx.x, blockIdx.y, tx,ty,sIdx,tIdx);
-    }
+//    if(threadIdx.x == 0 && threadIdx.y == 0) {
+//    	if(checkDebug(debugCopy))flprintf("block %u,%u tx %lu ty %lu sIdx %lu tIdx %lu\n", blockIdx.x, blockIdx.y, tx,ty,sIdx,tIdx);
+//    }
     if(x < sWidth && y < sHeight && tx < tWidth && ty < tHeight) {
     	tElements[tIdx] = sElements[sIdx];
     }
@@ -451,6 +498,36 @@ copyKernel(T* tElements, const T* sElements, uint amountInTs, uint offsetInTs, u
 
 template <typename T> __host__ CUDART_DEVICE void CuMatrix<T>::rightConcatenateL(DMatrix<T>& trg, const DMatrix<T>& src1, const DMatrix<T>& src2, cudaStream_t stream ) {
 	assert(src1.m == src2.m);
+
+/*
+ *
+ *	cudaMemcpy2DAsync(void *dst, size_t dpitch, const void *src,
+			size_t spitch, size_t width, size_t height, enum cudaMemcpyKind kind, cudaStream_t stream __dv(0));
+*/
+	if(stream) {
+		cherr(
+				cudaMemcpy2DAsync(trg.elements, trg.p * sizeof(T),
+						src1.elements, src1.p * sizeof(T), src1.n* sizeof(T), trg.m,
+						cudaMemcpyDefault, stream));
+
+		cherr(
+				cudaMemcpy2DAsync(trg.elements + src1.n, trg.p * sizeof(T),
+						src2.elements, src2.p * sizeof(T), src2.n* sizeof(T), trg.m,
+						cudaMemcpyDefault, stream));
+
+	}
+	else {
+		cherr(
+				cudaMemcpy2D(trg.elements, trg.p * sizeof(T), src1.elements,
+						src1.p * sizeof(T), src1.n* sizeof(T), trg.m,
+						cudaMemcpyDeviceToDevice));
+ 	cherr(
+				cudaMemcpy2D(trg.elements + src1.n, trg.p * sizeof(T),
+						src2.elements, src2.p * sizeof(T), src2.n* sizeof(T), trg.m,
+						cudaMemcpyDeviceToDevice));
+ 	}
+
+	/*
 	ExecCaps* pcaps = ExecCaps::currCaps();
 
 	dim3 block;
@@ -491,36 +568,49 @@ template <typename T> __host__ CUDART_DEVICE void CuMatrix<T>::rightConcatenateL
 			}
 		}
 	}
-	cherr(cudaStreamSynchronize(stream));
+*/
+	if(stream)
+		cherr(cudaStreamSynchronize(stream))
+	else
+		cherr(cudaDeviceSynchronize());
+
 }
 
-template <typename T> __host__ CUDART_DEVICE void CuMatrix<T>::bottomConcatenateL(DMatrix<T>& trg, const DMatrix<T>& src1, const DMatrix<T>& src2, cudaStream_t stream )  {
-	dim3 block(CAT_BLOCK_SIZE,CAT_BLOCK_SIZE,1);
-	dim3 dmBlock(CAT_BLOCK_SIZE,CAT_BLOCK_SIZE/8,1);
-	dim3 gridAc(DIV_UP(src1.n,CAT_BLOCK_SIZE), DIV_UP(src1.m,CAT_BLOCK_SIZE),1);
-	dim3 gridBc(DIV_UP(src2.n,CAT_BLOCK_SIZE), DIV_UP(src2.m,CAT_BLOCK_SIZE),1);
-	if(checkDebug(debugExec)){
-#ifndef __CUDA_ARCH__
-		outln("gridAc " << b_util::pd3(gridAc).c_str() << " for " << util<T>::pdm(src1));
-		outln("gridBc " << b_util::pd3(gridBc).c_str() << " for " << util<T>::pdm(src2));
-#else
-		printf("gridAc " );
-		b_util::prd3(gridAc);
-		//c_str() << " for " << util<T>::pdm(src1));
+template<typename T> __host__ CUDART_DEVICE void CuMatrix<T>::bottomConcatenateL(
+		DMatrix<T>& trg, const DMatrix<T>& src1, const DMatrix<T>& src2,
+		cudaStream_t stream) {
+	assert(src1.n == src2.n);
 
-	//	printf("gridBc " << b_util::pd3(gridBc).c_str() << " for " << util<T>::pdm(src2));
-#endif
-	}
-	if(src1.n == src1.p) {
-		copyKernel<<<gridAc,block,0,stream>>>(trg.elements, src1.elements,trg.n, trg.m, trg.p, src1.n, src1.m, src1.p, 0, 0);
-	} else {
 #ifndef __CUDA_ARCH__
-		dthrow(notImplemented());
-#else
-		setLastError(notImplementedEx);
+	if(checkDebug(debugCopy)) outln("src1  " << util<T>::pdm(src1));
+	if(checkDebug(debugCopy)) outln("src2  " << util<T>::pdm(src2));
+	if(checkDebug(debugCopy)) outln("trg  " << util<T>::pdm(trg));
 #endif
+	if(stream) {
+		cherr(
+				cudaMemcpy2DAsync(trg.elements, trg.p * sizeof(T),
+						src1.elements, src1.p * sizeof(T), src1.n* sizeof(T), trg.m,
+						cudaMemcpyDefault, stream));
+
+		cherr(
+				cudaMemcpy2DAsync(trg.elements + src1.m * src1.p, trg.p * sizeof(T),
+						src2.elements, src2.p * sizeof(T), src2.n* sizeof(T), trg.m,
+						cudaMemcpyDefault, stream));
+
 	}
-	copyKernel<<<gridBc,block,0,stream>>>(trg.elements, src2.elements, trg.n, trg.m, trg.p, src2.n, src2.m, src2.p, 0, src1.m);
+	else {
+		//cudaMemcpy2D(void *dst, size_t dpitch, const void *src, size_t spitch,
+		// size_t width, size_t height, enum cudaMemcpyKind kind);
+		cherr(
+				cudaMemcpy2D(trg.elements, trg.p * sizeof(T), src1.elements,
+						src1.p * sizeof(T), src1.n* sizeof(T), src1.m,
+						cudaMemcpyDeviceToDevice));
+ 	cherr(
+				cudaMemcpy2D(trg.elements + src1.m * src1.p, trg.p * sizeof(T),
+						src2.elements, src2.p * sizeof(T), src2.n* sizeof(T), src2.m,
+						cudaMemcpyDeviceToDevice));
+ 	}
+
 }
 
 template <typename T> void CuMatrix<T>::copy1D(T* trg, const T* src, int amountInTs, int offsetInTs, int lengthInTs, cudaStream_t stream) {
@@ -544,7 +634,7 @@ template <typename T>  __host__ CUDART_DEVICE void CuMatrix<T>::copy(DMatrix<T>&
 	if(checkDebug(debugCopy)) flprintf("cudaMemcpy2D(dst %p, dpitch %d, src %p, spitch %d, width %d, height %d, cpyKind %d\n",
 			dst, trg.p * tSize, src.elements, src.p* tSize, src.n* tSize, src.m,cudaMemcpyDeviceToDevice);
 	//cudaMemcpy2D(void *dst, size_t dpitch, const void *src, size_t spitch, size_t width, size_t height, enum cudaMemcpyKind kind);
-	cherr(cudaMemcpy2D(dst, trg.p * tSize, src.elements, src.p* tSize, src.n* tSize, src.m,cudaMemcpyDeviceToDevice));
+	cherr(cudaMemcpy2D(dst, trg.p * tSize, src.elements, src.p * tSize, src.n* tSize, src.m,cudaMemcpyDeviceToDevice));
 }
 
 template <typename T> void CuMatrix<T>::copyAsync(DMatrix<T>& trg, const DMatrix<T>& src, int troff, int tcoff) {
@@ -592,12 +682,17 @@ template <typename T> void CuMatrix<T>::shuffleCopyRows(DMatrix<T>& trg, const D
 }
 
 template<typename T> __host__ __device__ CuMatrix<T> CuMatrix<T>::copy(bool copyDeviceMem) const {
-	assert(tiler.tileSize == tiler.m_size);
+	assert(tiler.tileSize >= tiler.m_size);
 	CuMatrix<T> ret( m, n, elements != 0, tiler.hasDmemQ());
 #ifndef __CUDA_ARCH__
 	if (elements) {
+		//cmcpy2d args: void *dst, size_t dpitch, const void *src, size_t spitch, size_t width, size_t height, enum cudaMemcpyKind kind)
 		cherr(
-				cudaMemcpy(ret.elements, elements, size, cudaMemcpyHostToHost));
+				cudaMemcpy2D(ret.elements,
+							ret.p * sizeof(T),
+							elements, p * sizeof(T),
+							n *sizeof(T), m,
+							cudaMemcpyHostToHost));
 		HHCopied++;
 		MemHhCopied += size;
 	}
@@ -608,14 +703,31 @@ template<typename T> __host__ __device__ CuMatrix<T> CuMatrix<T>::copy(bool copy
 		T* thisp = tiler.currBuffer();
 		MemMgr<T>::checkValid(retp, "retp");
 		MemMgr<T>::checkValid(thisp, "thisp");
-		MemMgr<T>::checkValid(retp + m * n -1, "retp+ m * n -1");
-		MemMgr<T>::checkValid(thisp+ m * n -1, "thisp+ m * n -1");
+		MemMgr<T>::checkValid(retp + m * ret._tileP  -1, "retp+ m * n -1");
+		MemMgr<T>::checkValid(thisp+ m * _tileP -1, "thisp+ m * n -1");
+	//	cherr(
+	//			cudaMemcpy(ret.tiler.currBuffer(), tiler.currBuffer(), size, cudaMemcpyDeviceToDevice));
 		cherr(
-				cudaMemcpy(ret.tiler.currBuffer(), tiler.currBuffer(), size, cudaMemcpyDeviceToDevice));
+				cudaMemcpy2D(retp,
+							ret._tileP * sizeof(T),
+							thisp,
+							_tileP * sizeof(T),
+							n *sizeof(T),m,
+							cudaMemcpyDeviceToDevice));
 		DDCopied++;
 		MemDdCopied += size;
 #else
-		memcpy(ret.tiler.currBuffer(), tiler.currBuffer(), size);
+		if(_tileP == n && ret._tileP == n)
+			memcpy(ret.tiler.currBuffer(), tiler.currBuffer(), size);
+		else {
+			T* src = tiler.currBuffer();
+			T* trg = ret.tiler.currBuffer();
+			for(int row = 0; row < m; row++) {
+				memcpy(trg , src, n*sizeof(T));
+				trg += ret._tileP;
+				src += _tileP;
+			}
+		}
 
 #endif
 	}
@@ -637,7 +749,11 @@ template<typename T> __host__ __device__ CuMatrix<T> CuMatrix<T>::copy(bool copy
 			if(checkDebug(debugMem))printf("copy() copying txp->elements\n");
 #ifndef __CUDA_ARCH__
 			cherr(
-					cudaMemcpy(ret.txp->elements, txp->elements, size, cudaMemcpyHostToHost));
+					cudaMemcpy2D(ret.txp->elements,
+								ret.txp->p * sizeof(T),
+								txp->elements, txp->p * sizeof(T),
+								txp->n *sizeof(T), txp->m,
+								cudaMemcpyHostToHost));
 			HHCopied++;
 			MemHhCopied += size;
 #endif
@@ -826,9 +942,9 @@ template<typename T> cudaError_t CuMatrix<T>::copyIndexed(CuMatrix<T>& trg, cons
  *  todo implement randSequence as a kernel on column or row matrix
  * 		whose re-arrangment when sorted (idx0 -> idx0sorted ...) is applied to the original sequence
  */
-template<typename T> void CuMatrix<T>::shuffle(CuMatrix<T>* trg, CuMatrix<T>* leftovers, T fraction, vector<int>& vIndices ) const {
+template<typename T> void CuMatrix<T>::shuffle(CuMatrix<T>* trg, CuMatrix<T>* leftovers, T fraction, vector<int>& vIndices, TileDirection td ) const {
 
-	outln("std::this_thread::get_id  " <<  std::this_thread::get_id());
+	if (checkDebug(debugCons ))outln("std::this_thread::get_id  " <<  std::this_thread::get_id());
 
 	if( !(fraction >= 0. && fraction <= 1.)) {
 		dthrow(outOfBounds());
@@ -838,6 +954,10 @@ template<typename T> void CuMatrix<T>::shuffle(CuMatrix<T>* trg, CuMatrix<T>* le
 	}
 	if(lastMod == mod_host) {
 		dthrow(notSyncedDev());
+	}
+	TileDirection longDim = ( m >= n ? tdRows : tdCols);
+	if(longDim != tdRows) {
+		dthrow(notRowDominant());
 	}
 
 	int rows;
@@ -870,12 +990,6 @@ template<typename T> void CuMatrix<T>::shuffle(CuMatrix<T>* trg, CuMatrix<T>* le
 	if(checkDebug(debugMem))
 		outln("exoblock");
 
-/*
-	trg.m = rows;
-	trg.n = trg.p = n;
-	trg.size = trg.m * trg.p * sizeof(T);
-	trg.tiler.allocTiles();
-*/
 	if(rows == m) {
 		*leftovers = ZeroMatrix;
 	} else {
@@ -902,18 +1016,18 @@ template<typename T> void CuMatrix<T>::shuffle(CuMatrix<T>* trg, CuMatrix<T>* le
 	HDCopied++;
 	MemHdCopied += indexSize;
 	DMatrix<T> s, t, l;
-	assert(tiler.tileSize == tiler.m_size);
+	assert(tiler.tileSize >= tiler.m_size);
 
-	if(checkDebug(debugMem))outln("shuffle pre  iler.tile0(s,false)");
+	if (checkDebug(debugCons ))outln("shuffle pre  iler.tile0(s,false)");
 	tile0(s,lastMod == mod_host);
 	if(checkDebug(debugMem))outln("shuffle pre trg.tile0(t,false)");
 	trg->tile0(t,false);
-	outln("refcounts post trg.tile0(t,false) trg: "<< trg->elements << ": "  << trg->hRefCount() << ", " << trg->dRefCount());
+	if (checkDebug(debugCons ))outln("refcounts post trg.tile0(t,false) trg: "<< trg->elements << ": "  << trg->hRefCount() << ", " << trg->dRefCount());
 	shuffleCopyRows(t,s, d_indices);
 
 	trg->lastMod = mod_device;
 	trg->syncBuffers();
-	outln("refcounts post trg.syncBuffers() trg: "<< trg->elements << ": "  << trg->hRefCount() << ", " << trg->dRefCount());
+	if (checkDebug(debugCons ))outln("refcounts post trg.syncBuffers() trg: "<< trg->elements << ": "  << trg->hRefCount() << ", " << trg->dRefCount());
 	cherr(cudaDeviceSynchronize());
 
 	if( !leftovers->zeroDimsQ()) {
@@ -937,7 +1051,7 @@ template<typename T> void CuMatrix<T>::shuffle(CuMatrix<T>* trg, CuMatrix<T>* le
 	}
 
 	cherr(cudaDeviceSynchronize());
-	outln("freeing indices " << indices);
+	if (checkDebug(debugCons ))outln("freeing indices " << indices);
 	cherr(cudaFreeHost(indices));
 	cherr( cudaFree( d_indices));
 
@@ -956,6 +1070,8 @@ template<typename T> __host__ __device__ void CuMatrix<T>::zero() {
 	}
 #ifndef __CUDA_ARCH__
 	assert(tiler.tileSize == tiler.m_size);
+	constFiller<T> filler = Functory<T,constFiller>::pinch(0);
+	fillFn(filler,*this);
 	//checkCudaError(cudaMemset(tiler.currBuffer(), 0, size));
 #else
 	memset(tiler.currBuffer(), 0, size);
@@ -990,12 +1106,13 @@ template<typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::rightConcat
 		return CuMatrix();
 	} else {
 		DMatrix<T> d_A, d_B, d_Res;
-		if(tiler.tileSize == tiler.m_size &&
-				other.tiler.tileSize == other.tiler.m_size &&
+		if(tiler.tileSize >= tiler.m_size &&
+				other.tiler.tileSize >= other.tiler.m_size &&
 				newCols * m * sizeof(T) <= ExecCaps::currCaps()->maxReasonable() ) {
 			CuMatrix<T> ret(m, newCols,true, true);
-			if(checkDebug(debugTiler)) flprintf("ret.tiler %p ret.tiler.getTileCount %d ret.tiler.m_m %u ret.tiler.m_n %u\n",
-					&ret.tiler, ret.tiler.getTileCount(), ret.tiler.m_m, ret.tiler.m_n);
+			if(checkDebug(debugCopy)) flprintf(
+					"ret.tiler %p ret.tiler.getTileCount %d .m_m %d .m_n %d .m_p %d tileP %d\n",
+					&ret.tiler, ret.tiler.getTileCount(), ret.tiler.m_m, ret.tiler.m_n,ret.tiler.m_p, ret._tileP);
 			if(! gpuReadyQ() ) {
 				prlocf("this not synced\n");
 				setLastError(notSyncedEx);
@@ -1009,13 +1126,13 @@ template<typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::rightConcat
 			ret.tile0(d_Res,false,stream);
 			rightConcatenateL(d_Res, d_A,d_B,stream);
 			ret.invalidateHost();
-			cherr(cudaPeekAtLastError());
+			//cherr(cudaPeekAtLastError());
 			return ret;
 		} else {
 			if(checkDebug(debugTiler)) {
 				flprintf("m %u newCols %u\n" ,m, newCols);
 			}
-			CuMatrix<T> ret(m, newCols,newCols, Tiler<T>::gpuMaskFromCurrGpu(), true, true);
+			CuMatrix<T> ret(m, newCols,newCols, true, true, Tiler<T>::gpuMaskFromCurrGpu());
 			if(checkDebug(debugTiler)) {
 				flprintf("ret.size %lu\n" , ret.size);
 				ret.printShortString( __func__ );
@@ -1057,10 +1174,10 @@ template<typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::bottomConca
 #endif
 	} else {
 		DMatrix<T> d_A, d_B, d_Res;
-		if(tiler.tileSize == tiler.m_size &&
-				other.tiler.tileSize == other.tiler.m_size &&
+		if(tiler.tileSize >= tiler.m_size &&
+				other.tiler.tileSize >= other.tiler.m_size &&
 				newRows * n * sizeof(T) <= ExecCaps::currCaps()->maxReasonable() )  {
-			CuMatrix<T> ret(newRows, n,true,true);
+			CuMatrix<T> ret(newRows, n,n, true,true, Tiler<T>::gpuMaskFromCurrGpu());
 			tile0(d_A, lastMod == mod_host);
 			other.tile0(d_B, other.lastMod == mod_host);
 			ret.tile0(d_Res,false);
@@ -1069,7 +1186,7 @@ template<typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::bottomConca
 			return ret;
 		}else {
 			// all in hmem
-			CuMatrix<T> ret(newRows, n,n, Tiler<T>::gpuMaskFromCurrGpu(), true, true);
+			CuMatrix<T> ret(newRows, n,n, true, true, Tiler<T>::gpuMaskFromCurrGpu());
 			//if(checkDebug(debugTiler))usedDevMem();
 			if(checkDebug(debugTiler))flprintf("HMEM ret.elements %p, ret.p %u, elements %p, p %u\n",ret.elements, ret.p, elements, p);
 			cherr(cudaMemcpy2D(ret.elements, ret.p * sizeof(T), elements, p* sizeof(T), n*sizeof(T), m, cudaMemcpyHostToHost));
@@ -1089,7 +1206,7 @@ template <typename T> __global__ void setKernel(T* elements, int p, int row, int
 
 
 template<typename T> __host__ __device__ void CuMatrix<T>::set(int r, int c, T val) {
-	if (r >= m || c >= n)
+	if (r > m || c > n)
 		setLastError(outOfBoundsEx);
 	if(!tiler.hasDmemQ()) {
 		setLastError(noDeviceBufferEx);
@@ -1104,14 +1221,13 @@ template<typename T> __host__ CUDART_DEVICE void CuMatrix<T>::set(int l, T val) 
 	if(!tiler.hasDmemQ()) {
 		setLastError(noDeviceBufferEx);
 	}
-	assert(tiler.tileSize == tiler.m_size);
+	assert(tiler.tileSize >= tiler.m_size);
 	::setL<T>(tiler.currBuffer(), m, n, p, l, val);
 	invalidateHost();
 }
 
 template<typename T> __host__ __device__ T CuMatrix<T>::get(long l) const {
-	if (( n == p && l >= size / sizeof(T)) ||
-			( n != p && l >= m * p)) {
+	if (l > m * n) {
 		setLastError(outOfBoundsEx);
 	}
 	if(!tiler.hasDmemQ()) {
@@ -1120,11 +1236,23 @@ template<typename T> __host__ __device__ T CuMatrix<T>::get(long l) const {
 //	if(checkDebug(debugMem)) flprintf("lastMod %d\n", lastMod);
 #ifndef __CUDA_ARCH__
 	if(lastMod == mod_synced || lastMod == mod_host) {
-		return elements[l];
+		long pl = (n == p ? l : (l/n)*p + l % n);
+		return elements[pl];
 	}
 	T res;
-	assert(tiler.tileSize == tiler.m_size);
-	cherr(cudaMemcpy(&res, tiler.currBuffer()+ l, sizeof(T), cudaMemcpyDeviceToHost));
+
+	if( tiler.gpuModulus == 1) {
+		CuTimer timer;
+		timer.start();
+		cherr(cudaMemcpy(&res, tiler.currBuffer() + (l/n) * _tileP + l % n, sizeof(T), cudaMemcpyDeviceToHost));
+		//CuMatrix<T>::incDhCopy("CuMatrix<T>::get(long l)", sizeof(T),timer.stop());
+	} else switch(tiler.tileD) { // need to determine which tile and local coord
+		case tdRows :
+			int row = l / n;
+			int col = l % n;
+			int tileM = tiler.tileSize / _tileP;
+	}
+	assert(tiler.tileSize >= tiler.m_size);
 	if(checkDebug(debugCopyDh))outln("debugCopyDh " << "CuMatrix<T>::get");
 	DHCopied++;
 	MemDhCopied += sizeof(T);
@@ -1142,7 +1270,7 @@ template<typename T> __host__ __device__ T CuMatrix<T>::get(long l) const {
 template<typename T> __host__ __device__ T CuMatrix<T>::get(int r, int c) const {
 	if (r >= CuMatrix<T>::m || c >= CuMatrix<T>::n)
 		setLastError(outOfBoundsEx);
-	return get(r * p + c);
+	return get(r * n + c);
 }
 
 template<typename T> __host__ __device__ T CuMatrix<T>::getH(int r, int c) const {

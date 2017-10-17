@@ -731,7 +731,7 @@ template<typename T> int testNeuralH2N(int iterations,
 
 	ConjugateGradient<T>::init();
 	int resultIdx = 0;
-	Cycler cycler(ExecCaps::deviceCount);
+	Cycler cycler(ExecCaps::countGpus());
 
 	vector<reference_wrapper<CuMatrix<T>>> mats;
 	mats.push_back(training);
@@ -927,3 +927,4 @@ template<typename T> int testNeuralH2N(int iterations,
 
 	return 0;
 }
+

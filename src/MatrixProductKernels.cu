@@ -202,6 +202,7 @@ template<typename T> __host__ CUDART_DEVICE void matrixProductKPtrL(DMatrix<T>& 
 			b_util::prd3(*block);
 		}
 
+/*
 		if(checkDebug(debugMatProdBlockResize)) {
 			cudaFuncAttributes fatts;
 			cudaFuncGetAttributes(&fatts,matProdKptr);
@@ -218,6 +219,7 @@ template<typename T> __host__ CUDART_DEVICE void matrixProductKPtrL(DMatrix<T>& 
 				}
 			}
 		}
+*/
 	}
 	// block dim (bases?) should be warp-divisible
 	// but constrained by smem

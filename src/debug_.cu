@@ -7,7 +7,9 @@ uint hDebugFlags;
 __device__ CuMatrixException lastEx;
 
 string gpuNames[MAX_GPUS];
-
+char cuScratch[ 8 ];
+int* cuIntPtr = (int*) &cuScratch;
+float* cuFltPtr = (float*) &cuScratch;
 
 __host__ __device__ inline void cherrp(cudaError exp) {
 	if(exp != cudaSuccess) {
@@ -113,10 +115,17 @@ void setCurrGpuDebugFlags(uint flags, bool orThem, bool andThem,  cudaStream_t s
 		checkCudaErrors(cudaMemcpyFromSymbol(&curr, debugFlags,sizeof(uint)));
 		curr &= flags;
 	}
+	hDebugFlags = curr;
 //	outln("copying to device");
 	checkCudaErrors(cudaMemcpyToSymbolAsync(debugFlags,&curr,sizeof(uint),0,  cudaMemcpyHostToDevice, stream));
-//	outln("copied to device");
-	hDebugFlags = curr;
+
+	char buff[33];
+    buff[32]=0;
+    b_util::printBinInt(buff, hDebugFlags);
+
+	outln("hDebugFlags bin str " << buff);
+
+	flprintf("copied flags %s to device\n", dbgStr().c_str());
 }
 
 __host__ __device__ ostreamlike::ostreamlike() {}

@@ -6,7 +6,7 @@
 __device__ int d_MaxThreads = 512;
 __device__ int d_MaxBlocks = 128;
 
-__device__ ExecCaps** gd_devCaps = null;
+__device__ ExecCaps** gd_devCaps = nullptr;
 __constant__ int gd_devCount[MAX_GPUS];
 
  __host__ __device__ void getReductionExecContext(int &blocks, int &threads, long nP,int maxBlocks, int maxThreads) {
@@ -41,7 +41,6 @@ __host__ __device__ int ExecCaps::currDev() {
 	int dev = 0;
 #ifndef __CUDA_ARCH__
 	cherr(cudaGetDevice(&dev));
-	if(checkDebug(debugTiler)) flprintf("currDevice %d\n", dev);
 #endif
 	return dev;
 }
@@ -84,21 +83,19 @@ __host__ __device__ int ExecCaps::restoreDevice(const char* filename,const char*
 __global__ void freeDevSideDevCaps() {
 	//flprintf( "freeDevSideDevCaps freeing gd_devCaps %p gd_devCount %d \n", gd_devCaps, gd_devCount);
 	prlocf("freeDevSideDevCaps\n");
-/*
 	FirstThread {
-		for(int i = 0; i < ExecCaps::deviceCount; i++) {
+		for(int i = 0; i < ExecCaps::countGpus(); i++) {
 			flprintf("freeDevSideDevCaps deleting gd_devCaps[%d] %p\n", i, gd_devCaps[i]);
 			delete gd_devCaps[i];
 		}
 		flprintf( "freeinbg gd_devCaps %p\n", gd_devCaps);
 		free(gd_devCaps);
 	}
-	*/
 }
 
 void ExecCaps::freeDevCaps() {
 	flprintf( "ExecCaps::freeDevCaps freeDevCaps enter this %d\n",0);
-	for(int i = 0; i < ExecCaps::deviceCount; i++) {
+	for(int i = 0; i < ExecCaps::countGpus(); i++) {
 		flprintf("ExecCaps::freeDevCaps deleting g_devCaps[device = %d] %p\n",i, g_devCaps[i]);
 		delete g_devCaps[i];
 	}
@@ -111,7 +108,7 @@ void ExecCaps::freeDevCaps() {
 __host__ __device__ cudaError_t ExecCaps::currCaps(ExecCaps** caps, int dev) {
 
 #ifndef __CUDA_ARCH__
-	if(dev < ExecCaps::deviceCount) {
+	if(dev < ExecCaps::countGpus()) {
 		*caps = g_devCaps[dev];
 		return cudaSuccess;
 	}
@@ -127,21 +124,22 @@ __host__ __device__ cudaError_t ExecCaps::currCaps(ExecCaps** caps, int dev) {
 
 __host__ __device__ ExecCaps* ExecCaps::currCaps(int dev ) {
 #ifndef __CUDA_ARCH__
-	if(checkDebug(debugExec))flprintf( "in ExecCaps::currCaps ExecCaps::deviceCount %d\n",ExecCaps::deviceCount);
-	if(dev < ExecCaps::deviceCount) {
+	if(checkDebug(debugExec))flprintf( "in ExecCaps::currCaps ExecCaps::countGpus() %d\n",ExecCaps::countGpus());
+	if(dev < ExecCaps::countGpus()) {
 		return g_devCaps[dev];
 	}
-//#else
-//	if(checkDebug(debugExec))flprintf( "in [D}ExecCaps::currCaps gd_devCount %d\n",gd_devCount);
+#else
+	if(checkDebug(debugExec))flprintf( "in [D}ExecCaps::currCaps gd_devCount %d\n",gd_devCount);
 //	setLastError(notImplementedEx);
-//	if(dev < gd_devCount) {
-//		flprintf( "pCaps %p \n ",pCaps);
-//		flprintf( "gd_devCaps[%d] %p \n ",dev, gd_devCaps[dev]);
+/*	if(dev < ExecCaps::countGpus()) {*/
+		ExecCaps* pCaps = gd_devCaps[dev];
+		flprintf( "pCaps %p \n ",pCaps);
+		flprintf( "gd_devCaps[%d] %p \n ",dev, pCaps);
 
-//		return gd_devCaps[dev];
-//	}
+		return pCaps;
+/*	}*/
 #endif
-	return null;
+	return nullptr;
 }
 
 
@@ -463,6 +461,7 @@ __host__ __device__ int ExecCaps::maxBlocks() {
  */
 __host__ __device__ size_t ExecCaps::minMaxReasonable(int gpuMask, float headroom) {
 	int devCnt;
+	cherr(cudaPeekAtLastError());
 	checkCudaError(cudaGetDeviceCount(&devCnt));
 	size_t minMax = 0, currMax = 0;
 
@@ -494,10 +493,10 @@ __global__ void addCaps(int dev, ExecCaps caps) {
 
 cudaError_t ExecCaps::addDevice(int dev) {
 	ExecCaps_setDevice(dev);
-//	checkCudaError(cudaMemcpyToSymbol(gd_devCount, (void*) &ExecCaps::deviceCount, sizeof(int)));
+//	checkCudaError(cudaMemcpyToSymbol(gd_devCount, (void*) &ExecCaps::countGpus(), sizeof(int)));
  //	cuDeviceGet(&device,dev);
 
-	createCapsPPtr<<<1,1>>>(ExecCaps::deviceCount);
+	createCapsPPtr<<<1,1>>>(ExecCaps::countGpus());
 	addCaps<<<1,1>>>(dev, *g_devCaps[dev]);
 	return cudaSuccess;
 }
@@ -505,17 +504,17 @@ cudaError_t ExecCaps::addDevice(int dev) {
 void ExecCaps::initDevCaps() {
 	//flprintf("%s enter\n","ExecCaps::initDevCaps");
 	if(checkDebug(debugVerbose))prlocf("enter\n");
-	checkCudaError(cudaGetDeviceCount(&ExecCaps::deviceCount));
 	//ExecCaps* g_devCaps[];
-	g_devCaps = (ExecCaps**) malloc(ExecCaps::deviceCount* sizeof(ExecCaps*));
-	if(checkDebug(debugVerbose))flprintf("gpuCount %d, malloced-> %d\n",ExecCaps::deviceCount,ExecCaps::deviceCount* sizeof(ExecCaps*) );
-	//outln("gpuCount " << ExecCaps::deviceCount << " mallocd " <<(ExecCaps::deviceCount* sizeof(ExecCaps*)));
-	for(int i = 0; i < ExecCaps::deviceCount; i++) {
+	g_devCaps = (ExecCaps**) malloc(ExecCaps::countGpus()* sizeof(ExecCaps*));
+	if(checkDebug(debugVerbose))flprintf("gpuCount %d, malloced-> %d\n",ExecCaps::countGpus(),ExecCaps::countGpus()* sizeof(ExecCaps*) );
+	//outln("gpuCount " << ExecCaps::countGpus() << " mallocd " <<(ExecCaps::countGpus()* sizeof(ExecCaps*)));
+	for(int i = 0; i < ExecCaps::countGpus(); i++) {
 		ExecCaps* cap = new ExecCaps();
 		if(checkDebug(debugVerbose))flprintf("created cap %p\n", cap);
 		g_devCaps[i] = cap;
 		ExecCaps::getExecCaps(*cap, i);
 		if(checkDebug(debugVerbose))outln("adding " << i << "\n" << cap->toString() << "\n");
+		ExecCaps::addDevice(i);
 	}
 }
 
@@ -549,4 +548,42 @@ __host__ void ExecCaps::allGpuMem(size_t* free, size_t* total) {
 	}
 	//cout << endl;
 	ExecCaps_setDevice(orgDev);
+}
+__host__ __device__ DevStream::DevStream(int device) :  device(device) {
+	int orgDev = ExecCaps::currDev();
+	if(orgDev != device)
+		ExecCaps_visitDevice(device);
+
+#ifndef __CUDA__ARCH__
+	cherr(cudaStreamCreateWithFlags(&stream,cudaStreamNonBlocking));
+	flprintf("on gpieux %d, created DevStream(%d,%p)\n",  ExecCaps::currDev(), device, stream);
+	if(orgDev != device)
+		ExecCaps_setDevice(orgDev);
+#else
+	stream = 0;
+#endif
+}
+
+__host__ __device__ cudaError_t  DevStream::sync() {
+	int orgDev = ExecCaps::currDev();
+	if(orgDev != device)
+		ExecCaps_visitDevice(device);
+	flprintf("on gpieux  %d syncing DevStream(%d,%p)\n",  ExecCaps::currDev(), device, stream);
+#ifndef __CUDA_ARCH__
+	cudaError_t res =  cudaStreamSynchronize(stream);
+#else
+	cudaError_t res =  cudaDeviceSynchronize();
+#endif
+	flprintf("sanched  -> %s\n", __cudaGetErrorEnum(res) );
+	if(orgDev != device)
+		ExecCaps_setDevice(orgDev);
+
+	return res;
+}
+__host__ __device__ cudaError_t DevStream::destroy() {
+	return cudaStreamDestroy(stream);
+}
+
+__host__ __device__ DevStream::~DevStream() {
+	cherr(destroy());
 }

@@ -10,6 +10,8 @@
 #include "util.h"
 #include "BinaryOpF_Gen.h"
 
+#include "CuMatrix.h"
+
 // using __shflX in functions templated by functor types is tedious because, as of cuda5.5,
 // function templates can't be partially specialized (precludes partially specializing just on the data type)
 // member functions can't be __global__ (precludes using functors (param'd by data type with operator()s templated by functors) for kernels)
@@ -281,7 +283,10 @@ template <typename T, int StateDim > __host__ CUDART_DEVICE T shuffle(  const T*
 	cherr(cudaDeviceSynchronize());
 #ifndef __CUDA_ARCH__
 	T res;
+	CuTimer timer;
+	timer.start();
 	checkCudaErrors(cudaMemcpy(&res, d_res, sizeof(T), cudaMemcpyDeviceToHost));
+//	CuMatrix<T>::incDhCopy("CuDefs::shuffle",sizeof(T), timer.stop());
 //	outln("cudaFree " << d_ary);
 	checkCudaErrors(cudaFree(d_ary));
 	return res;

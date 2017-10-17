@@ -7,8 +7,6 @@
 
 #pragma once
 
-//#define TESTTMPLT
-
 #include <iostream>
 #include <cuda_runtime.h>
 #include <cassert>
@@ -23,9 +21,16 @@ using std::stringstream;
 using std::cout;
 using std::endl;
 
+
+string _expNotation(long val);
+
 extern __constant__ uint debugFlags;
 extern uint hDebugFlags;
 extern string gpuNames[];
+extern char cuScratch[];
+extern int* cuIntPtr;
+extern float* cuFltPtr;
+
 extern string CuMatrixExceptionStrings[];
 
 extern const long SECOND_MS;
@@ -36,6 +41,12 @@ extern const long HOUR_MS;
 extern const long DAY_S;
 extern const long DAY_MS;
 extern const float F_DAY_MS;
+extern const long WEEK_S;
+extern const long WEEK_MS;
+extern const float F_WEEK_MS;
+extern const long MONTH_S;
+extern const long MONTH_MS;
+extern const float F_MONTH_MS;
 enum CuMatrixException {
 	successEx,
 	illegalArgumentEx,
@@ -50,6 +61,7 @@ enum CuMatrixException {
 	cantSyncHostFromDeviceEx,
 	notSquareEx,
 	badDimensionsEx,
+	needsTilingEx,
 	matricesOfIncompatibleShapeEx,
 	rowDimsDisagreeEx,
 	columnDimsDisagreeEx,
@@ -73,42 +85,47 @@ enum CuMatrixException {
 	nullPointerEx,
 	multipleGpusEx,
 };
+
 extern  __device__ CuMatrixException lastEx;
 typedef __device_builtin__ enum CuMatrixException CuMatrixException_t;
 
-#define debugUseTimers 	1
-#define debugExec 		(1 << 1)
-#define debugMem 		(1 << 2)
-#define debugCheckValid (1 << 3)
-#define debugFtor  		(1 << 4)
-#define debugCopy  		(1 << 5)
-#define debugCopyDh  	(1 << 6)
-#define debugFill  		(1 << 7)
-#define debugMatProd  	(1 << 8)
-#define debugCons  		(1 << 9)
-#define debugDestr 		(1 << 10)
-#define debugTxp 		(1 << 11)
-#define debugRefcount  	(1 << 12)
-#define debugVerbose  	(1 << 13)
-#define debugNn  		(1 << 14)
-#define debugCg  		(1 << 15)
-#define debugMultGPU  	(1 << 16)
-#define debugPm  		(1 << 17)
-#define debugMaths 		(1 << 18)
-#define debugAnomDet	(1 << 19)
-#define debugStream  	(1 << 20)
-#define debugRedux 		(1 << 21)
-#define debugSpoofSetLastError (1 << 22)
-#define debugMatProdBlockResize  	(1 << 23)
-#define debugMatStats  	(1 << 24)
-#define debugTiler  	(1 << 25)
-#define debugUnaryOp 	(1 << 26)
-#define debugPrecision 	(1 << 27)
-#define debugMeans 		(1 << 28)
-#define debugBinOp		(1 << 29)
-#define debugFile		(1 << 30)
-#define debugMemblo		(1 << 31)
-
+#define debugUseTimers 			1
+#define debugExec 				(1 << 1)
+#define debugMem 				(1 << 2)
+#define debugCheckValid			(1 << 3)
+#define debugFtor  				(1 << 4)
+#define debugCopy  				(1 << 5)
+#define debugCopyDh  			(1 << 6)
+#define debugFill  				(1 << 7)
+#define debugMatProd  			(1 << 8)
+#define debugCons  				(1 << 9)
+#define debugDestr 				(1 << 10)
+#define debugTxp 				(1 << 11)
+#define debugRefcount  			(1 << 12)
+#define debugVerbose  			(1 << 13)
+#define debugNn  				(1 << 14)
+#define debugCg  				(1 << 15)
+#define debugMultGPU  			(1 << 16)
+#define debugPm  				(1 << 17)
+#define debugMaths 				(1 << 18)
+#define debugAnomDet			(1 << 19)
+#define debugStream  			(1 << 20)
+#define debugRedux 				(1 << 21)
+#define debugSpoofSetLastError 	(1 << 22)
+#define debugTimer 				(1 << 23)
+#define debugMatStats  			(1 << 24)
+#define debugTiler  			(1 << 25)
+#define debugUnaryOp 			(1 << 26)
+#define debugPrecision 			(1 << 27)
+#define debugMeans 				(1 << 28)
+#define debugBinOp				(1 << 29)
+#define debugFile				(1 << 30)
+#define debugMemblo				(1 << 31)
+extern string DebugFlagsStr[];
+extern string DebugOptionsPreamble;
+extern string DebugOptionsStr[];
+extern string UsageStrPreamble;
+extern string UsagesStr[];
 extern const char* allChoice;
 extern const char* anomChoice;
 extern const char* memChoice;
@@ -136,6 +153,7 @@ extern const char* lrgBlkChoice;
 extern const char* debugMultGPUChoice;
 extern const char* debugMillisForMicrosChoice;
 extern const char* debugReduxChoice;
+extern const char* debugTimerChoice;
 extern const char* debugTilerChoice;
 extern const char* debugUnaryOpChoice;
 extern const char* debugPrecisionChoice;
@@ -144,8 +162,20 @@ extern const char* debugBinOpChoice;
 extern const char* debugCheckValidChoice;
 extern const char* debugMembloChoice;
 
-__host__ __device__ const char* __cudaGetErrorEnum(cudaError_t res);
-__host__ __device__ const char *__cublasGetErrorEnum(cublasStatus_t error);
+#define Kilo (1000l)
+#define Kilob (1024l)
+#define Mega (Kilo*Kilo)
+#define Megab (Kilob*Kilob)
+#define Giga (Kilo*Mega)
+#define Gigab (Kilob*Megab)
+#define Tera (Kilo*Giga)
+#define Terab (Kilob*Gigab)
+#define Peta (Kilo*Tera)
+#define Petab (Kilob*Terab)
+
+
+__host__ __device__ extern const char* __cudaGetErrorEnum(cudaError_t res);
+__host__ __device__ extern const char *__cublasGetErrorEnum(cublasStatus_t error);
 
 void cherr_(cudaError_t err, char* file, int line);
 //#define cherr(exp) cherr_((exp))
@@ -204,9 +234,10 @@ string fromMillis(double millis);
 string fromMicros(double micros);
 string niceEpochMicros(long micros);
 
+string dbgStr();
 
-void membly(const char * file , int line, const char * func);
-#define memblo membly(__FILE__, __LINE__, __func__)
+void memblyFlf(const char * file , int line, const char * func);
+#define memblo memblyFlf(__FILE__, __LINE__, __func__)
 
 template<typename T> string niceVec(T* v) {
 	stringstream ss;
@@ -260,6 +291,15 @@ void setCurrGpuDebugFlags(uint flags, bool orThem, bool andThem,  cudaStream_t s
 #define VerbOn() setCurrGpuDebugFlags( debugVerbose,true,false)
 #define VerbOff() setCurrGpuDebugFlags( ~debugVerbose,false,true)
 
+#define FillOn() setCurrGpuDebugFlags( debugFill,true,false)
+#define FillOff() setCurrGpuDebugFlags( ~debugFill,false,true)
+
+#define TilerOn() setCurrGpuDebugFlags( debugTiler,true,false)
+#define TilerOff() setCurrGpuDebugFlags( ~debugTiler,false,true)
+
+#define FlagsOn(flags) setCurrGpuDebugFlags( flags,true,false)
+#define FlagsOff(flags) setCurrGpuDebugFlags( ~(flags),false,true)
+
 template <typename T> void printAllDeviceGFlops();
 
 float pctChg(float a, float b);
@@ -292,4 +332,40 @@ template <typename type>
 __host__ __device__ ostreamlike& operator<<(ostreamlike& stream, const type& data) {
   return stream.write(data);
 }
+
+class debug {
+public:
+	static void setAllGpuDebugFlags(uint flags, bool orThem, bool andThem) {
+		::setAllGpuDebugFlags(flags,orThem, andThem);
+	}
+	static void setCurrGpuDebugFlags(uint flags, bool orThem, bool andThem) {
+		::setCurrGpuDebugFlags(flags,orThem, andThem);
+	}
+	static string fromSeconds(double seconds) { return ::fromSeconds(seconds); }
+	static string fromMillis(double millis) { return ::fromMillis(millis); }
+	static string fromMicros(double micros) { return ::fromMicros(micros); }
+	static string niceEpochMicros(long micros) { return ::niceEpochMicros(micros); }
+	template <typename T> static void printAllDeviceGFlops() { ::printAllDeviceGFlops<T>(); }
+
+	static float pctChg(float a, float b) { return ::pctChg(a,b); }
+
+	static __host__ __device__ void setLastError(CuMatrixException lastEx) { ::setLastError(lastEx); }
+	static __host__ __device__ CuMatrixException getLastError() { return ::getLastError(); }
+
+	template<typename T> static string niceVec(T* v) { return ::niceVec<T>(v); }
+
+	template <typename K, typename V> static void printMap(string name, std::map<K,V>& theMap) {
+		::printMap(name,theMap);
+	}
+
+	template <typename K, typename V> static void printMap(string name,CMap<K,V>& theMap) {
+		::printMap(name,theMap);
+	}
+
+	static __host__ __device__ void printLongSizes() { ::printLongSizes(); }
+	template<typename T> void printObjSizes() { ::printObjSizes<T>(); }
+
+
+};
+
 

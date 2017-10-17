@@ -55,7 +55,7 @@ template<typename T> Point<T>::Point(const T* pos, const T* vel) :
 template void Point<float>::set( const float* , const float*);
 template void Point<double>::set( const double* , const double*);
 template<typename T> void Point<T>::set( const T* pos, const T* dir)  {
-	//dthrow(notImplemented());
+	dthrow(notImplemented());
 }
 
 

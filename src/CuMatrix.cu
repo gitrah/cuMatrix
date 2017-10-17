@@ -15,8 +15,11 @@
 
 __constant__ uint D_MaxRowsDisplayed;
 __constant__ uint D_MaxColsDisplayed;
-cublasHandle_t g_handle;
+
+#ifdef CuMatrix_UseCublas
+cublasHandle_t g_handle = nullptr;
 bool g_useCublas = false;
+#endif
 
 template <typename T> __host__ void CuMatrix<T>::setMaxRowsDisplayed(int rows) {
 	MaxRowsDisplayed = rows;
@@ -477,7 +480,7 @@ template<typename T> string CuMatrix<T>::dimsString() const {
 	return ssout.str();
 }
 
-template<typename T> string CuMatrix<T>::toShortString() const {
+template<typename T> __host__ string CuMatrix<T>::toShortString() const {
 	stringstream ssout;
 	ssout << "[[";
 	ssout << this;
@@ -487,7 +490,11 @@ template<typename T> string CuMatrix<T>::toShortString() const {
 	ssout << n;
 	ssout << "x";
 	ssout << p;
-	if(ownsBuffers) ssout << " owns";
+	if(ownsDBuffers || ownsDBuffers) {
+		ssout << "owns";
+		if(ownsDBuffers) ssout << "D";
+		if(ownsHBuffers) ssout << "H";
+	}
 	ssout << " (sz " << size << ") [";
 	ssout << b_util::modStr(lastMod);
 	ssout << (colMajor ? "] ColMajor" : "]");

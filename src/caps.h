@@ -19,11 +19,13 @@
 enum DataTypes {
 	dtFloat, dtDouble, dtLong, dtUlong, dtInt, dtUint, dtLast
 };
+extern __host__ __device__ const char *__cudaGetErrorEnum(cudaError_t error);
+#define scherr(exp) if((exp)!= cudaSuccess) {printf( "\n\n%s : %d --> %s\n\n", __FILE__, __LINE__ , __cudaGetErrorEnum(exp));assert(0);}
 
 template <typename T> int getTypeEnum();
 template <typename T> const char* getTypeName();
 #define MAX_TYPES 	10
-
+#define T_SZ sizeof(T)
 #define FirstThread  if(threadIdx.x == 0 && blockIdx.x == 0 && threadIdx.y == 0 && blockIdx.y == 0 && threadIdx.z == 0 && blockIdx.z == 0)
 
 #define ExecCaps_setDevice( val) ExecCaps::setDevice(__FILE__, __func__, __LINE__, val)
@@ -116,21 +118,37 @@ struct ExecCaps {
 private:
 		static int deviceCounter;
 public:
-		static int deviceCount;
-		static int nextDevice() {
-			return deviceCounter++ % deviceCount;
+		static __device__ __host__ int countGpus() {
+/*
+#ifndef __CUDA_ARCH__
+			static int deviceCount = -1;
+#else
+			int deviceCount = -1;
+#endif
+*/
+			scherr(cudaPeekAtLastError());
+
+			int deviceCount = -1;
+			if(deviceCount < 0)
+				scherr(cudaGetDeviceCount(&deviceCount));
+			return deviceCount;
 		}
+		static int nextDevice() {
+			return deviceCounter++ % countGpus();
+		}
+
+
 };
 
 template <typename T> inline __host__ __device__ uint maxH(const ExecCaps& ecaps, uint specW, bool usingSmem = false) {
-		if(usingSmem) {
+	if(usingSmem) {
 		return MIN(
 			MIN (ecaps.maxBlock.y,
-					ecaps.memSharedPerBlock/(specW*sizeof(T))),
-			(ecaps.thrdPerBlock  )/ specW);
-		}else {
-			return MIN(ecaps.maxBlock.y, ecaps.thrdPerBlock  / specW);
-		}
+				ecaps.memSharedPerBlock/(specW*sizeof(T))),
+		(ecaps.thrdPerBlock  )/ specW);
+	}else {
+		return MIN(ecaps.maxBlock.y, ecaps.thrdPerBlock  / specW);
+	}
 }
 
  __host__ __device__ void getReductionExecContext(int &blocks, int &threads, long nP,
@@ -153,4 +171,14 @@ struct KernelCaps {
 		cudaStream_t stream;
 
 		static KernelCaps forArray(ExecCaps & caps, dim3& array);
+};
+
+struct DevStream {
+	int device;
+	cudaStream_t stream;
+
+	__host__ __device__ DevStream(int device);
+	__host__ __device__ ~DevStream();
+	__host__ __device__ cudaError_t  sync();
+	__host__ __device__ cudaError_t destroy();
 };

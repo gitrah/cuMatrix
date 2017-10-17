@@ -111,15 +111,26 @@ template int testNeural<ulong>::operator()(int argc, const char **argv) const;
 template<typename T> int testNeural<T>::operator()(int argc,
 		const char** args) const {
 
+
+	CuMatrix<T> tiny = CuMatrix<T>::ones(4,4) * 2;
+	outln("tiny " << tiny);
+	CuMatrix<T> tinyB = tiny.addBiasColumn().syncBuffers();
+	CuMatrix<T> tinybc0 = tinyB.columnMatrix(0).syncBuffers();
+
+	outln("tinyB " << tinyB);
+	outln("tinybc0 " << tinybc0);
+	outln("tinybc0.sum() " << tinybc0.sum());
+	outln("tinyB.biasedQ " << tinyB.biasedQ());
 	bool ompq = checkCmdLineFlag(argc,args, "omp");
 
-	bool checkGrad = true;
+
+	bool checkGrad = checkDebug(debugNn); // true;
 	T lambda = 3;
 	if (checkGrad) {
 		NeuralNet<T>::checkNnGradients(lambda);
 	}
 
-	int iterations = b_util::getParameter(argc, args, "its", 100);
+	int iterations = b_util::getParameter(argc, args, "its", 50);
 
 	map<string, CuMatrix<T>*> f_s[2]; //f, fw;
 	map<string, CuMatrix<T>*> f,fw;
@@ -166,6 +177,8 @@ template<typename T> int testNeural<T>::operator()(int argc,
 	CuTimer timer;
 	timer.start();
 
+//	testNeuralKPtr(iterations, f, fw);
+
 	CuMatrix<T>* x = f["X"];
 	outln("x "<< x->toShortString());
 	x->syncBuffers();
@@ -185,15 +198,23 @@ template<typename T> int testNeural<T>::operator()(int argc,
 
 	T cost;
 	CuMatrix<T> xBiased = x->addBiasColumn();
+	xBiased.syncBuffers();
+	outln("xBiased " << xBiased);
 	assert(xBiased.biasedQ());
+	T xbs = xBiased.sum();
+	outln("xbs " << xbs);
+	assert(util<T>::almostEquals(xbs, x->m + 2.626782601596818e05));
+
 	CuMatrix<T> training, training2, cv, cv2;
 
 
 	CuMatrix<T> ytraining, ytrainingBiased, ycv, ycvBiased;
 	vector<int> vIndices;
 	CuMatrix<T> yBiased = y->toBinaryCategoryMatrix().syncBuffers();
+	assert(yBiased.isBinaryCategoryMatrix());
+	usedCurrMem();
 
-	if( ompq) {
+	if( false && ompq) {
 
 #ifdef CuMatrix_UseOmp
 	CuMatrix<T>* srcs[] = {&xBiased, y};
@@ -222,137 +243,136 @@ template<typename T> int testNeural<T>::operator()(int argc,
 	}
 	yBiased.shuffle(&ytrainingBiased, &ycvBiased, (T) .75, vIndices);
 
-	outln("after shuffling xBiased sum %ld " << xBiased.sum());
-	outln("after shuffling y sum %ld " << y->sum());
+	outln("after shuffling xBiased sum " << xBiased.sum());
+	outln("after shuffling y sum " << y->sum());
+	usedCurrMem();
 
-	outln("after shuffling training sum %ld " << training.sum());
-	outln("after shuffling cv sum %ld " << cv.sum());
+	outln("after shuffling training sum " << training.sum());
+	outln("after shuffling cv sum " << cv.sum());
 
 	outln("after shuffling h"
 			"ytraining sum %ld " << ytraining.sum());
-	outln("after shuffling ycv sum %ld " << ycv.sum());
+	outln("after shuffling ycv sum " << ycv.sum());
 
 	outln("after shuffling yBiased " << yBiased.toShortString());
 
+	cherr(cudaPeekAtLastError());
 	ConjugateGradient<T>::init();
-
+	outln("after ConjugateGradient<T>::init()");
 	vector<reference_wrapper<CuMatrix<T>>> mats;
 	mats.push_back(training);
 	mats.push_back(ytrainingBiased);
 
 
 	bool repeatable = true;
+/*
 
+	CuMatrix<T> initial_Theta0 =
+			repeatable ?
+					CuMatrix<T>::sin(hidden_layer_size, input_layer_size).syncBuffers().addBiasColumn() :
+					CuMatrix<T>::randn(hidden_layer_size, input_layer_size).syncBuffers().addBiasColumn();
+*/
 	CuMatrix<T> initial_Theta1 =
 			repeatable ?
 					CuMatrix<T>::sin(hidden_layer_size, input_layer_size).syncBuffers().addBiasColumn() :
 					CuMatrix<T>::randn(hidden_layer_size, input_layer_size).syncBuffers().addBiasColumn();
 	CuMatrix<T> initial_Theta2 =
 			repeatable ?
-					CuMatrix<T>::sin(hidden_layer_size, hidden_layer_size).syncBuffers().addBiasColumn() :
-					CuMatrix<T>::randn(hidden_layer_size, hidden_layer_size).syncBuffers().addBiasColumn();
-	CuMatrix<T> initial_Theta3 =
-			repeatable ?
 					CuMatrix<T>::sin(num_labels, hidden_layer_size).syncBuffers().addBiasColumn() :
 					CuMatrix<T>::randn(num_labels, hidden_layer_size).syncBuffers().addBiasColumn();
 
 	outln(
-			"hs " << hidden_layer_size << ": " << "initial_Theta1 " << initial_Theta1.syncBuffers().toShortString());
+			"hs " << hidden_layer_size << ": " << "initial_Theta1 " << initial_Theta1.sum());
 	outln(
-			"hs " << hidden_layer_size << ": " << "initial_Theta2 " << initial_Theta2.syncBuffers().toShortString());
-	outln(
-			"hs " << hidden_layer_size << ": " << "initial_Theta3 " << initial_Theta3.syncBuffers().toShortString());
-	const CuMatrix<T>* parts3[] = { &initial_Theta1, &initial_Theta2,
-			&initial_Theta3 };
-	CuMatrix<T> initial_nn_params(
-			(initial_Theta1.size + initial_Theta2.size
-					+ initial_Theta3.size) / sizeof(T), 1, false, true);
+			"hs " << hidden_layer_size << ": " << "initial_Theta2 " << initial_Theta2.sum() );
+	const CuMatrix<T>* parts2[] = {  &initial_Theta1,&initial_Theta2 };
+	CuMatrix<T> initial_nn_params(1, (  initial_Theta1.size	+ initial_Theta2.size) / sizeof(T),  false, true);
 	outln("hs " << hidden_layer_size << ": " << "initial_nn_params bef concat " << initial_nn_params.toShortString());
 
-	CuMatrix<T>::concat(initial_nn_params, 3, parts3);
+	CuMatrix<T>::concat(initial_nn_params, 2, parts2);
 
-	uint2 dims[3];
+	uint2 dims[2];
 
 	dims[0].x = initial_Theta1.m;
 	dims[0].y = initial_Theta1.n;
 	dims[1].x = initial_Theta2.m;
 	dims[1].y = initial_Theta2.n;
-	dims[2].x = initial_Theta3.m;
-	dims[2].y = initial_Theta3.n;
 	outln("\n\ninitial_nn_params aft concat " << initial_nn_params.toShortString());
 
-	nnCostFtorPm<T> pmFtor3(dims, 3, training, ytrainingBiased, lambda);
+	nnCostFtorPm<T> pmFtor2(dims, 2, training, ytrainingBiased, lambda);
 	CuTimer justFmincg;
 	justFmincg.start();
 	outln("justFmincg.start()");
 
-	pair<CuMatrix<T>, pair<CuMatrix<T>, int> > tup2_3 =
-			ConjugateGradient<T>::fmincg(pmFtor3, initial_nn_params,
+	pair<CuMatrix<T>, pair<CuMatrix<T>, int> > tup2_2 =
+			ConjugateGradient<T>::fmincg(pmFtor2, initial_nn_params,
 					iterations);
 	outln( "back from initial_nn_params pmfmincg, took " << justFmincg.stop()/1000 << "s");
 	//
 	//
-	CuMatrix<T> nn_parms3PmGrad = tup2_3.first;
-	outln("nn_parms3PmGrad " << nn_parms3PmGrad.toShortString());
-	outln("nn_parms3PmGrad.sum " << nn_parms3PmGrad.sum());
+	CuMatrix<T> nn_parms2PmGrad = tup2_2.first.syncBuffers();
+	outln("nn_parms2PmGrad " << nn_parms2PmGrad.toShortString());
+	outln("nn_parms2PmGrad.sum " << nn_parms2PmGrad.sum());
 
-	CuMatrix<T> nTheta1Pm3(dims[0].x, dims[0].y, false, true);
-	CuMatrix<T> nTheta2Pm3(dims[1].x, dims[1].y, false, true);
-	CuMatrix<T> nTheta3Pm3(dims[2].x, dims[2].y, false, true);
+	CuMatrix<T> nTheta1Pm2(dims[0].x, dims[0].y, false, true);
+	CuMatrix<T> nTheta2Pm2(dims[1].x, dims[1].y, false, true);
 					// mat, m, n, p, off
-	nn_parms3PmGrad.unconcat(nTheta1Pm3, hidden_layer_size,
+	nn_parms2PmGrad.unconcat(nTheta1Pm2, hidden_layer_size,
 			(input_layer_size + 1), (input_layer_size + 1), 0);
-	outln("nTheta1Pm3 " << nTheta1Pm3.toShortString());
-	outln("nTheta1Pm3,sum " << nTheta1Pm3.sum());
-
-	nn_parms3PmGrad.unconcat(nTheta2Pm3, hidden_layer_size, (hidden_layer_size + 1),
-			(hidden_layer_size + 1), hidden_layer_size * (input_layer_size + 1));
-	outln("nTheta2Pm3 " << nTheta2Pm3.toShortString());
-	outln("nTheta2Pm3,sum " << nTheta2Pm3.sum());
-
-	nn_parms3PmGrad.unconcat(nTheta3Pm3, num_labels, (hidden_layer_size + 1),
+	outln("nTheta1Pm2 " << nTheta1Pm2.toShortString());
+	outln("nTheta1Pm2,sum " << nTheta1Pm2.sum());
+/*
+ 	nn_parms.unconcat(nTheta1, hidden_layer_size, (input_layer_size + 1),
+			(input_layer_size + 1), 0);
+	outln("post nTheta1 " << nTheta1.toss());
+	nn_parms.unconcat(nTheta2, num_labels, (hidden_layer_size + 1),
 			(hidden_layer_size + 1),
-			hidden_layer_size * (input_layer_size + 1 + hidden_layer_size)
-					+ hidden_layer_size);
-	outln("nTheta3Pm3 " << nTheta3Pm3.toShortString());
+			hidden_layer_size * (input_layer_size + 1));
+
+
+ */
+	nn_parms2PmGrad.unconcat(nTheta2Pm2,  num_labels, (hidden_layer_size + 1),
+			(hidden_layer_size + 1),
+			hidden_layer_size * (input_layer_size + 1));
+	outln("nTheta2Pm2 " << nTheta2Pm2.toShortString());
 	//  outln("nTheta2Pm " << nTheta2Pm.syncBuffers());
 
 	vector<CuMatrix<T> > thetaV;
-	thetaV.push_back(nTheta1Pm3);
-	thetaV.push_back(nTheta2Pm3);
-	thetaV.push_back(nTheta3Pm3);
+	thetaV.push_back(nTheta1Pm2);
+	thetaV.push_back(nTheta2Pm2);
 
-	NNPrediction<T> pred3 = NeuralNet<T>::forward(thetaV, training,
+	NNPrediction<T> pred2 = NeuralNet<T>::forward(thetaV, training,
 			ytrainingBiased, lambda);
-	CuMatrix<T> p1pm3 = pred3.hTheta;
+	CuMatrix<T> p1pm2 = pred2.hTheta;
 	//    outln("p1Pm " << p1Pm.syncBuffers());
-	outln("p1pm3 sum " << p1pm3.sum());
+	outln("p1pm2 sum " << p1pm2.sum());
 
 	checkCudaError(cudaGetLastError());
-	CuMatrix<T> h1Pm3 = p1pm3.toMaxColumnIndexVector() + 1;
+	CuMatrix<T> h1Pm2 = p1pm2.toMaxColumnIndexVector() + 1;
 	checkCudaError(cudaGetLastError());
 	outln("forwarding");
 	for(auto &im : thetaV) outln("thetaV." << im.toShortString());
 	for(auto &im : {cv,
 			ycvBiased} )outln("cv/y " << im.toShortString());
-	NNPrediction<T> pred3cv = NeuralNet<T>::forward(thetaV, cv,
+	NNPrediction<T> pred2cv = NeuralNet<T>::forward(thetaV, cv,
 			ycvBiased, lambda);
-	CuMatrix<T> p1Pmcv3 = pred3cv.hTheta;
+	CuMatrix<T> p1Pmcv2 = pred2cv.hTheta;
 	checkCudaError(cudaGetLastError());
-	CuMatrix<T> h1Pmcv3 = p1Pmcv3.toMaxColumnIndexVector() + 1;
-	outln("h1Pmcv3 " << h1Pmcv3.toShortString());
+	CuMatrix<T> h1Pmcv2 = p1Pmcv2.toMaxColumnIndexVector() + 1;
+	outln("h1Pmcv2 " << h1Pmcv2.toShortString());
 
-	CuMatrix<T> p1cv = NeuralNet<T>::predictCg(nTheta1Pm3, nTheta2Pm3, cv);
+	CuMatrix<T> p1cv = NeuralNet<T>::predictCg(nTheta1Pm2, nTheta2Pm2, cv);
 	outln("p1cv " << p1cv.toShortString());
 	//b_util::allDevices([]() { setCurrGpuDebugFlags(debugCons | debugDestr,true,false,0 );});
 
-	T resPm3 = ytraining.accuracy(h1Pm3);
+	T resPm2 = ytraining.accuracy(h1Pm2);
 	checkCudaError(cudaGetLastError());
-	outln("Pm3 training accuracy : " << ( resPm3 * 100));
+	outln("Pm2 training accuracy : " << ( resPm2 * 100));
 
-	T rescvPm3 = ycv.accuracy(h1Pmcv3);
-	outln("cv accuracy : " << ( rescvPm3 * 100));
+	T rescvPm2 = ycv.accuracy(h1Pmcv2);
+	outln("cv accuracy : " << ( rescvPm2 * 100));
 	checkCudaError(cudaGetLastError());
+//	assert(resPm2 > .8);
 
 
 	util<CuMatrix<T> >::deletePtrMap(f);
@@ -462,7 +482,7 @@ template<typename T> int testNeuralKPtr(int iterations,
 	outln("cost lambada = 1 " << cost);
 	assert(util<T>::almostEquals(cost, 0.383770, 0.001));
 
-	T sigArry[] = { 1, -.5, 0, .5, 1 };
+	T sigArry[] = { 1, (T)-.5, 0, (T ).5, 1 };
 	CuMatrix<T> sigTest1(sigArry, 1, 5, true);
 	CuMatrix<T> aSigTest = sigTest1.syncBuffers().sigmoidGradient();
 	outln("aSigTest " << aSigTest.syncBuffers());
@@ -471,14 +491,10 @@ template<typename T> int testNeuralKPtr(int iterations,
 	CuMatrix<T> training, training2, cv, cv2;
 	vector<int> vIndices;
 
-	//outln("shuffling");
-	//outln("xBiased " << xBiased);
 	T xbs = xBiased.sum();
 	outln("xBiased.sum " << xbs);
 	xBiased.shuffle(&training, &cv, (T) .75, vIndices);
-	//x->shuffle(training2,cv2,(T).75,vIndices);
 	outln("shuffled ");
-	//outln( training);
 
 	CuMatrix<T> ytraining, ytrainingBiased, ycv, ycvBiased;
 	y->shuffle(&ytraining, &ycv, (T) .75, vIndices);
@@ -498,10 +514,6 @@ template<typename T> int testNeuralKPtr(int iterations,
 	checkCudaError(cudaGetLastError());
 	outln("cost lambada = 1 " << cost);
 
-	//util<T>::timeReps(&CuMatrix<T>::sigmoidGradient,"sigmoidGradient", &sigTest2, 10000);
-
-	//CuMatrix<T> initial_Theta1 = CuMatrix<T>::randn(hidden_layer_size, input_layer_size).addBiasColumn();
-	//CuMatrix<T> initial_Theta2 = CuMatrix<T>::randn(num_labels, hidden_layer_size).addBiasColumn();
 
 	CuMatrix<T> initial_Theta1 = CuMatrix<T>::sin(hidden_layer_size,
 			input_layer_size).syncBuffers().addBiasColumn();
@@ -523,9 +535,12 @@ template<typename T> int testNeuralKPtr(int iterations,
 			true);
 	outln("initial_nn_params bef concat " << initial_nn_params.toShortString());
 	CuMatrix<T>::concat(initial_nn_params, 2, parts);
-	outln("initial_nn_params aft concat " << initial_nn_params.syncBuffers());
+	/*outln("initial_nn_params aft concat " << */ initial_nn_params.syncBuffers()/*)*/;
 	flprintf("initial_nn_params sum %.20g\n", initial_nn_params.sum());
 
+	CuMatrix<T> selfMult =   initial_nn_params.transpose() * initial_nn_params ;
+	outln("selfMult " << selfMult.toss());
+	outln("selfMult " << selfMult.syncBuffers());
 	//CuMatrix<T> initial_nn_params = CuMatrix<T>::zeros(1,(initial_Theta1.size + initial_Theta2.size)/sizeof(T));
 
 	//
@@ -536,8 +551,13 @@ template<typename T> int testNeuralKPtr(int iterations,
 	//
 	//
 
+/*
 	nnCostFtor<T> ftor(input_layer_size, hidden_layer_size, num_labels,
 			training, ytrainingBiased, lambda);
+*/
+
+	nnCostFtor<T> ftor(input_layer_size, hidden_layer_size, num_labels,
+			xBiased, yBiased, lambda);
 
 	CuMatrix<T> initGrad;
 	T initCost;
@@ -551,21 +571,36 @@ template<typename T> int testNeuralKPtr(int iterations,
 
 	CuTimer justFmincg;
 	justFmincg.start();
-	//  cherr(cudaProfilerStart());
+
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+	outln("\n\n\n    about to train     \n\n\n");
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+	//setAllGpuDebugFlags(debugNn, true, false);
 	pair<CuMatrix<T>, pair<CuMatrix<T>, int> > tup2 =
 			ConjugateGradient<T>::fmincg(ftor, initial_nn_params, iterations);
 	outln("back from fmincg, took " << justFmincg.stop()/1000 << "s");
 	checkCudaError(cudaGetLastError());
+	//setAllGpuDebugFlags(!debugNn, false, true);
 
-	CuMatrix<T> nn_parms = tup2.first;
-
+	CuMatrix<T> nn_parms = tup2.first.syncBuffers();
+	outln("nn_parms " << nn_parms.toss());
 	CuMatrix<T> nTheta1;
 	CuMatrix<T> nTheta2;
+	outln("about to uncon nTheta1 " << nTheta1.toss() );
+
 	nn_parms.unconcat(nTheta1, hidden_layer_size, (input_layer_size + 1),
 			(input_layer_size + 1), 0);
+	outln("post nTheta1 " << nTheta1.toss());
 	nn_parms.unconcat(nTheta2, num_labels, (hidden_layer_size + 1),
 			(hidden_layer_size + 1),
 			hidden_layer_size * (input_layer_size + 1));
+	outln("post nTheta2 " << nTheta2.toss());
 	checkCudaError(cudaGetLastError());
 	//  outln("nTheta2 " << nTheta2.syncBuffers());
 

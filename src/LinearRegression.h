@@ -4,8 +4,7 @@
  *  Created on: Aug 22, 2012
  *      Author: reid
  */
-#ifndef LINEARREGRESSION_H_
-#define LINEARREGRESSION_H_
+#pragma once
 
 #include "CuMatrix.h"
 #include "util.h"
@@ -31,6 +30,6 @@ public:
 	static T costFunctionNoReg2(CuMatrix<T>& hThetaT, CuMatrix<T>& yT, int m) ;
 
 	template<template <typename> class CostFunction > static CuMatrix<T> gradientApprox(
-			CostFunction<T> costFn, CuMatrix<T> theta, T epsilon);};
+			CostFunction<T> costFn, CuMatrix<T> theta, T epsilon);
+};
 
-#endif /* LINEARREGRESSION_H_ */

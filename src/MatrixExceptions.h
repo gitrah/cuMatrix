@@ -5,8 +5,8 @@
  *      Author: reid
  */
 
-#ifndef MATRIXEXCEPTIONS_H_
-#define MATRIXEXCEPTIONS_H_
+#pragma once
+
 using std::ostream;
 
 class MatrixException {
@@ -35,6 +35,7 @@ class notSyncedDev: public  notSynced{}; // required buffer (host or dev) missin
 class notSyncedHost: public  notSynced{}; // required buffer (host or dev) missing or out of date
 
 class notSquare : public  MatrixException{};
+class notRowDominant: public  notSquare{};
 
 class badDimensions: public  MatrixException{};
 class matricesOfIncompatibleShape : public  badDimensions{};
@@ -72,6 +73,3 @@ class ThisAlreadySet : public OglCbException {};
 
 class CapsException : public  MatrixException{};
 
-/*
-*/
-#endif /* MATRIXEXCEPTIONS_H_ */

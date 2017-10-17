@@ -1,5 +1,6 @@
 #include <helper_cuda.h>
 #include  "caps.h"
+#include "CuMatrix.h"
 
 __device__ uint scanSumAsm(int s) {
 	uint tot = 0;
@@ -39,7 +40,7 @@ int scanSumL(int fin) {
 		return fin;
 	}
 	ExecCaps& caps = *ExecCaps::currCaps();
-	outln("major " <<caps.deviceProp.major << ", minor " <<  caps.deviceProp.minor);
+	//outln("major " <<caps.deviceProp.major << ", minor " <<  caps.deviceProp.minor);
 	if(caps.deviceProp.major == 5 ) {
 #ifdef CuMatrix_Maxwell_Workaround1
 		return ompScan(fin);
@@ -50,8 +51,12 @@ int scanSumL(int fin) {
 	checkCudaErrors(cudaMalloc(&d_res,sizeof(int)));
 	scanSum<<<1,1>>>( d_res, fin);
 	checkCudaErrors(cudaDeviceSynchronize());
+	CuTimer timer;
+	timer.start();
 	checkCudaErrors(cudaMemcpy(&res,d_res,sizeof(int), cudaMemcpyDeviceToHost));
+	//CuMatrix<float>::incDhCopy("scanSumL",sizeof(int),timer.stop());
 	checkCudaErrors(cudaFree(d_res));
 	return res;
 }
+
 

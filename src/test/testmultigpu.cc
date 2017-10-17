@@ -11,7 +11,7 @@ template <typename T> int testMultiGPUMemcpy<T>::operator()(int argc, const char
 
 	outln("testMultiGPUMemcpy start");
 
-	outln("found " << ExecCaps::deviceCount << " gpus");
+	outln("found " << ExecCaps::countGpus() << " gpus");
 
     ExecCaps_setDevice(0);
     CuMatrix<T> m50d0 = CuMatrix<T>::ones(50,50).syncBuffers();
@@ -56,8 +56,8 @@ template <typename T> int testMultiGPUMemcpy<T>::operator()(int argc, const char
     ExecCaps_setDevice(0);
 	CuMatrix<T> col = CuMatrix<T>::sin(500,500).syncBuffers();
 
-	util<T>::deletePtrArray(g_devCaps, ExecCaps::deviceCount);
-	util<T>::deleteDevPtrArray(gd_devCaps, ExecCaps::deviceCount);
+	util<T>::deletePtrArray(g_devCaps, ExecCaps::countGpus());
+	util<T>::deleteDevPtrArray(gd_devCaps, ExecCaps::countGpus());
 
 	return 0;
 }
@@ -151,4 +151,38 @@ template <typename T> int testMultiGPUMath<T>::operator()(int argc, const char *
 }
 
 
+template int testMultiGPUTiling<float>::operator()(int argc, const char **argv) const;
+template int testMultiGPUTiling<double>::operator()(int argc, const char **argv) const;
+template int testMultiGPUTiling<ulong>::operator()(int argc, const char **argv) const;
+template <typename T> int testMultiGPUTiling<T>::operator()(int argc, const char **argv) const {
 
+	int count = b_util::getCount(argc,argv,100);
+	float exeTime1,exeTime2,exeTime3;
+	int devCount;
+	checkCudaErrors(cudaGetDeviceCount(&devCount));
+	if(devCount < 2) {
+		dthrow(insufficientGPUCount());
+	}
+
+	CuMatrix<T> icols = CuMatrix<T>::increasingColumns(10000,10000,0);
+	CuMatrix<T> irows = CuMatrix<T>::increasingRows(10000,10000,0);
+	CuMatrix<T> sumb = icols + irows;
+	sumb.syncBuffers();
+	sumb.getMgr().freeTiles(sumb);
+	sumb.tiler.setGpuMask(3);
+
+	CuTimer timer;
+	timer.start();
+	cudaStream_t streams[2];
+
+	for(int i =0; i < 2; i++) {
+		ExecCaps_visitDevice(i);
+		checkCudaErrors(cudaStreamCreateWithFlags(&streams[i], cudaStreamNonBlocking));
+	}
+	for(int i = 0; i < 10; i++) {
+
+	}
+
+
+	return 0;
+}

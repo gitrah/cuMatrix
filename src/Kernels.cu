@@ -25,7 +25,9 @@ template<> __host__ __device__ ulong Epsilon() {
 }
 
 __global__ void warmup() {
-#if __CUDA_ARCH__ == 520
+#if __CUDA_ARCH__ == 610
+	prlocf("\n\nwarmup<<<>>> on cc 6.1 device\n\n\n");
+#elif __CUDA_ARCH__ == 520
 	prlocf("\n\nwarmup<<<>>> on cc 5.2 device\n\n\n");
 #elif __CUDA_ARCH__ == 500
 	prlocf("\n\nwarmup<<<>>> on cc 5 device\n\n\n");
@@ -55,11 +57,10 @@ __global__ void slep(long slepMs) {
 	global_now = now;
 }
 
-
 template <typename T> __host__ CUDART_DEVICE void setL(T* elements, int m, int n, int p, int row, int col, T val) {
 	if(row > m) { printf("rowOutOfBounds()\n"); return;}
-	if(col > n) {printf("columnOutOfBounds()\n"); return; }
-	setKernel<<<1,1>>>(elements,row,col,p, row * p + col, val);
+	if(col > n) { printf("columnOutOfBounds()\n"); return; }
+	setKernel<<<1,1>>>(elements, row, col, p, row * p + col, val);
 }
 template void setL<float>(float*, int, int, int, int, int, float);
 template void setL<double>(double*, int, int, int, int, int, double);
@@ -175,11 +176,11 @@ template<typename T, typename FillOp> __global__ void fillOpNsbKernel(
 template __global__ void fillOpNsbKernel<float, oneOverFiller<float> >(oneOverFiller<float>, float*, int, int, int, bool);
 template __global__ void fillOpNsbKernel<double, oneOverFiller<double> >(oneOverFiller<double>, double*, int, int, int, bool);
 
-__global__ void setup_kernel ( curandState * state, int width )
+__global__ void setup_kernel ( curandState * state, int width, int pitch )
 {
     int xIdx = threadIdx.x + blockIdx.x * blockDim.x;
     int yIdx = threadIdx.y + blockIdx.y * blockDim.y;
-    int offset = xIdx + yIdx * width;
+    int offset = xIdx + yIdx * pitch;
     /* Each thread gets same seed, a different sequence
        number, no offset */
     curand_init (1234, offset, 0, & state [ offset ]) ;
@@ -207,29 +208,58 @@ template <typename T> __global__ void generate_kernel ( curandState * state,
     }
 }
 template __global__ void generate_uniform_kernel ( curandState * state,
-		float*  result, float epsilon, int height, int width );
+		float*  result, float epsilon, int height, int width, int );
 template  __global__ void generate_uniform_kernel ( curandState * state,
-		double*  result, double epsilon, int height, int width );
+		double*  result, double epsilon, int height, int width, int );
 template  __global__ void generate_uniform_kernel ( curandState * state,
-		long*  result, long epsilon, int height, int width );
+		long*  result, long epsilon, int height, int width, int );
 template  __global__ void generate_uniform_kernel ( curandState * state,
-		ulong*  result, ulong epsilon, int height, int width );
+		ulong*  result, ulong epsilon, int height, int width, int );
 template  __global__ void generate_uniform_kernel ( curandState * state,
-		uint*  result, uint epsilon, int height, int width );
+		uint*  result, uint epsilon, int height, int width , int);
 template  __global__ void generate_uniform_kernel ( curandState * state,
-		int*  result, int epsilon, int height, int width );
+		int*  result, int epsilon, int height, int width, int  );
 
 template <typename T>  __global__ void generate_uniform_kernel ( curandState * state,
-		T*  result, T epsilon, int height, int width )
+		T*  result, T epsilon, int height, int width, int pitch )
 {
-	int xIdx = threadIdx.x + blockIdx.x * blockDim.x;
+ 	int xIdx = threadIdx.x + blockIdx.x * blockDim.x;
 	int yIdx = threadIdx.y + blockIdx.y * blockDim.y;
-	int offset = xIdx + yIdx * width;
+	int offset = xIdx + yIdx * pitch;
     if(xIdx < width && yIdx < height) {
     	/* Copy state to local memory for efficiency */
     	curandState localState = state [ offset ];
     	/* Generate pseudo - random uniforms */
     	result[offset] = (2 * curand_uniform (& localState ) - 1) * epsilon;
+    	/* Copy state back to global memory */
+    	state [ offset ] = localState ;
+    }
+}
+
+template __global__ void generate_uniform_kernel_mod ( curandState * state,
+		float*  result, float epsilon, int height, int width, int , int );
+template  __global__ void generate_uniform_kernel_mod ( curandState * state,
+		double*  result, double epsilon, int height, int width, int , int );
+template  __global__ void generate_uniform_kernel_mod ( curandState * state,
+		long*  result, long epsilon, int height, int width, int, int  );
+template  __global__ void generate_uniform_kernel_mod ( curandState * state,
+		ulong*  result, ulong epsilon, int height, int width, int , int );
+template  __global__ void generate_uniform_kernel_mod ( curandState * state,
+		uint*  result, uint epsilon, int height, int width , int, int );
+template  __global__ void generate_uniform_kernel_mod ( curandState * state,
+		int*  result, int epsilon, int height, int width, int, int   );
+
+template <typename T>  __global__ void generate_uniform_kernel_mod ( curandState * state,
+		T*  result, T epsilon, int height, int width, int pitch, int mod )
+{
+ 	int xIdx = threadIdx.x + blockIdx.x * blockDim.x;
+	int yIdx = threadIdx.y + blockIdx.y * blockDim.y;
+	int offset = xIdx + yIdx * pitch;
+    if(xIdx < width && yIdx < height) {
+    	/* Copy state to local memory for efficiency */
+    	curandState localState = state [ offset ];
+    	/* Generate pseudo - random uniforms */
+    	result[offset] = (T) ( (int)((2 * curand_uniform (& localState ) - 1) * epsilon) % mod);
     	/* Copy state back to global memory */
     	state [ offset ] = localState ;
     }

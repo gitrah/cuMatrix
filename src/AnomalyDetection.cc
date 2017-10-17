@@ -30,8 +30,6 @@ template <typename T> void AnomalyDetection<T>::fitGaussians( CuMatrix<T>& means
 			means.m = 1;
 			means.updateSize();
 			means.tiler.reset(means);
-			means.tiler.allocTiles();
-			means.getMgr().addTiles(&means.tiler);
 		}
 	}
 	cherr(cudaPeekAtLastError());
@@ -40,17 +38,15 @@ template <typename T> void AnomalyDetection<T>::fitGaussians( CuMatrix<T>& means
 			outln("sqrdSigmas matrix is wrong sized ");
 			dthrow(matricesOfIncompatibleShape());
 		}else {
-			sqrdSigmas.m =  x.n;
-			sqrdSigmas.n = sqrdSigmas.p = 1;
+			sqrdSigmas.m =  1;
+			sqrdSigmas.n = sqrdSigmas.p = x.n;
 			sqrdSigmas.updateSize();
-			sqrdSigmas.tiler.reset(sqrdSigmas);
-			sqrdSigmas.tiler.allocTiles();
-			sqrdSigmas.getMgr().addTiles(&sqrdSigmas.tiler);
 		}
 	}
 	if(checkDebug(debugAnomDet))outln("ad.fitGaussians " << sqrdSigmas.toShortString());
 	cherr(cudaPeekAtLastError());
 	x.fitGaussians(sqrdSigmas, means);
+	//sqrdSigmas = sqrdSigmas.transpose();
 	cherr(cudaPeekAtLastError());
 }
 

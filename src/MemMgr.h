@@ -3,10 +3,15 @@
  *
  *  Created on: Oct 5, 2012
  *      Author: reid
+ *
+ *
+ *      shared memory
+ *
+ *      b_1   b_2   b_3   b_4   b_5   b_6   b_7
+ *      w32_1	w32_2
  */
 
-#ifndef MEMMGR_H_
-#define MEMMGR_H_
+#pragma once
 
 #include <cuda_runtime_api.h>
 #include "util.h"
@@ -66,6 +71,7 @@ public:
 	__host__ __device__ cudaError_t allocDevice(T** pElements, CuMatrix<T>& mat, uint size );
 	__host__ void addTiles( const Tiler<T>* tiler);
 	__host__ int freeTiles(CuMatrix<T>& mat);
+	__host__ int freeDbuff(T* currBuff, long tileSize);
 	__host__ void dumpLeftovers();
 
 	__host__ int migrate(int dev, CuMatrix<T>& m);
@@ -73,9 +79,9 @@ public:
 	__host__ void copy(int dev, CuMatrix<T>& m);
 	__host__ pair<size_t,size_t> migrate(int dev, vector< reference_wrapper<CuMatrix<T>>>  ms);
 
-	__host__ static bool checkValid(const T* addr, const char* msg = null);
+	static __host__ __device__ bool checkValid(const T* addr, const char* msg = null);
 
-	__host__ static void checkRange(const T* addr, int endIdx, const char* msg = null);
+	static __host__ void checkRange(const T* addr, int endIdx, const char* msg = null);
 
 
 };
@@ -84,4 +90,3 @@ extern template class MemMgr<float>;
 extern template class MemMgr<double>;
 extern template class MemMgr<ulong>;
 
-#endif /* MEMMGR_H_ */

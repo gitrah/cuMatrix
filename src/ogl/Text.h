@@ -5,8 +5,8 @@
  *      Author: reid
  */
 
-#ifndef TEXT_H_
-#define TEXT_H_
+#pragma once
+
 #include <string>
 #include "Vutil.h"
 #include "Drawable.h"
@@ -79,5 +79,3 @@ public:
 		this->text = text;
 	}
 };
-
-#endif /* TEXT_H_ */

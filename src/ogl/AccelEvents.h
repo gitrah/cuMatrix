@@ -3,8 +3,7 @@
  *
  */
 
-#ifndef DEFS_H_
-#define DEFS_H_
+#pragma once
 
 #include "../util.h"
 #include "../MatrixExceptions.h"
@@ -68,5 +67,3 @@ template<typename T> const T AccelEvents<T>::noEvent[] = {0,0,0,0};
 template <typename T> AccelEvents<T>* AccelEvents<T>::This = null;
 template <typename T> int AccelEvents<T>::sequenceThresholdMicros = 300;
 template <typename T> bool AccelEvents<T>::DelayMillisForMicros = false;
-
-#endif /* DEFS_H_ */

@@ -4,9 +4,7 @@
  *  Created on: Apr 24, 2014
  *      Author: reid
  */
-
-#ifndef KMEANS_H_
-#define KMEANS_H_
+#pragma once
 
 #include "CuMatrix.h"
 
@@ -18,4 +16,3 @@ public:
 	static __host__ CUDART_DEVICE void calcMeansColThread(IndexArray& indices, CuMatrix<T>& means, const CuMatrix<T>& x);
 };
 
-#endif /* KMEANS_H_ */

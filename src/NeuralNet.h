@@ -5,8 +5,7 @@
  *      Author: reid
  */
 
-#ifndef NEURALNET_H_
-#define NEURALNET_H_
+#pragma once
 
 #include "CuMatrix.h"
 using std::stack;
@@ -186,5 +185,3 @@ template <typename T, template <typename> class OutT> struct nnPermUtil {
 	 */
 	static void mapPermutations( list<OutT<T> >& retVals,  permFunction fn, const NnRunInfo<T>& nnri, list<list<uint>> listOfLists, list<uint> inst);
 };
-
-#endif /* NEURALNET_H_ */

@@ -4,8 +4,7 @@
  *  Created on: Feb 21, 2013
  */
 
-#ifndef VALIDATION_H_
-#define VALIDATION_H_
+#pragma once
 
 #include "CuMatrix.h"
 
@@ -20,5 +19,3 @@ public:
 				crossValidationFactor * input.m / leftovers.m,leftoverIndices);
 	}
 };
-
-#endif /* VALIDATION_H_ */

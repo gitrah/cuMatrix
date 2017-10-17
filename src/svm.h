@@ -5,8 +5,7 @@
  *      Author: reid
  */
 
-#ifndef SVM_H_
-#define SVM_H_
+#pragma once
 
 #include "CuMatrix.h"
 
@@ -30,5 +29,3 @@ public:
 	static void svmTrain(CuMatrix<T>& model, const CuMatrix<T>& x, T c, KernelFunction<T> kernel, int maxPasses, T tol = util<T>::epsilon());
 
 };
-
-#endif /* SVM_H_ */

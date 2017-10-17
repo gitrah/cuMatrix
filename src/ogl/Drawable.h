@@ -5,8 +5,7 @@
  *      Author: reid
  */
 
-#ifndef DRAWABLE_H_
-#define DRAWABLE_H_
+#pragma once
 
 #include <GL/gl.h>
 #include <string>
@@ -108,6 +107,3 @@ template <typename T> bool Drawable<T>::enablePath = false;
 template bool Drawable<float>::enablePath;
 template bool  Drawable<double>::enablePath;
 template <typename T> T Drawable<T>::bbxGrowFactor = 1.2;
-
-
-#endif /* DRAWABLE_H_ */

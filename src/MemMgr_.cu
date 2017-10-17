@@ -1,6 +1,51 @@
 #include "MemMgr.h"
 #include "Tiler.h"
 
+template __host__ __device__ bool MemMgr<float>::checkValid(const float* addr, const char* msg);
+template __host__ __device__ bool MemMgr<double>::checkValid(const double* addr, const char* msg);
+template __host__ __device__ bool MemMgr<ulong>::checkValid(const ulong* addr, const char* msg);
+template __host__ __device__ bool MemMgr<long>::checkValid(const long* addr, const char* msg);
+template __host__ __device__ bool MemMgr<uint>::checkValid(const uint* addr, const char* msg);
+template __host__ __device__ bool MemMgr<int>::checkValid(const int* addr, const char* msg);
+
+template<typename T> __host__ __device__ bool MemMgr<T>::checkValid(const T* addr, const char* msg) {
+
+		if(checkDebug(debugMem | debugCons | debugCheckValid)) {
+
+			ExecCaps* currCaps;
+			cherr(ExecCaps::currCaps(&currCaps));
+			if (currCaps->deviceProp.major > 1) {
+				struct cudaPointerAttributes ptrAtts;
+				//ptrAtts.memoryType = dev ? cudaMemoryTypeDevice : cudaMemoryTypeHost;
+				cudaError_t ret = cudaPointerGetAttributes(&ptrAtts, addr);
+
+				if (ret == cudaSuccess) {
+/*
+					if(checkDebug(debugMem | debugRefcount | debugCheckValid | debugCons )) {
+						outln((msg != null ? msg : "") << " cudaSuccess " << addr << " points to " << ( ptrAtts.memoryType == cudaMemoryTypeDevice ? " device " : " host") << " mem" ) ;
+					}
+*/
+					return true;
+				} else {
+					flprintf(" Imwavlid %p\n", addr);
+					b_util::dumpStack();
+					checkCudaError(ret);
+				}
+				//outln((msg != null ? msg : "") << " Imwalid " << addr);
+				if(msg != null) {
+					flprintf("(%s) Imwavlid %p\n", msg, addr);
+				} else {
+					flprintf("(null) Imwavlid %p\n", addr);
+				}
+				b_util::dumpStack();
+				checkCudaError(ret);
+			}
+			return false;
+		} else {
+			return true;
+		}
+	}
+
 template<typename T> __host__ __device__ cudaError_t MemMgr<T>::allocDevice(
 		T** pD_elements, CuMatrix<T>& mat, uint size) {
 

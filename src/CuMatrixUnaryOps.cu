@@ -152,17 +152,18 @@ template<typename T> template<int StateDim> __host__ CUDART_DEVICE void CuMatrix
 	}
 */
 
-	uint tileM, tileN, roff, coff;
-	tiler.tileDims(tileM, tileN, tdRows);
+	int tileM, tileN, tileP, roff, coff;
+	tiler.tileDims(tileM, tileN, tileP, tdRows);
 	int tileCount = DIV_UP(m,tileM);
 	DMatrix<T> d_A, d_Res;
 	int lastGpu = ExecCaps::currDev();
+	cudaStream_t streams[] = {stream};
 	for(int i = 0; i < tileCount; i++) {
 		if(checkDebug(debugFill))flprintf("tileM %d tileN %d tile %d lastGpu %u\n", tileM, tileN, i, lastGpu);
 		if(checkDebug(debugFill))flprintf("roff %u coff %u\n",roff, coff);
-		tiler.tileLike(d_A, roff, coff, tileM, tileN, i, tdRows, lastMod == mod_host, lastGpu, stream);
+		tiler.tileLike(d_A, roff, coff, tileM, tileN, tileP, i, tdRows, lastMod == mod_host, lastGpu, streams);
 		if(checkDebug(debugFill))flprintf("after tiler.tileLike for tile %d; roff %u coff %u\n", i, roff, coff);
-		lastGpu = res.tiler.tileLike(d_Res, roff, coff, tileM, tileN, i, tdRows, false,lastGpu, stream);
+		lastGpu = res.tiler.tileLike(d_Res, roff, coff, tileM, tileN, res.tiler.m_p, i, tdRows, false,lastGpu, streams);
 		if(checkDebug(debugFill))flprintf("after res.tiler.tileLike for tile %d; roff %u coff %u lastGpu %d\n", i, roff, coff, lastGpu);
 		if(p == n) {
 			unaryOpL( d_Res, d_A, op,stream);
@@ -241,6 +242,11 @@ template<typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::sqr() const
 
 template<typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::pow(T o) const {
 	powUnaryOp<T> pf = Functory<T,powUnaryOp>::pinch(o);
+	return unaryOp(pf);
+}
+
+template<typename T> __host__ CUDART_DEVICE CuMatrix<T> CuMatrix<T>::qpow(T o) const {
+	qpowUnaryOp<T> pf = Functory<T,qpowUnaryOp>::pinch(o);
 	return unaryOp(pf);
 }
 

@@ -5,8 +5,7 @@
  *      Author: reid
  */
 
-#ifndef PERSPECTIVE_H_
-#define PERSPECTIVE_H_
+#pragma once
 #include "Vision.h"
 
 class Perspective : public Vision {
@@ -48,6 +47,3 @@ public:
 		zNear = near;
 	}
 };
-
-
-#endif /* PERSPECTIVE_H_ */

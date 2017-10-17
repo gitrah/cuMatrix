@@ -18,13 +18,13 @@ template<typename T> int testBinaryOpAmort<T>::operator()(int argc, const char**
 
 	int m = 5000, n = 3000;
 	int ma = 5*1024, na = 3*1024;
-	CuMatrix<T> big2s = CuMatrix<T>::fill((T) 2, m,n);
+	CuMatrix<T> big2s = CuMatrix<T>::fill( m,n,(T)2);
 	DMatrix<T> dbig2s = big2s.asDmatrix();
-	CuMatrix<T> big2sa = CuMatrix<T>::fill((T) 2, ma,na);
+	CuMatrix<T> big2sa = CuMatrix<T>::fill(ma,na,(T)2);
 	DMatrix<T> dbig2sa = big2sa.asDmatrix();
-	CuMatrix<T> big3s = CuMatrix<T>::fill((T) 3, m,n);
+	CuMatrix<T> big3s = CuMatrix<T>::fill( m,n,(T)3);
 	DMatrix<T> dbig3s = big3s.asDmatrix();
-	CuMatrix<T> big3sa = CuMatrix<T>::fill((T) 3, ma,na);
+	CuMatrix<T> big3sa = CuMatrix<T>::fill(ma,na,(T)3);
 	DMatrix<T> dbig3sa = big3sa.asDmatrix();
 	CuMatrix<T> res = CuMatrix<T>::zeros(m, n);
 	DMatrix<T> dres = res.asDmatrix();

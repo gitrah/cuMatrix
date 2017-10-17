@@ -1,5 +1,5 @@
 /*
- * PFunctor.cu
+ * CuFunctor.cu
  *
  *  Created on: Sep 28, 2014
  *      Author: reid
@@ -244,7 +244,6 @@ template<typename T, template <typename> class IndexUnaryOp> __global__ void swi
 template <typename T, int StateDim> __global__ void switchableIndexFunctorTest( UnaryOpIndexF<T,StateDim> ftr )
 #endif
 {
-	uint idx = blockDim.x * threadIdx.y + threadIdx.x;
 
 #ifdef CuMatrix_StatFunc
 	flprintf("ftr.fn %p\n",ftr.fn);
@@ -480,11 +479,6 @@ template<typename T>void test1sFillers() {
 	indexFunctorTest<T,1><<<1,3>>>(uof);
 	checkCudaErrors(cudaDeviceSynchronize());
 
-	sequenceFiller<T> seqf = Functory<T,sequenceFiller>::pinch(21);
-	std::cout << "callin indexFunctorTest with sequenceFiller filler with value " << seqf[0] << "\n";
-	indexFunctorTest<T,1><<<1,3>>>(seqf);
-	checkCudaErrors(cudaDeviceSynchronize());
-
 	powFiller<T> powFlr = Functory<T,powFiller>::pinch(1.1);
 	std::cout << "callin indexFunctorTest with powFiller filler with value " << powFlr[0] << "\n";
 	indexFunctorTest<T,1><<<1,3>>>(powFlr);
@@ -625,6 +619,15 @@ template<typename T>void test1sBinaryOps() {
 
 
 template<typename T>void test2sFillers() {
+	sequenceFiller<T> seqf = Functory<T,sequenceFiller>::pinch(10,2);
+	std::cout << "callin indexFunctorTest with sequenceFiller filler with start " << seqf[0] << " and step " << seqf[1] << "\n";
+#ifndef CuMatrix_Enable_KTS
+	indexFunctorTest<T,2><<<1,10>>>(seqf); // 5 rows
+#else
+	indexFunctorTest<T,sequenceFiller><<<1,10>>>(seqf); // 5 rows
+#endif
+	checkCudaErrors(cudaDeviceSynchronize());
+
 	increasingColumnsFiller<T> icf = Functory<T,increasingColumnsFiller>::pinch(10,2);
 	std::cout << "callin indexFunctorTest<T,2> with increasingColumnsFiller with start " << icf[0] << " and width " << icf[1] << " cols \n";
 #ifndef CuMatrix_Enable_KTS
@@ -682,6 +685,19 @@ template<typename T>void test2sUnaryOps() {
 	checkCudaErrors(cudaDeviceSynchronize());
 
 }
+
+template<typename T>void test3sUnaryOps() {
+	idx1DblockAlmostEqUnaryOp<T> ibauo = Functory<T,idx1DblockAlmostEqUnaryOp>::pinch(static_cast<T>(0),static_cast<T>(2),static_cast<T>(4));
+	std::cout << "callin idx1DblockAlmostEqUnaryOp<T,3> with idx1DblockAlmostEqUnaryOp " << ibauo[0] << "\n";
+#ifdef CuMatrix_Enable_KTS
+	unaryOpTest<T,idx1DblockAlmostEqUnaryOpy><<<1,10>>>(ibauo);
+#else
+	unaryOpTest<T,3><<<1,10>>>(ibauo);
+#endif
+	checkCudaErrors(cudaDeviceSynchronize());
+}
+
+
 
 template<typename T>void test3sFillers() {
 	sinFiller<T> sf = Functory<T,sinFiller>::pinch(20,3,10);

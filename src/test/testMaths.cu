@@ -227,10 +227,10 @@ template int testMatRowMath<double>::operator()(int argc, const char **argv) con
 template int testMatRowMath<ulong>::operator()(int argc, const char **argv) const;
 template <typename T> int testMatRowMath<T>::operator()(int argc, const char **argv) const {
 
-	CuMatrix<T> src = CuMatrix<T>::increasingColumns(1,28,28);
+	CuMatrix<T> src = CuMatrix<T>::increasingColumns(28,28,1);
 	outln("src " << src.syncBuffers());
-	CuMatrix<T> row = CuMatrix<T>::increasingColumns(1,1,28);
-	CuMatrix<T> col = 2.5 * CuMatrix<T>::increasingColumns(.0001,28,1);
+	CuMatrix<T> row = CuMatrix<T>::increasingColumns(1,28,1);
+	CuMatrix<T> col = 2.5 * CuMatrix<T>::increasingColumns(28,1,.0001);
 
 	CuMatrix<T> sum = src + src;
 	CuMatrix<T> rowsum = row + row;

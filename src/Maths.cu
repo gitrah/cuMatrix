@@ -9,6 +9,114 @@
 //#include "CuMatrix.h"
 #include "Kernels.h"
 
+template<> __device__  uint qpow<uint>(uint x, int y) {
+	uint z;
+	asm("{\n\t"
+			// use braces for local scope
+			".reg.s32 pow;\n\t"
+			".reg.pred p;\n\t"
+			"mov.u32 %0,1;\n\t"// set res to 1 initially
+			"mov.s32 pow,%2;\n\t"
+			"qpowLoop: setp.eq.s32 p,pow,0;\n\t"  // start of loop: set predicate p if pow is 0
+			"@p bra LeaveQpow;\n\t"
+			" mul.lo.u32 %0, %0, %1;\n\t"
+			" sub.s32 pow, pow, 1;\n\t"
+			" bra qpowLoop;\n\t"
+			"LeaveQpow: }"
+			: "+r"(z) : "r" (x), "r" (y));
+	return z;
+}
+
+template<> __device__  int qpow<int>(int x, int y) {
+	int z;
+	asm("{\n\t"
+			// use braces for local scope
+			".reg.s32 pow;\n\t"
+			".reg.pred p;\n\t"
+			"mov.s32 %0,1;\n\t"// set res to 1 initially
+			"mov.s32 pow,%2;\n\t"
+			"qpowLoop: setp.eq.s32 p,pow,0;\n\t"  // start of loop: set predicate p if pow is 0
+			"@p bra Leave_qpow;\n\t"
+			" mul.lo.s32 %0, %0, %1;\n\t"
+			" sub.s32 pow, pow, 1;\n\t"
+			" bra qpowLoop;\n\t"
+			"Leave_qpow: \n\t"
+			"}"
+			: "+r"(z) : "r" (x), "r" (y));
+	return z;
+}
+
+template<> __device__  ulong qpow<ulong>(ulong x, int y) {
+	ulong z;
+	asm("{\n\t"
+			// use braces for local scope
+			".reg.s32 pow;\n\t"
+			".reg.pred p;\n\t"
+			"mov.u64 %0,1;\n\t"// set res to 1 initially
+			"mov.s32 pow,%2;\n\t"
+			"qpowLoop: setp.eq.s32 p,pow,0;\n\t"  // start of loop: set predicate p if pow is 0
+			"@p bra Leave_qpow;\n\t"
+			" mul.lo.u64 %0, %0, %1;\n\t"
+			" sub.s32 pow, pow, 1;\n\t"
+			" bra qpowLoop;\n\t"
+			"Leave_qpow: }"
+			: "+l"(z) : "l" (x), "r" (y));
+	return z;
+}
+
+template<> __device__  long qpow<long>(long x, int y) {
+	long z;
+	asm("{\n\t"
+			// use braces for local scope
+			".reg.s32 pow;\n\t"
+			".reg.pred p;\n\t"
+			"mov.s64 %0,1;\n\t"// set res to 1 initially
+			"mov.s32 pow,%2;\n\t"
+			"qpowLoop: setp.eq.s32 p,pow,0;\n\t"  // start of loop: set predicate p if pow is 0
+			"@p bra Leave_qpow;\n\t"
+			" mul.lo.s64 %0, %0, %1;\n\t"
+			" sub.s32 pow, pow, 1;\n\t"
+			" bra qpowLoop;\n\t"
+			"Leave_qpow: }"
+			: "+l"(z) : "l" (x), "r" (y));
+	return z;
+}
+
+template<> __device__  double qpow<double>(double x, int y) {
+	double z;
+	asm("{\n\t"
+			// use braces for local scope
+			".reg.s32 pow;\n\t"
+			".reg.pred p;\n\t"
+			"mov.f64 %0,1.0;\n\t"// set res to 1 initially
+			"mov.s32 pow,%2;\n\t"
+			"qpowLoop: setp.eq.s32 p,pow,0;\n\t"  // start of loop: set predicate p if pow is 0
+			"@p bra Leave_qpow;\n\t"
+			" mul.f64 %0, %0, %1;\n\t"
+			" sub.s32 pow, pow, 1;\n\t"
+			" bra qpowLoop;\n\t"
+			"Leave_qpow: }"
+			: "+d"(z) : "d" (x), "r" (y));
+	return z;
+}
+
+template<> __device__  float qpow<float>(float x, int y) {
+	float z;
+	asm("{\n\t"
+			// use braces for local scope
+			".reg.s32 pow;\n\t"
+			".reg.pred p;\n\t"
+			"mov.f32 %0,1.0;\n\t"// set res to 1 initially
+			"mov.s32 pow,%2;\n\t"
+			"qpowLoop: setp.eq.s32 p,pow,0;\n\t"  // start of loop: set predicate p if pow is 0
+			"@p bra Leave_qpow;\n\t"
+			" mul.f32 %0, %0, %1;\n\t"
+			" sub.s32 pow, pow, 1;\n\t"
+			" bra qpowLoop;\n\t"
+			"Leave_qpow: }"
+			: "+f"(z) : "f" (x), "r" (y));
+	return z;
+}
 
 template<> __device__  uint cube<uint>(uint x) {
 	uint y;
@@ -31,7 +139,7 @@ template <> __device__  int cube<int>( int v) {
 	return cube<uint>(v);
 }
 
-template __device__ int cube<int>(int);
+//template __device__ int cube<int>(int);
 
 template<> __device__ long cube<long>(long x) {
 	long y;
@@ -48,7 +156,7 @@ template<> __device__ long cube<long>(long x) {
 	return y;
 }
 
-template __device__ long cube<long>(long);
+//template __device__ long cube<long>(long);
 
 template<> __device__  float cube<float>(float x) {
 	float y;
@@ -380,7 +488,6 @@ template __host__ CUDART_DEVICE float bisection< float, deg2UnaryOp>(float*, uin
 template __host__ CUDART_DEVICE double bisection<double, deg2UnaryOp>(double*, uint*, uint, deg2UnaryOp<double>, double, double,double, uint);
 template __host__ CUDART_DEVICE ulong bisection<ulong, deg2UnaryOp>(ulong*, uint*, uint, deg2UnaryOp<ulong>, ulong, ulong, ulong, uint);
 
-
 template<typename T>  __host__ __device__ inline T gradient(typename func1<T>::inst function, T x, T epsilon) {
 	return ( function(x + epsilon) - function(x - epsilon))/(2 * epsilon);
 }
@@ -450,7 +557,12 @@ template __host__ CUDART_DEVICE ulong bisection<ulong>(ulong*, uint*, uint,func1
 
 template<typename T> __host__ CUDART_DEVICE T bisection(T* roots, uint* count, uint maxRoots,  FuncNums idx, T a, T b, T epsilon, uint slices) {
 	if(checkDebug(debugMaths))prlocf("bisection enter\n");
-	typename func1<T>::inst function = 	(typename func1<T>::inst) funcPtres[idx];
+	typename func1<T>::inst function;
+#ifdef __CUDA_ARCH__
+	function = 	(typename func1<T>::inst) funcPtres[idx];
+#else
+	cherr(cudaMemcpy(&function, &(funcPtres[idx]), sizeof(typename func1<T>::inst), cudaMemcpyDeviceToHost));
+#endif
 	dim3 grid, block;
 	block.x = 256;
 	grid.x = slices/block.x;
@@ -476,3 +588,114 @@ __host__ CUDART_DEVICE void biggestBin( int* whichBin, const int* binCounts, int
 	}
 	*whichBin = maxIdx;
 }
+
+
+template <> __device__  uint popc( int val) {
+	uint ret;
+	asm("{\n\t"
+			" popc.b32 %0, %1;\n\t"
+			"}"
+			: "=r"(ret) : "r" (val));
+	return ret;
+
+}
+template <> __device__ uint popc( uint val) {
+	uint ret;
+	asm("{\n\t"
+			" popc.b32 %0, %1;\n\t"
+			"}"
+			: "=r"(ret) : "r" (val));
+	return ret;
+
+}
+template <> __device__  uint popc( long val) {
+	uint ret;
+	asm("{\n\t"
+			" popc.b64 %0, %1;\n\t"
+			"}"
+			: "=r"(ret) : "l" (val));
+	return ret;
+
+}
+template <> __device__  uint popc( ulong val) {
+	uint ret;
+	asm("{\n\t"
+			" popc.b64 %0, %1;\n\t"
+			"}"
+			: "=r"(ret) : "l" (val));
+	return ret;
+
+}
+
+template<> __device__ float sigmoid(const float x, const int depth) {
+	float ret;
+	asm("{\n\t"
+			".reg.f32 accum, ffact, currPow;\n\t"
+			".reg.f32 signedX;\n\t"
+			".reg.s32 fact, currentTermIdx;\n\t"
+			".reg.pred %p;\n\t"
+			"mov.s32 fact, 1;\n\t"
+			"mov.f32 accum, 1.0;\n\t"
+			"mov.f32 currPow, 1.0;\n\t"
+			"mov.s32 currentTermIdx, 1;\n\t"
+			"mov.f32 signedX, %1;\n\t"
+			"neg.f32 signedX, signedX;\n\t"
+			"loop:  setp.eq.s32 %p, currentTermIdx, %2;\n\t"
+			"@%p bra leavus;\n\t"
+			"mul.f32 currPow, currPow, signedX;\n\t"
+			"mul.lo.s32 fact, fact, currentTermIdx;\n\t"
+			"cvt.rn.f32.s32 ffact, fact;\n\t"
+			"div.approx.f32 ffact, currPow, ffact;\n\t"
+			"add.f32 accum, accum, ffact;\n\t"
+			"add.s32 currentTermIdx, currentTermIdx, 1;\n\t"
+			"bra loop;\n\t"
+			"leavus:\n\t"
+			"add.f32 accum, accum, 1.0;\n\t"
+			"div.approx.f32 accum, 1.0, accum;\n\t"
+			"mov.f32 %0, accum;\n\t"
+			"}"
+			: "=f"(ret) : "f" (x), "r" (depth));
+	return ret;
+
+}
+
+template <> __device__  double sigmoid( const double x, const int depth) {
+	double ret;
+
+	asm("{\n\t"
+			".reg.f64 accum, ffact, currPow;\n\t"
+			".reg.f64 signedX;\n\t"
+			".reg.s32 fact, currentTermIdx;\n\t"
+			".reg.pred %p;\n\t"
+			"mov.s32 fact, 1;\n\t" // set factorial dividend to initially be 1
+			"mov.f64 accum, 1.0;\n\t" // set accumulated result initially to 1 (1 + x + x^2/2! + x^3/3! + ...
+			"mov.f64 currPow, 1.0;\n\t" // currPow holds the power of x part of the element, initially at mult identity
+			"mov.s32 currentTermIdx, 1;\n\t" // index of current term in taylor series
+			"mov.f64 signedX, %1;\n\t" // negate x for sigmoid
+			"neg.f64 signedX, signedX;\n\t"
+			"loop:  setp.eq.s32 %p, currentTermIdx, %2;\n\t" // check if calculated to the <<depth>>-st term
+			"@%p bra leavus;\n\t"
+			"mul.f64 currPow, currPow, signedX;\n\t"  // multiply currPow by signedX to get this term's power of x
+			"mul.lo.s32 fact, fact, currentTermIdx;\n\t" // mult fact by currentTermIdx to get this term's factorial divisor
+			"cvt.rn.f64.s32 ffact, fact;\n\t"
+			"div.f64 ffact, currPow, ffact;\n\t"  // divide currPow by fact
+			"add.f64 accum, accum, ffact;\n\t"	 // and accumulate
+			"add.s32 currentTermIdx, currentTermIdx, 1;\n\t"
+			"bra loop;\n\t"
+			"leavus:\n\t"  // e^-x calced, now calc rest of sigmoid
+			"add.f64 accum, accum, 1.0;\n\t"  // 1 + e^-x
+			"div.f64 accum, 1.0, accum;\n\t"  // 1/(1 + e^-x)
+			"mov.f64 %0, accum;\n\t"
+			"}"
+			: "=d"(ret) : "d" (x), "r" (depth));
+
+	return ret;
+
+}
+
+
+template <> __device__  ulong sigmoid( const ulong x, const int depth) {
+	return 0;
+}
+
+

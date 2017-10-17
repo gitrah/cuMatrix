@@ -128,13 +128,34 @@ void binaryOpL(DMatrix<T>& trg, const DMatrix<T>& src1, const DMatrix<T>& src2, 
 	uint len = src1.m * src2.n;
 	dim3 dBlocks, dThreads;
 	b_util::vectorExecContext(threads, len, dBlocks, dThreads);
+#ifndef __CUDA_ARCH__
+	if(!stream) {
+		checkCudaError(cudaDeviceSynchronize());
+	}
+#endif
 
 /*
 #ifndef __CUDA_ARCH__
 	b_util::dumpStack();
 #endif
 */
-	if(checkDebug(debugExec)){
+	if(checkDebug(debugTiler)){
+		checkCudaError(cudaGetLastError());
+		flprintf("curr dev %d\n", ExecCaps::currDev());
+		flprintf("trg.elements %p, src1.elements %p, src2.elements %p\n",trg.elements, src1.elements, src2.elements);
+		flprintf("trg on dev %d, src1 on dev %d, src2 on dev %d\n",
+				b_util::getDevice(trg.elements), b_util::getDevice(src1.elements),
+				b_util::getDevice(src2.elements));
+		flprintf("trg %d*%d*%d, src1 %d*%d*%d, src2 %d*%d*%d\n",
+		trg.m,trg.n,trg.p, src1.m,src1.n,src1.p, src2.m,src2.n,src2.p);
+#ifndef __CUDA_ARCH__
+		MemMgr<T>::checkValid(trg.elements,"trg.elements");
+		MemMgr<T>::checkValid(trg.elements + len -1,"trg.elements + len -1");
+		MemMgr<T>::checkValid(src1.elements,"src1.elements");
+		MemMgr<T>::checkValid(src1.elements + len -1,"src1.elements + len -1");
+		MemMgr<T>::checkValid(src2.elements,"src2.elements");
+		MemMgr<T>::checkValid(src2.elements + len -1,"src2.elements + len -1");
+#endif
 		prlocf("binaryOpL grid " );
 		b_util::prd3(dBlocks);
 		prlocf("binaryOpL of block ");
@@ -214,15 +235,16 @@ void CuMatrix<T>::binaryOp(CuMatrix<T>& res, const CuMatrix<T>& o, BinaryOpF<T, 
 {
 	DMatrix<T> d_A, d_B, d_res;
 
-	assert( compatibleQ(o));
-	if(tiler.tileSize == tiler.m_size) {
+	assert( compatibleQ(o) || (vectorQ() && o.vectorQ() && length() == o.length()) );
+
+	if(tiler.tileSize >= tiler.m_size) {
 
 		tile0(d_A,lastMod==mod_host,stream);
-		if (checkDebug(debugTiler)) prlocf("this tile0\n");
+		if (checkDebug(debugBinOp)) prlocf("this tile0\n");
 		o.tile0( d_B, tiler != o.tiler && o.lastMod==mod_host,stream);
-		if (checkDebug(debugTiler)) prlocf("o.tile0\n");
+		if (checkDebug(debugBinOp)) prlocf("o.tile0\n");
 		res.tile0( d_res, false,stream);
-		if(n == p) {
+		if(n == _tileP) {
 			binaryOpL( d_res, d_A, d_B,op,stream);
 			//if(0==p)binaryOpL2( d_res, d_A, d_B,op,1);
 		} else {
@@ -230,47 +252,55 @@ void CuMatrix<T>::binaryOp(CuMatrix<T>& res, const CuMatrix<T>& o, BinaryOpF<T, 
 		}
 		res.invalidateHost();
 	} else {
-		uint tileM, tileN;
 		if (checkDebug(debugTiler)) {
 			flprintf("this %p, &o %p, &res %p\n",this, &o, &res);
 			o.printShortString("matrix o");
 			printShortString("this");
 			res.printShortString("ret");
 		}
-		tiler.tileDims(tileM, tileN, tdRows);
+		int tileM = _tileM, tileN = _tileN, tileP = _tileP;
+		tiler.tileDims(tileM, tileN, tileP, tdRows);
 		int tileCount = DIV_UP(m,tileM);
-		uint roff,coff;
+		int roff,coff;
 		int gpuCount = tiler.countGpus();
 		int orgDevice = ExecCaps::currDev();
-		int lastGpu =gpuCount > 1 ? 0 : -1;
+		int lastGpu = -1;
 		cudaStream_t* streams = null;
 		if(gpuCount > 1) {
-			assert(!stream);
-			cudaStream_t* streams = (cudaStream_t*)malloc(gpuCount * sizeof(cudaStream_t));
+			streams = (cudaStream_t*)malloc(gpuCount * sizeof(cudaStream_t));
+			if (checkDebug(debugTiler))flprintf("creating %d streams\n",gpuCount);
 			for(int i =0 ; i < gpuCount; i++) {
 				lastGpu = tiler.nextGpu(lastGpu);
 				ExecCaps_setDevice(lastGpu);
 				cherr(cudaStreamCreateWithFlags(&streams[i],cudaStreamNonBlocking));
+				if (checkDebug(debugTiler))flprintf("created stream %p\n",streams[i]);
 			}
+			lastGpu = -1;
+		} else if(stream) {
+			streams = (cudaStream_t*)malloc(sizeof(cudaStream_t));
+			streams[0] = stream;
 		}
 
-		lastGpu = tiler.nextGpu(0);
+		//lastGpu = tiler.nextGpu(-1);
+		if (checkDebug(debugTiler))flprintf("lastGpu = tiler.nextGpu(-1) == %d\n",lastGpu);
 		for(int i =0; i < tileCount; i++ ) {
-			ExecCaps_setDevice(lastGpu); // do it here so this (i)tile, (j) b-tile and (i,j) res-tile all on same dev
-			if (checkDebug(debugTiler))prlocf("binaryOp tileLike d_A");
-			tiler.tileLike(d_A, roff,coff, tileM, tileN, i, tdRows, true,lastGpu,gpuCount > 1 ? streams[i] : stream);
-			if (checkDebug(debugTiler))prlocf("binaryOp tileLike d_B");
-			o.tiler.tileLike( d_B, roff,coff, tileM, tileN, i, tdRows, tiler != o.tiler, lastGpu,gpuCount > 1 ? streams[i] : stream);
-			if (checkDebug(debugTiler))prlocf("binaryOp tileLike d_Res");
-			lastGpu = res.tiler.tileLike( d_res, roff,coff, tileM, tileN, i, tdRows, false,lastGpu,gpuCount > 1 ? streams[i] : stream);
-			if(checkDebug(debugExec)) {
-				prlocf("void CuMatrix<T>::binaryOp(CuMatrix<T> &,CuMatrix<T> &, BinaryOp -> " );
-			}
-		#ifndef __CUDA_ARCH__
-			if(checkDebug(debugExec)){
-				flprintf(" %s  " , b_util::unmangl(typeid(op).name()).c_str());
-			}
-		#endif
+			ExecCaps_setDevice(tiler.nextGpu(-1)); // do it here so this (i)tile, (j) b-tile and (i,j) res-tile all on same dev
+			flprintf("if (checkDebug(debugBinOp)) %d\n", (checkDebug(debugBinOp)));
+#ifndef __CUDA_ARCH__
+			if (checkDebug(debugTiler))flprintf("tileLike d_A %s i %d\n", util<T>::pdm(d_A).c_str(),i);
+#endif
+			if (checkDebug(debugTiler))flprintf("gpuCount %d\n",gpuCount);
+			if (checkDebug(debugTiler))flprintf("streams %p\n",streams);
+/*
+			if (checkDebug(debugBinOp))flprintf("binaryOp tileLike d_A %s tileM %d, tileN %d, i %d, lastGpu %d stream %p\n ",
+					util<T>::pdm(d_A).c_str(), tileM, tileN, i, lastGpu, gpuCount > 1 ? streams[i] : stream);
+*/
+			tiler.tileLike(d_A, roff,coff, tileM, tileN, tileP, i, tdRows, true,lastGpu,streams);
+			if (checkDebug(debugFill))prlocf("binaryOp tileLike d_B\n");
+			o.tiler.tileLike( d_B, roff,coff, tileM, tileN, tileP, i, tdRows, tiler != o.tiler, lastGpu, streams);
+			if (checkDebug(debugBinOp))prlocf("binaryOp tileLike d_Res\n");
+			lastGpu = res.tiler.tileLike( d_res, roff,coff, tileM, tileN, tileP, i, tdRows, false,lastGpu,streams);
+			if (checkDebug(debugTiler))flprintf("lastGpu = res.tiler.tileLike( ..) == %d\n", lastGpu);
 			if(n == p) {
 				binaryOpL( d_res, d_A, d_B,op,stream);
 				//if(0==p)binaryOpL2( d_res, d_A, d_B,op,1);
@@ -289,7 +319,7 @@ void CuMatrix<T>::binaryOp(CuMatrix<T>& res, const CuMatrix<T>& o, BinaryOpF<T, 
 		if(orgDevice != ExecCaps::currDev()) {
 			ExecCaps_setDevice(orgDevice);
 		}
-		res.lastMod = mod_synced;  // have to
+		res.lastMod = mod_host;  // have to
 	}
 }
 
@@ -301,14 +331,17 @@ template<typename T> template<int StateDim> __host__ CUDART_DEVICE
 CuMatrix<T> CuMatrix<T>::binaryOp(const CuMatrix<T>& o, BinaryOpF<T,StateDim> op , cudaStream_t stream  ) const
 #endif
 {
-	if(!equalDims(o)  && !( o.vectorQ() && o.n == n ) ) {
+	if(!equalDims(o)  && !( o.vectorQ() && vectorQ() ) ) {
 		printShortString(" can't be bin-opd with ");
 		o.printShortString();
 		setLastError(matricesOfIncompatibleShapeEx);
 	}
-	if(checkDebug(debugBinOp)) prlocf("binaryOp(const CuMatrix<T>&,...) creating res\n" );
+	if(checkDebug(debugBinOp)) flprintf("binaryOp(const CuMatrix<T>&,...) creating res with mask gpuMask %d and dir %d\n", tiler.gpuMask, tiler.tileD );
 
-	CuMatrix<T> res(m, n, true, true);
+	CuMatrix<T> res(m, n, p, true, true, tiler.gpuMask, tiler.tileD);
+#ifndef __CUDA_ARCH__
+	if(checkDebug(debugBinOp)) flprintf("binaryOp created res %s\n", res.toShortString().c_str());
+#endif
 	binaryOp(res, o, op,stream);
 	return res;
 }

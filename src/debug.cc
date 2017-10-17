@@ -8,6 +8,7 @@
 #include "debug.h"
 #include <time.h>
 #include "CuFunctor.h"
+#include "CuMatrix.h"
 
 const long SECOND_MS = 1000l;
 
@@ -25,6 +26,12 @@ const long DAY_MS = DAY_S * SECOND_MS;
 
 const float F_DAY_MS = DAY_MS * 1.f;
 
+const long WEEK_S = 7 * DAY_S;
+
+const long WEEK_MS = WEEK_S * SECOND_MS;
+
+const float F_WEEK_MS = WEEK_MS * 1.f;
+
 const char * allChoice = "all";
 const char * anomChoice = "anom";
 const char * memChoice = "mem";
@@ -34,7 +41,6 @@ const char * execChoice = "exec";
 const char * fillChoice = "fill";
 const char * ftorChoice = "ftor";
 const char * matprodChoice = "matprod";
-const char * matprodBlockResizeChoice = "mpbr";
 const char * debugMatStatsChoice = "stats";
 const char * consChoice = "cons";
 const char * destrChoice = "dstr";
@@ -51,6 +57,7 @@ const char * lrgBlkChoice = "lblk";
 const char * debugMultGPUChoice = "gpu";
 const char * debugMillisForMicrosChoice = "m4m";
 const char * debugReduxChoice = "rdx";
+const char * debugTimerChoice = "tmr";
 const char * debugTilerChoice = "tlr";
 const char * debugUnaryOpChoice = "uny";
 const char * debugPrecisionChoice = "prec";
@@ -58,6 +65,92 @@ const char * debugMeansChoice = "mean";
 const char * debugBinOpChoice = "bnop";
 const char * debugCheckValidChoice = "dcv";
 const char * debugMembloChoice = "mbl";
+
+string DebugFlagsStr[] = {
+"debugUseTimers",
+"debugExec",
+"debugMem",
+"debugCheckValid",
+"debugFtor",
+"debugCopy",
+"debugCopyDh",
+"debugFill",
+"debugMatProd",
+"debugCons",
+"debugDestr",
+"debugTxp",
+"debugRefcount",
+"debugVerbose",
+"debugNn",
+"debugCg",
+"debugMultGPU",
+"debugPm",
+"debugMaths",
+"debugAnomDet",
+"debugStream",
+"debugRedux",
+"debugSpoofSetLastError",
+"debugTimer",
+"debugMatStats",
+"debugTiler",
+"debugUnaryOp",
+"debugPrecision",
+"debugMeans",
+"debugBinOp",
+"debugFile",
+"debugMemblo"};
+
+string UsageStrPreamble =
+ "usage:\n\n\tcumatrel|cumatrest [options]\n\n"
+ "Usage options:\n";
+
+string UsagesStr[] = {
+		"-usage\t\t---\t\tdisplay this",
+		"-dbg=<list>\t---\t\tspecify comma-sep'd list of one of more debugging options (listed below)",
+		"-dev=N\t\t---\t\tspecify which device to be default (for single device tests)",
+		"-stopAt=N\t---\t\tstop after this test (numbers start at 0 in code order)",
+		"-blas\t\t---\t\tuse cublas for matrix math (really just multiplication",
+		"-cool\t\t---\t\tselect whichever device is coolest (requires NVML) for each test",
+		"-test=N\t\t---\t\trun test #N only (0 based, ordered by appearance in code)",
+		"-krn=N\t\t---\t\tuse matrix product kernel N for matrix mult"
+};
+
+string DebugOptionsPreamble ="List of Debug Options\n\t(usually to enable detailed log messages for classes of operation)\n";
+
+
+string DebugOptionsStr[] = {
+"debugUseTimers\t\ttmr",
+"debugExec\t\texec",
+"debugMem\t\tmem",
+"debugCheckValid\t\tdcv",
+"debugFtor\t\tftor",
+"debugCopy\t\tcopy",
+"debugCopyDh\t\tcopyDh",
+"debugFill\t\tfill",
+"debugMatProd\t\tmatprod",
+"debugCons\t\tcons",
+"debugDestr\t\tdstr",
+"debugTxp\t\ttxp",
+"debugRefcount\t\tref",
+"debugVerbose\t\tverb",
+"debugNn\t\t\tnn",
+"debugCg\t\t\tcg",
+"debugMultGPU\t\tgpu",
+"debugPm\t\t\tpack",
+"debugMaths\t\t<?>",
+"debugAnomDet\t\tanom",
+"debugStream\t\t<?>",
+"debugRedux\t\trdx",
+"debugSpoofSetLastError\t<?>",
+"debugTimer\t\ttmr",
+"debugMatStats\t\tstats",
+"debugTiler\t\ttlr",
+"debugUnaryOp\t\tuny",
+"debugPrecision\t\tprec",
+"debugMeans\t\tmean",
+"debugBinOp\t\tbnop",
+"debugFile\t\tfile",
+"debugMemblo\t\tmbl"};
 
 // todo:  generate this from enum CuMatrixException
 string CuMatrixExceptionStrings[] = {
@@ -74,6 +167,7 @@ string CuMatrixExceptionStrings[] = {
 		"cantSyncHostFromDeviceEx",
 		"notSquareEx",
 		"badDimensionsEx",
+		"needsTilingEx",
 		"matricesOfIncompatibleShapeEx",
 		"rowDimsDisagreeEx",
 		"columnDimsDisagreeEx",
@@ -94,8 +188,7 @@ string CuMatrixExceptionStrings[] = {
 		"timerAlreadyStartedEx",
 		"wrongStreamEx",
 		"insufficientGPUCountEx",
-		"nullPointerEx",
-
+		"nullPointerEx"
 };
 
 string NvmlErrors[] = {
@@ -118,6 +211,7 @@ string NvmlErrors[] = {
     "NVML_ERROR_RESET_REQUIRED",
     "NVML_ERROR_OPERATING_SYSTEM",
 };
+
 
 const char* getNvmlErrorEnum(int en) {
 	if(en > -1 && en < 17) {
@@ -161,11 +255,11 @@ string fromSeconds(double seconds) {
 }
 
 string fromMillis(double millis) {
-	return fromSeconds(millis);
+	return fromSeconds(millis/1000.0);
 }
 
 string fromMicros(double micros) {
-	return fromMillis(micros/1000.);
+	return fromMillis(micros/1000000.0);
 }
 
 string niceEpochMicros(long micros) {
@@ -174,21 +268,29 @@ string niceEpochMicros(long micros) {
 	return string(asctime(millisTm));
 }
 
-void membly(const char * file , int line, const char * func){
-	size_t lFree, lTotal;
-	cherr(cudaMemGetInfo(&lFree, &lTotal));
-	double pct =  100 * (1 - 1.* (lTotal-lFree)/lTotal);
+string dbgStr( ) {
+	string ret = "";
+	for(int i=0; i < 32; i++) {
+		if( (hDebugFlags >> i) & 1) {
+			ret += DebugFlagsStr[i] + " ";
+		}
+	}
+	return ret;
+}
+
+void memblyFlf(const char * file , int line, const char * func){
+	size_t stFree, stTotal;
+	cherr(cudaMemGetInfo(&stFree, &stTotal));
+	double pct =  100 * (1 - 1.* (stTotal-stFree)/stTotal);
 	if(checkDebug(debugMemblo))
-		printf("memser %s : %d %s free %.2f%% %lu total %lu\n", file, line, func, pct, lFree, lTotal);
+		printf("memser %s : %d %s free %.2f%% %s total %s\n",
+				file, line, func,
+				pct, b_util::expNotationMem(stFree).c_str(), b_util::expNotationMem(stTotal).c_str());
 }
 
 void dummy_1f1476811d0646db8cc4de3c21f85825() {}
 
-
 float pctChg(float a, float b){  return .1*((int)((1 - a/b)*1000));}
-///float pctChg(float a, float b){  return .1*((int)(((b-a)/b)*1000));}
-
-
 
 template <typename T> void printAllDeviceGFlops() {
 	int devCount, currDev;
@@ -199,9 +301,38 @@ template <typename T> void printAllDeviceGFlops() {
 	for(int i = 0; i < devCount;i++) {
 #ifndef CuMatrix_Enable_KTS
 	#ifdef CuMatrix_StatFunc
+			CuTimer timer;
+			timer.start();
 			unaryOpIndexMbrs<T>::setupAllFunctionTables(i);
+			float time = timer.stop()/9;
+/*
+		    CuMatrix<T>::incDhCopy("FunctionTableMgr<T>::setup0sFunctionTables", sizeof(typename UnaryOpF<T,0>::uopFunction),time, Uop0sLast);
+		    CuMatrix<T>::incDhCopy("FunctionTableMgr<T>::setup0sFunctionTables", sizeof(typename UnaryOpIndexF<T,0>::iopFunction),time, Iop0sLast);
+		    CuMatrix<T>::incDhCopy("FunctionTableMgr<T>::setup0sFunctionTables", sizeof(typename BinaryOpF<T,0>::bopFunction),time, Bop0sLast);
+
+		    CuMatrix<T>::incDhCopy("FunctionTableMgr<T>::setup1sFunctionTables", sizeof(typename UnaryOpF<T,1>::uopFunction),time, Uop1sLast);
+		    CuMatrix<T>::incDhCopy("FunctionTableMgr<T>::setup1sFunctionTables", sizeof(typename UnaryOpIndexF<T,1>::iopFunction),time, Iop1sLast);
+		    CuMatrix<T>::incDhCopy("FunctionTableMgr<T>::setup1sFunctionTables", sizeof(typename BinaryOpF<T,1>::bopFunction),time, Bop1sLast);
+		    CuMatrix<T>::incDhCopy("FunctionTableMgr<T>::setup2sFunctionTables", sizeof(typename UnaryOpF<T,2>::uopFunction),time, Uop2sLast);
+		    CuMatrix<T>::incDhCopy("FunctionTableMgr<T>::setup2sFunctionTables", sizeof(typename UnaryOpIndexF<T,2>::iopFunction),time, Iop2sLast);
+		    CuMatrix<T>::incDhCopy("FunctionTableMgr<T>::setup3sFunctionTables", sizeof(typename UnaryOpIndexF<T,3>::iopFunction),time, Iop3sLast);
+*/
 	#else
+			CuTimer timer;
+			timer.start();
 			unaryOpIndexMbrs<T>::setupAllMethodTables(i);
+			float time = timer.stop()/9;
+/*
+		    CuMatrix<T>::incDhCopy("MethodTableMgr<T>::setup0sMethodTables",  sizeof(typename UnaryOpF<T,0>::uopMethod),time, Uop0sLast);
+		    CuMatrix<T>::incDhCopy("MethodTableMgr<T>::setup0sMethodTables", sizeof(typename UnaryOpIndexF<T,0>::iopMethod),time, Iop0sLast);
+		    CuMatrix<T>::incDhCopy("MethodTableMgr<T>::setup0sMethodTables", sizeof(typename BinaryOpF<T,0>::bopMethod),time, Bop0sLast);
+		    CuMatrix<T>::incDhCopy("MethodTableMgr<T>::setup1sMethodTables",  sizeof(typename UnaryOpF<T,1>::uopMethod),time, Uop1sLast);
+		    CuMatrix<T>::incDhCopy("MethodTableMgr<T>::setup1sMethodTables", sizeof(typename UnaryOpIndexF<T,1>::iopMethod),time, Iop1sLast);
+		    CuMatrix<T>::incDhCopy("MethodTableMgr<T>::setup1sMethodTables", sizeof(typename BinaryOpF<T,1>::bopMethod),time, Bop1sLast);
+		    CuMatrix<T>::incDhCopy("MethodTableMgr<T>::setup2sMethodTables", sizeof(typename UnaryOpF<T,2>::uopMethod),time, Uop2sLast);
+		    CuMatrix<T>::incDhCopy("MethodTableMgr<T>::setup2sMethodTables", sizeof(typename UnaryOpIndexF<T,2>::iopMethod),time, Iop2sLast);
+		    CuMatrix<T>::incDhCopy("MethodTableMgr<T>::setup3sMethodTables", sizeof(typename UnaryOpIndexF<T,3>::iopMethod),time, Iop3sLast);
+*/
 	#endif
 #endif
 		gflorps = util<T>::vAddGflops(i);

@@ -17,6 +17,7 @@ extern const char* NN_DIM_RESULTS_FILE;
 extern std::thread::id main_thread_id;
 
 template <typename T> struct Test {
+	int testNo = 0;
 	virtual int operator()(int argc, const char **argv) const {
 		 outln("base test");
 		return 0;
@@ -59,6 +60,8 @@ template <typename T> struct testHugeMatProds2 : public Test<T> {	int operator()
 template <typename T> struct testHugeMatProds3 : public Test<T> {	int operator()(int argc, const char **argv)const;};
 
 // fill
+
+template <typename T> struct testFillVsLoadRnd: public Test<T> {	int operator()(int argc, const char **argv)const;};
 template <typename T> struct testFillNsb : public Test<T> {	int operator()(int argc, const char **argv)const;};
 template <typename T> struct testFillers : public Test<T> {	int operator()(int argc, const char **argv)const;};
 template <typename T> struct testFillXvsY : public Test<T> {	int operator()(int argc, const char **argv)const;};
@@ -67,6 +70,10 @@ template <typename T> struct testTinyXRFill : public Test<T> {	int operator()(in
 template <typename T> struct testMemsetFill: public Test<T> {	int operator()(int argc, const char **argv)const;};
 
 // form
+
+template <typename T> struct testTiler : public Test<T> {	int operator()(int argc, const char **argv)const;};
+template <typename T> struct testDTiler : public Test<T> {	int operator()(int argc, const char **argv)const;};
+
 template <typename T> struct testAnonMatrices : public Test<T> { int operator()(int argc, const char **argv)const;};
 template <typename T> struct testTranspose : public Test<T> {	int operator()(int argc, const char **argv)const;};
 template <typename T> struct testTransposeNneqP : public Test<T> {	int operator()(int argc, const char **argv)const;};
@@ -78,6 +85,10 @@ template <typename T> struct testReshape : public Test<T> {	int operator()(int a
 template <typename T> struct testSubmatrices : public Test<T> {	int operator()(int argc, const char **argv)const;};
 template <typename T> struct testSubmatrices2 : public Test<T> {	int operator()(int argc, const char **argv)const;};
 template <typename T> struct testDropFirstAlts : public Test<T> {	int operator()(int argc, const char **argv)const;};
+template <typename T> struct testAttFreqsSmall : public Test<T> {	int operator()(int argc, const char **argv)const;};
+template <typename T> struct testAttFreqsMed : public Test<T> {	int operator()(int argc, const char **argv)const;};
+template <typename T> struct testAttFreqsLarge : public Test<T> {	int operator()(int argc, const char **argv)const;};
+//template <typename T> struct testAttFreqs : public Test<T> {	int operator()(int argc, const char **argv)const;};
 
 template <typename T> struct testSigmoidNneqP : public Test<T> {	int operator()(int argc, const char **argv)const;};
 template <typename T> struct intestOps : public Test<T> {	int operator()(int argc, const char **argv)const;};
@@ -101,6 +112,7 @@ template <typename T> struct testEqualsEtc : public Test<T> {	int operator()(int
 template <typename T> struct testSuite : public Test<T> {	int operator()(int argc, const char **argv)const;};
 template <typename T> struct testCheckNNGradients : public Test<T> {	int operator()(int argc, const char **argv)const;};
 template <typename T> struct testOps : public Test<T> {	int operator()(int argc, const char **argv)const;};
+template <typename T> struct testNeuralMnistHw : public Test<T> {	int operator()(int argc, const char **argv)const;};
 
 // mem
 template <typename T> struct testCudaMemcpy : public Test<T> {	int operator()(int argc, const char **argv)const; };
@@ -133,6 +145,13 @@ template <typename T> struct testRedux : public Test<T> { int operator()(int arg
 template <typename T> struct testColumnRedux : public Test<T> { int operator()(int argc, const char **argv)const;};
 template <typename T> struct testReduceRows : public Test<T> { int operator()(int argc, const char **argv)const;};
 
+template <typename T> struct testCuSet1D : public Test<T> { int operator()(int argc, const char **argv)const;};
+template <typename T> struct testCuSet : public Test<T> { int operator()(int argc, const char **argv)const;};
+template <typename T> struct testDedeup : public Test<T> { int operator()(int argc, const char **argv)const;};
+template <typename T> struct testJaccard : public Test<T> { int operator()(int argc, const char **argv)const;};
+template <typename T> struct testQpow : public Test<T> { int operator()(int argc, const char **argv)const;};
+template <typename T> struct testMergeSorted : public Test<T> { int operator()(int argc, const char **argv)const;};
+template <typename T> struct testOrderedCountedSet : public Test<T> { int operator()(int argc, const char **argv)const;};
 
 template <typename T> struct testShuffle : public Test<T> {	int operator()(int argc, const char **argv)const;};
 template <typename T> struct testShufflet : public Test<T> {	int operator()(int argc, const char **argv)const;};
@@ -162,7 +181,7 @@ template <typename T> struct testMontePi: public Test<T> {	int operator()(int ar
 // multi gpu
 template <typename T> struct testMultiGPUMemcpy : public Test<T> {	int operator()(int argc, const char **argv)const; };
 template <typename T> struct testMultiGPUMath: public Test<T> {	int operator()(int argc, const char **argv)const; };
-
+template <typename T> struct testMultiGPUTiling: public Test<T> {	int operator()(int argc, const char **argv)const; };
 // multi thread / omp
 template <typename T> struct testCMap: public Test<T> {	int operator()(int argc, const char **argv)const; };
 
@@ -197,6 +216,7 @@ template <typename T> struct testPermus: public Test<T> {	int operator()(int arg
 template <typename T> struct testBinaryOpAmort: public Test<T> {	int operator()(int argc, const char **argv)const; };
 
 template <typename T> struct tests {
+	static list<string> argsl;
 	static int runTest(int argc, const char** argv);
 	static T timeTest( const Test<T>& test, int argv, const char** args, int* theResult );
 };

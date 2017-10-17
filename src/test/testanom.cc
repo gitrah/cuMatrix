@@ -135,6 +135,9 @@ template<typename T> int testAnomDet<T>::operator()(int argc, const char **argv)
 	CuMatrix<T>::mvGaussianVectorFromFeatures(d_pvec, d_pdens);
 	pvec.invalidateHost();
 	outln("d_pvec " << pvec.syncBuffers());
+	T pvecS = pvec.sum();
+	outln("pvecS " << pvecS);
+	assert(util<T>::almostEquals(pvecS, replicationFactor * 18.1293675212711 ));
 
 	outln("a sigmas " << sqrdSigmas.toShortString());
 	//xb.multivariateGaussianFeatures(bpdens,bsqrdSigmas,bmeans);
@@ -150,7 +153,6 @@ template<typename T> int testAnomDet<T>::operator()(int argc, const char **argv)
 	CuMatrix<T> pvalVector(xval.m, 1,true,true);
 	pdensval.mvGaussianVectorFromFeatures(pvalVector);
 	outln("pvalVector " << pvalVector.syncBuffers());
-
 	CuMatrix<T> pvecDirect(xval.m, 1,true,true);
 	xval.multivariateGaussianVector(pvecDirect,sqrdSigmas,means);
 	outln("a3 sigmas " << sqrdSigmas.toShortString());
@@ -160,8 +162,10 @@ template<typename T> int testAnomDet<T>::operator()(int argc, const char **argv)
 	outln("pvalVector.sumSqrDiff(pvecDirect) " <<pvalVector.sumSqrDiff(pvecDirect));
 	assert(pvalVector.almostEq(pvecDirect));
 
-	outln("pvalVector.min() " << pvalVector.min());
-	outln("pvalVector.max() " << pvalVector.max());
+	T pvalVmin = pvalVector.min();
+	T pvalVmax = pvalVector.max();
+	outln("pvalVector.min() " << pvalVmin);
+	outln("pvalVector.max() " << pvalVmax);
 	pair<T,T> bounds = pvalVector.bounds();
 	outln("bounds " << bounds.first << ", " << bounds.second);
 
@@ -186,7 +190,7 @@ template<typename T> int testAnomDet<T>::operator()(int argc, const char **argv)
 	//IndexArray outliers = pvec.find(lt);
 	int outlierCount = 20;
 	uint idxs[outlierCount];
-	memset(idxs,0, outlierCount);
+	memset(idxs,0, outlierCount * sizeof(uint));
 	IndexArray outliers(idxs,outlierCount,false);
 	outln("init outliers " << outliers);
 	//int outlier = pvec.count(lt);

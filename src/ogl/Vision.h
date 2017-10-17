@@ -5,8 +5,7 @@
  *      Author: reid
  */
 
-#ifndef VISION_H_
-#define VISION_H_
+#pragma once
 
 class Vision {
 public:
@@ -14,4 +13,3 @@ public:
 	virtual void set() = 0;
 };
 
-#endif /* VISION_H_ */
